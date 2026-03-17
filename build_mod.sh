@@ -7,7 +7,7 @@ summary="build_logs/build_all_now_${ts}.txt"
 mkdir -p build_logs dist_builds
 : > "$summary"
 
-versions=("1.16.5" "1.17.1" "1.18.2" "1.19" "1.19.2" "1.19.4" "1.20.1" "1.20.4" "1.21.1")
+versions=("1.16.5" "1.17.1" "1.18.2" "1.19" "1.19.2" "1.19.4" "1.20.1" "1.20.4" "1.21.1") # i still dont know why i am building 1.21.1 xd
 
 root_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 
