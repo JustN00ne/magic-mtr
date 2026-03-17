@@ -2,3 +2,13 @@
 .idea
 build
 ./JMEM_INSTRUCTIONS.md
+
+# Local JDK downloads (IntelliJ / build scripts)
+.jdks/
+
+# build_mod.sh outputs
+build_logs/
+dist_builds/
+
+# Local run logs
+run/logs/
