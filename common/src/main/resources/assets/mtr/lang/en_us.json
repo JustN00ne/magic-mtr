@@ -1,0 +1,6 @@
+{
+  "gui.mtr.route_type_train_metro": "Type: Metro",
+  "gui.mtr.route_type_train_bus": "Type: Bus",
+  "gui.mtr.route_type_train_tram": "Type: Tram",
+  "gui.mtr.route_type_train_sbahn": "Type: S-Bahn"
+}

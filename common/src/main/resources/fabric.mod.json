@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "id": "jme",
+  "version": "${version}",
+  "name": "MAGIC",
+  "description": "MTR Addon for General Improvement and Customization.",
+  "authors": ["JustNoone", "Szandor13th", "Movies22"],
+  "contact": {"homepage": "https://www.georail.eu/"},
+  "license": "MIT",
+  "icon": "assets/jme/icon.png",
+  "environment": "*",
+  "entrypoints": {
+    "fabric-datagen": [
+      "org.justnoone.jme.client.JmeDataGenerator"
+    ],
+    "client": [
+      "org.justnoone.jme.client.JmeClient"
+    ],
+    "main": [
+      "org.justnoone.jme.Jme"
+    ],
+    "modmenu": [
+      "org.justnoone.jme.client.modmenu.JmeModMenuApi"
+    ]
+  },
+  "mixins": [
+    "jme.mixins.json",
+    {
+      "config": "jme.client.mixins.json",
+      "environment": "client"
+    }
+  ],
+  "depends": {
+    "fabricloader": ">=${loader_version}",
+    "fabric-api": "*",
+    "minecraft": "${minecraft_version}"
+  }
+}

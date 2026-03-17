@@ -1,7 +1,57 @@
+import groovy.json.JsonSlurper
+import org.gradle.api.file.DuplicatesStrategy
+
+import java.net.URLEncoder
+
 plugins {
-    id 'fabric-loom' version '1.15-SNAPSHOT'
-    id 'maven-publish'
+    id "fabric-loom" version "1.7-SNAPSHOT"
+    id "maven-publish"
 }
+
+def mcVer = (project.findProperty("minecraft_version") ?: "1.20.1").toString()
+def mcMinor = Integer.parseInt(mcVer.split("\\.")[1])
+def targetJava = mcMinor <= 16 ? 8 : (mcMinor == 17 ? 16 : 17)
+def dependencyCompatMcVer = ["1.19": "1.19.2", "1.21.1": "1.20.4"].get(mcVer, mcVer)
+def mappingsMcVer = dependencyCompatMcVer
+
+def jsonSlurper = new JsonSlurper()
+
+def fetchJson = { String url ->
+    new URL(url).withInputStream { stream -> jsonSlurper.parse(stream) }
+}
+
+def firstModrinthVersion = { String projectId, String loader, String gameVersion ->
+    def encodedLoaders = URLEncoder.encode("[\"${loader}\"]", "UTF-8")
+    def encodedGameVersions = URLEncoder.encode("[\"${gameVersion}\"]", "UTF-8")
+    def versions = fetchJson("https://api.modrinth.com/v2/project/${projectId}/version?loaders=${encodedLoaders}&game_versions=${encodedGameVersions}")
+    if (!(versions instanceof List) || versions.isEmpty()) {
+        throw new GradleException("No Modrinth version found for ${projectId} on ${loader} ${gameVersion}")
+    }
+    return versions[0].version_number.toString()
+}
+
+def resolvedLoaderVersion = {
+    def versions = fetchJson("https://meta.fabricmc.net/v2/versions/loader/${mcVer}")
+    if (!(versions instanceof List) || versions.isEmpty()) {
+        throw new GradleException("No Fabric Loader version found for Minecraft ${mcVer}")
+    }
+    versions[0].loader.version.toString()
+}.call()
+
+def resolvedYarnVersion = {
+    if (mcVer == "1.20.1") {
+        return "1.20.1+build.10"
+    }
+    def versions = fetchJson("https://meta.fabricmc.net/v2/versions/yarn/${mcVer}")
+    if (!(versions instanceof List) || versions.isEmpty()) {
+        throw new GradleException("No Yarn mapping found for Minecraft ${mcVer}")
+    }
+    versions[0].version.toString()
+}.call()
+
+def resolvedFabricApiVersion = firstModrinthVersion("fabric-api", "fabric", mcVer)
+def resolvedModMenuVersion = firstModrinthVersion("modmenu", "fabric", mcVer)
+def resolvedMtrVersion = firstModrinthVersion("minecraft-transit-railway", "fabric", dependencyCompatMcVer)
 
 version = project.mod_version
 group = project.maven_group
@@ -10,95 +60,77 @@ base {
     archivesName = project.archives_base_name
 }
 
-loom {
-    splitEnvironmentSourceSets()
-
-    mods {
-        "jme" {
-            sourceSet sourceSets.main
-            sourceSet sourceSets.client
-        }
-    }
-}
-
-fabricApi {
-    configureDataGeneration {
-        client = true
-    }
-}
-
 repositories {
-    // Add repositories to retrieve artifacts from in here.
-    // You should only use this when depending on other mods because
-    // Loom adds the essential maven repositories to download Minecraft and libraries from automatically.
-    // See https://docs.gradle.org/current/userguide/declaring_repositories.html
-    // for more information about repositories.
-    maven {
-        name = "Modrinth"
-        url = "https://api.modrinth.com/maven"
+    mavenCentral()
+    maven { url "https://maven.fabricmc.net/" }
+    maven { url "https://maven.nucleoid.xyz" }
+    maven { url "https://api.modrinth.com/maven" }
+    maven { url "https://maven.terraformersmc.com/releases/" }
+    maven { url "file://${rootDir}/local-maven" }
+    flatDir { dirs "${rootDir}/libs" }
+}
+
+loom {
+    accessWidenerPath = file("fabric/src/main/resources/jme.accesswidener")
+}
+
+sourceSets {
+    main {
+        java {
+            setSrcDirs(["common/src/main/java", "fabric/src/main/java"])
+        }
+        resources {
+            setSrcDirs(["fabric/src/main/resources", "common/src/main/resources"])
+        }
     }
 }
 
 dependencies {
-    // To change the versions see the gradle.properties file
-    minecraft "com.mojang:minecraft:${project.minecraft_version}"
-    mappings "net.fabricmc:yarn:${project.yarn_mappings}:v2"
-    modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
+    minecraft "com.mojang:minecraft:${mcVer}"
+    mappings "net.fabricmc:yarn:${resolvedYarnVersion}:v2"
 
-    modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
-    modImplementation "maven.modrinth:minecraft-transit-railway:FABRIC-4.0.3+1.20.1"
+    modImplementation "net.fabricmc:fabric-loader:${resolvedLoaderVersion}"
+    modImplementation "net.fabricmc.fabric-api:fabric-api:${resolvedFabricApiVersion}"
+    modImplementation "maven.modrinth:minecraft-transit-railway:${resolvedMtrVersion}"
+    modImplementation "com.terraformersmc:modmenu:${resolvedModMenuVersion}"
+
+    implementation "org.mtr:Minecraft-Mappings-fabric-${mappingsMcVer}:0.0.1-dev"
+    compileOnly "com.google.code.findbugs:jsr305:3.0.2"
+    implementation "org.tukaani:xz:1.9"
+    include "org.tukaani:xz:1.9"
 }
 
 processResources {
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
     inputs.property "version", project.version
-    inputs.property "minecraft_version", project.minecraft_version
-    inputs.property "loader_version", project.loader_version
-    filteringCharset "UTF-8"
+    inputs.property "minecraft_version", mcVer
+    inputs.property "loader_version", resolvedLoaderVersion
 
     filesMatching("fabric.mod.json") {
-        expand "version": project.version,
-                "minecraft_version": project.minecraft_version,
-                "loader_version": project.loader_version
+        expand(
+                "version": project.version,
+                "minecraft_version": mcVer,
+                "loader_version": resolvedLoaderVersion
+        )
     }
 }
 
-def targetJavaVersion = 17
 tasks.withType(JavaCompile).configureEach {
-    // ensure that the encoding is set to UTF-8, no matter what the system default is
-    // this fixes some edge cases with special characters not displaying correctly
-    // see http://yodaconditions.net/blog/fix-for-java-file-encoding-problems-with-gradle.html
-    // If Javadoc is generated, this must be specified in that task too.
     it.options.encoding = "UTF-8"
-    if (targetJavaVersion >= 10 || JavaVersion.current().isJava10Compatible()) {
-        it.options.release.set(targetJavaVersion)
-    }
+    it.options.release.set(targetJava)
 }
 
 java {
-    toolchain.languageVersion = JavaLanguageVersion.of(targetJavaVersion)
+    toolchain.languageVersion = JavaLanguageVersion.of(21)
     withSourcesJar()
 }
 
-jar {
-    from("LICENSE") {
-        rename { "${it}_${project.archives_base_name}" }
-    }
+tasks.named("sourcesJar").configure {
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 }
 
-// configure the maven publication
-publishing {
-    publications {
-        create("mavenJava", MavenPublication) {
-            artifactId = project.archives_base_name
-            from components.java
-        }
-    }
-
-    // See https://docs.gradle.org/current/userguide/publishing_maven.html for information on how to set up publishing.
-    repositories {
-        // Add repositories to publish to here.
-        // Notice: This block does NOT have the same function as the block in the top level.
-        // The repositories here will be used for publishing your artifact, not for
-        // retrieving dependencies.
+jar {
+    from("LICENSE.txt") {
+        rename { "${it}_${project.archives_base_name}" }
     }
 }

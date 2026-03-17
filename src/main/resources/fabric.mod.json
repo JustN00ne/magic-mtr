@@ -6,7 +6,7 @@
   "description": "The JME mod adds enchancements to the mod, which otherwise have not existed!",
   "authors": [],
   "contact": {},
-  "license": "All-Rights-Reserved",
+  "license": "MIT",
   "icon": "assets/jme/icon.png",
   "environment": "*",
   "entrypoints": {

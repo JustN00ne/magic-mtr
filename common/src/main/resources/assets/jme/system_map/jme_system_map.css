@@ -1,0 +1,173 @@
+.wrapper {
+  position: relative;
+}
+
+#jme-rails-overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 18;
+}
+
+#jme-map-menu-root {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 30;
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+}
+
+#jme-map-menu-button {
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 12px;
+  background: rgba(18, 18, 22, 0.72);
+  color: #ffffff;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.25);
+}
+
+#jme-map-menu-root.open #jme-map-menu-button {
+  border-color: rgba(255, 90, 87, 0.55);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.28), 0 0 0 2px rgba(255, 90, 87, 0.18);
+}
+
+#jme-map-menu-button:hover {
+  background: rgba(18, 18, 22, 0.84);
+}
+
+#jme-map-menu-button:active {
+  transform: translateY(1px);
+}
+
+.jme-map-menu-logo {
+  width: 24px;
+  height: 24px;
+  display: block;
+}
+
+#jme-map-menu-panel {
+  margin-top: 10px;
+  width: 270px;
+  max-width: calc(100vw - 24px);
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 14px;
+  background: rgba(18, 18, 22, 0.86);
+  color: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.3);
+}
+
+.jme-menu-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.jme-menu-title {
+  font-size: 12px;
+  font-weight: 750;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.92;
+}
+
+.jme-menu-close {
+  border: 0;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.8);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 10px;
+}
+
+.jme-menu-close:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.95);
+}
+
+.jme-menu-section {
+  margin-top: 12px;
+}
+
+.jme-menu-section-title {
+  font-size: 12px;
+  font-weight: 600;
+  opacity: 0.75;
+  margin-bottom: 8px;
+}
+
+.jme-menu-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.jme-menu-col {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.jme-menu-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.9);
+  cursor: pointer;
+}
+
+.jme-menu-chip:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.jme-menu-chip.active {
+  background: rgba(255, 90, 87, 0.18);
+  border-color: rgba(255, 90, 87, 0.5);
+}
+
+.jme-menu-chip .material-icons {
+  font-size: 18px;
+}
+
+.jme-menu-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 9px 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.9);
+  cursor: pointer;
+  text-align: left;
+}
+
+.jme-menu-action:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.jme-menu-action .material-icons {
+  font-size: 18px;
+}

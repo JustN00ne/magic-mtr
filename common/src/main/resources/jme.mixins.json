@@ -1,0 +1,36 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "org.justnoone.jme.mixin",
+  "compatibilityLevel": "JAVA_17",
+  "mixins": [
+    "ArrivalsRequestAlternativePlatformMixin",
+    "ArrivalsRequestSchemaAccessor",
+    "DepotAlternativePlatformMixin",
+    "FileLoaderThreadLimitMixin",
+    "ItemRailModifierMixin",
+    "ItemRailModifierTooltipMixin",
+    "RailSchemaAccessor",
+    "SidingDelayCancellationMixin",
+    "SidingDynamicPlatformRerouteMixin",
+    "SidingVehiclesAccessor",
+    "SidingSpeedLimitMixin",
+    "TrainScheduleSensorRailDetectMixin",
+    "SystemMapServletMixin",
+    "VehicleDelayAccessor",
+    "VehicleAlternativePlatformRerouteMixin",
+    "VehicleExtraDataAlternativePlatformMixin",
+    "VehicleMutableExtraDataAccessor",
+    "VehicleSignalInvoker",
+    "VehiclePlatformRouteInfoAccessor",
+    "WebserverResourcesMixin",
+    "VehicleSpeedLimitMixin",
+    "VehicleExtraDataAccessor"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  },
+  "overwrites": {
+    "requireAnnotations": true
+  }
+}

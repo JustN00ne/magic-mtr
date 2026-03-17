@@ -1,0 +1,38 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "org.justnoone.jme.mixin",
+  "compatibilityLevel": "JAVA_17",
+  "client": [
+    "BlockNodeBrushProfileMixin",
+    "ClientPacketHelperTrainDetectorMixin",
+    "ColorSelectorScreenLayoutMixin",
+    "DashboardScreenAccessor",
+    "DashboardScreenAlternativePlatformMixin",
+    "DashboardScreenMagicMenuMixin",
+    "DashboardScreenMapAreasMixin",
+    "DashboardScreenRouteFoldersMixin",
+    "EditDepotScreenCancellationMixin",
+    "EditRouteScreenRouteTypesMixin",
+    "EditNameColorScreenBaseAccessor",
+    "GameRendererTiltMixin",
+    "MtrRegistryHideRailsMixin",
+    "RailTypeMixin",
+    "RenderRailsTiltMixin",
+    "RenderVehiclesTiltMixin",
+    "RenderRailsColorContextMixin",
+    "RailModifierScreenMixin",
+    "ScreenAbstractMappingOverlayClickMixin",
+    "SavedRailScreenBaseAccessor",
+    "SidingScreenMixin",
+    "SavedRailBasePositionAccessor",
+    "WidgetMapAccessor",
+    "WidgetMapRouteOverlayMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  },
+  "overwrites": {
+    "requireAnnotations": true
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "variants": {
+    "powered=0": {
+      "model": "jme:block/train_detector"
+    },
+    "powered=1": {
+      "model": "jme:block/train_detector"
+    },
+    "powered=2": {
+      "model": "jme:block/train_detector"
+    }
+  }
+}
