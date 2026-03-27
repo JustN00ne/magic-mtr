@@ -1,5 +1,6 @@
 package org.justnoone.jme.systemmap;
 
+import org.justnoone.jme.config.JmeConfig;
 import org.justnoone.jme.config.MagicConfigPaths;
 import org.mtr.libraries.com.google.gson.Gson;
 import org.mtr.libraries.com.google.gson.GsonBuilder;
@@ -170,7 +171,9 @@ public final class SystemMapOverlayCacheStore {
         }
 
         if (!cache.loaded) {
-            loadFromDisk(dimension, cache);
+            if (JmeConfig.systemMapOverlayCachePersistEnabled()) {
+                loadFromDisk(dimension, cache);
+            }
             cache.loaded = true;
         }
 
@@ -178,6 +181,10 @@ public final class SystemMapOverlayCacheStore {
     }
 
     private static void maybeScheduleSave(String dimension, DimensionCache cache) {
+        if (!JmeConfig.systemMapOverlayCachePersistEnabled()) {
+            return;
+        }
+
         final long now = System.currentTimeMillis();
         if (now - cache.lastSaveStartMillis < SAVE_DEBOUNCE_MILLIS) {
             return;

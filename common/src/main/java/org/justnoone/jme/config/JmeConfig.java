@@ -78,6 +78,33 @@ public final class JmeConfig {
         data.dashboardRailOverlayCullMaxPerCell = clampCullMaxPerCell(maxPerCell);
     }
 
+    /**
+     * Server-side System Map overlay cache.
+     * <p>
+     * When enabled, MAGIC merges rails/vehicles snapshots into a long-lived cache so the HTTP system map
+     * (port 8888) keeps showing content even after chunks unload.
+     */
+    public static boolean systemMapOverlayCacheEnabled() {
+        return data.systemMapOverlayCacheEnabled;
+    }
+
+    public static void setSystemMapOverlayCacheEnabled(boolean enabled) {
+        data.systemMapOverlayCacheEnabled = enabled;
+    }
+
+    /**
+     * Whether the server-side System Map overlay cache is persisted to disk under {@code config/MAGIC/map}.
+     * <p>
+     * Disabling this prevents large on-disk cache files from being created/updated.
+     */
+    public static boolean systemMapOverlayCachePersistEnabled() {
+        return data.systemMapOverlayCachePersistEnabled;
+    }
+
+    public static void setSystemMapOverlayCachePersistEnabled(boolean enabled) {
+        data.systemMapOverlayCachePersistEnabled = enabled;
+    }
+
     public static String formatSpeedLabel(int speedKmh) {
         if (useMph()) {
             return toMph(speedKmh) + " mph";
@@ -98,6 +125,8 @@ public final class JmeConfig {
         root.addProperty("dashboard_map_auto_save_enabled", data.dashboardMapAutoSaveEnabled);
         root.addProperty("dashboard_rail_overlay_mode", data.dashboardRailOverlayMode.name());
         root.addProperty("dashboard_rail_overlay_cull_max_per_cell", data.dashboardRailOverlayCullMaxPerCell);
+        root.addProperty("system_map_overlay_cache_enabled", data.systemMapOverlayCacheEnabled);
+        root.addProperty("system_map_overlay_cache_persist_enabled", data.systemMapOverlayCachePersistEnabled);
 
         try {
             Files.createDirectories(CONFIG_PATH.getParent());
@@ -138,6 +167,12 @@ public final class JmeConfig {
             }
             if (root.has("dashboard_rail_overlay_cull_max_per_cell")) {
                 loaded.dashboardRailOverlayCullMaxPerCell = clampCullMaxPerCell(root.get("dashboard_rail_overlay_cull_max_per_cell").getAsInt());
+            }
+            if (root.has("system_map_overlay_cache_enabled")) {
+                loaded.systemMapOverlayCacheEnabled = root.get("system_map_overlay_cache_enabled").getAsBoolean();
+            }
+            if (root.has("system_map_overlay_cache_persist_enabled")) {
+                loaded.systemMapOverlayCachePersistEnabled = root.get("system_map_overlay_cache_persist_enabled").getAsBoolean();
             }
         } catch (Exception ignored) {
         }
@@ -187,6 +222,8 @@ public final class JmeConfig {
         private boolean dashboardMapAutoSaveEnabled = true;
         private DashboardRailOverlayMode dashboardRailOverlayMode = DashboardRailOverlayMode.ALL;
         private int dashboardRailOverlayCullMaxPerCell = 8;
+        private boolean systemMapOverlayCacheEnabled = true;
+        private boolean systemMapOverlayCachePersistEnabled = true;
     }
 
     public enum DashboardRouteListMode {

@@ -72,8 +72,37 @@ public final class DashboardMapOverlayCacheStore {
                 continue;
             }
 
-            if (cache.railsById.containsKey(id)) {
-                continue;
+            final RailSnapshot existing = cache.railsById.get(id);
+
+            // Cheap "metadata" check first: avoid rebuilding polylines every frame.
+            // If something important changed (speed, direction, signals), rebuild the snapshot.
+            if (existing != null) {
+                final Position[] positions = parseRailPositions(id);
+                final Position from = positions[0];
+                final Position to = positions[1];
+                if (from == null || to == null) {
+                    continue;
+                }
+
+                final boolean allowForward = rail.getSpeedLimitMetersPerMillisecond(from) > 0;
+                final boolean allowReverse = rail.getSpeedLimitMetersPerMillisecond(to) > 0;
+                boolean hasSignals = false;
+                try {
+                    hasSignals = rail.getSignalColors() != null && !rail.getSignalColors().isEmpty();
+                } catch (Exception ignored) {
+                    hasSignals = false;
+                }
+
+                final long speedForward = rail.getSpeedLimitKilometersPerHour(false);
+                final long speedReverse = rail.getSpeedLimitKilometersPerHour(true);
+                final int speedKmh = (int) Math.max(1L, Math.min(1000L, Math.max(speedForward, speedReverse)));
+
+                if (existing.speedKmh == speedKmh
+                        && existing.allowForward == allowForward
+                        && existing.allowReverse == allowReverse
+                        && existing.hasSignals == hasSignals) {
+                    continue;
+                }
             }
 
             final RailSnapshot snapshot = RailSnapshot.fromRail(rail);
@@ -82,7 +111,13 @@ public final class DashboardMapOverlayCacheStore {
             }
 
             cache.railsById.put(id, snapshot);
-            cache.railsList.add(snapshot);
+            final Integer index = cache.railIndexById.get(id);
+            if (index != null && index >= 0 && index < cache.railsList.size()) {
+                cache.railsList.set(index, snapshot);
+            } else {
+                cache.railIndexById.put(id, cache.railsList.size());
+                cache.railsList.add(snapshot);
+            }
             changed = true;
         }
 
@@ -272,6 +307,7 @@ public final class DashboardMapOverlayCacheStore {
 
                     final RailSnapshot snapshot = new RailSnapshot(id, points, Math.max(1, speedKmh), allowForward, allowReverse, hasSignals);
                     cache.railsById.put(id, snapshot);
+                    cache.railIndexById.put(id, cache.railsList.size());
                     cache.railsList.add(snapshot);
                 }
             }
@@ -502,6 +538,7 @@ public final class DashboardMapOverlayCacheStore {
         private long lastSaveStartMillis;
 
         private final LinkedHashMap<String, RailSnapshot> railsById = new LinkedHashMap<>();
+        private final LinkedHashMap<String, Integer> railIndexById = new LinkedHashMap<>();
         private final ArrayList<RailSnapshot> railsList = new ArrayList<>();
 
         private final LinkedHashMap<Long, VehicleSnapshot> vehiclesById = new LinkedHashMap<>();

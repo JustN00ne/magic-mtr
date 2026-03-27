@@ -189,15 +189,24 @@ public abstract class SystemMapServletMixin {
         // Merge live snapshots into a persisted on-disk cache so rails/vehicles remain visible even if chunks unload.
         // When the overlay is disabled, don't serve/build rails to keep the endpoint cheap.
         final boolean railOverlayEnabled = JmeConfig.dashboardRailOverlayMode() != JmeConfig.DashboardRailOverlayMode.OFF;
+        final boolean overlayCacheEnabled = JmeConfig.systemMapOverlayCacheEnabled();
         if (railOverlayEnabled) {
-            SystemMapOverlayCacheStore.mergeLiveRails(dimension, liveRails, railsSnapshotTime);
-            response.add("rails", SystemMapOverlayCacheStore.getRailsForResponse(dimension));
+            if (overlayCacheEnabled) {
+                SystemMapOverlayCacheStore.mergeLiveRails(dimension, liveRails, railsSnapshotTime);
+                response.add("rails", SystemMapOverlayCacheStore.getRailsForResponse(dimension));
+            } else {
+                response.add("rails", liveRails);
+            }
         } else {
             response.add("rails", new JsonArray());
         }
 
-        SystemMapOverlayCacheStore.mergeLiveVehicles(dimension, liveVehicles, vehiclesSnapshotTime);
-        response.add("vehicles", SystemMapOverlayCacheStore.getVehiclesForResponse(dimension));
+        if (overlayCacheEnabled) {
+            SystemMapOverlayCacheStore.mergeLiveVehicles(dimension, liveVehicles, vehiclesSnapshotTime);
+            response.add("vehicles", SystemMapOverlayCacheStore.getVehiclesForResponse(dimension));
+        } else {
+            response.add("vehicles", liveVehicles);
+        }
         return response;
     }
 
@@ -236,7 +245,9 @@ public abstract class SystemMapServletMixin {
 
             final String overrideRouteType = RouteTypeOverrideConfig.getRouteType(normalizedRouteId);
             if (!overrideRouteType.isEmpty()) {
-                routeObject.addProperty("type", overrideRouteType);
+                // Keep the base MTR `type` unchanged for compatibility with upstream consumers
+                // (notably the built-in System Map path-finder). Expose the extended type separately.
+                routeObject.addProperty("jmeType", overrideRouteType);
             }
         }
     }
