@@ -77,12 +77,27 @@ public abstract class SystemMapServletMixin {
 
     @Inject(method = "getContent", at = @At("HEAD"), cancellable = true)
     private void jme$onGetContent(String endpoint, String data, Object2ObjectAVLTreeMap<String, String> parameters, JsonReader jsonReader, Simulator simulator, Consumer<JsonObject> sendResponse, CallbackInfo ci) {
+        if (endpoint.equals("jme-config")) {
+            sendResponse.accept(jme$handleConfigRequest(jsonReader));
+            ci.cancel();
+            return;
+        }
+
         if (endpoint.equals("rails")) {
             final String dimension = simulator.dimension;
             final String modeRaw = parameters == null ? "" : parameters.getOrDefault("mode", "");
             final String mode = modeRaw == null ? "" : modeRaw.trim().toLowerCase(Locale.ENGLISH);
+            final String formatRaw = parameters == null ? "" : parameters.getOrDefault("format", "");
+            final String format = formatRaw == null ? "" : formatRaw.trim().toLowerCase(Locale.ENGLISH);
+            final boolean compact = "compact".equals(format) || "minimal".equals(format) || "bluemap".equals(format);
+            final boolean includeCurvePoints = jme$parseBooleanParameter(parameters, "curve_points", true);
+            final int offset = jme$parseIntParameter(parameters, "offset", 0, 0, 1_000_000);
+            final int limit = jme$parseIntParameter(parameters, "limit", -1, -1, 1_000_000);
 
-            final boolean railOverlayEnabled = JmeConfig.dashboardRailOverlayMode() != JmeConfig.DashboardRailOverlayMode.OFF;
+            // The dashboard overlay can be disabled for client performance, but BlueMap still needs rails.
+            // `format=bluemap` (or `force_rails=1`) opts into building/serving rails regardless of the dashboard setting.
+            final boolean forceRails = "bluemap".equals(format) || jme$parseBooleanParameter(parameters, "force_rails", false);
+            final boolean railOverlayEnabled = forceRails || JmeConfig.dashboardRailOverlayMode() != JmeConfig.DashboardRailOverlayMode.OFF;
             final boolean includeRails = railOverlayEnabled && !"vehicles".equals(mode);
             final boolean includeVehicles = !"rails".equals(mode);
 
@@ -96,17 +111,184 @@ public abstract class SystemMapServletMixin {
             if ("rails".equals(mode)) {
                 if (railOverlayEnabled) {
                     final JsonObject railsSnapshot = jme$railsSnapshotByDimension.get(dimension);
-                    sendResponse.accept(railsSnapshot == null ? jme$createEmptyRailsSnapshot() : railsSnapshot);
+                    final JsonObject baseResponse = railsSnapshot == null ? jme$createEmptyRailsSnapshot() : railsSnapshot;
+                    sendResponse.accept(jme$applyRailsQueryOptions(baseResponse, compact, includeCurvePoints, offset, limit));
                 } else {
                     sendResponse.accept(jme$createEmptyRailsSnapshot());
                 }
             } else if ("vehicles".equals(mode)) {
                 final JsonObject vehiclesSnapshot = jme$vehiclesSnapshotByDimension.get(dimension);
-                sendResponse.accept(vehiclesSnapshot == null ? jme$createEmptyVehiclesSnapshot() : vehiclesSnapshot);
+                final JsonObject baseResponse = vehiclesSnapshot == null ? jme$createEmptyVehiclesSnapshot() : vehiclesSnapshot;
+                sendResponse.accept(jme$applyRailsQueryOptions(baseResponse, compact, includeCurvePoints, offset, limit));
             } else {
-                sendResponse.accept(jme$createFullRailsResponse(dimension));
+                sendResponse.accept(jme$applyRailsQueryOptions(jme$createFullRailsResponse(dimension), compact, includeCurvePoints, offset, limit));
             }
             ci.cancel();
+        }
+    }
+
+    @Unique
+    private static JsonObject jme$applyRailsQueryOptions(JsonObject baseResponse, boolean compact, boolean includeCurvePoints, int offset, int limit) {
+        if (!compact && includeCurvePoints && offset <= 0 && limit < 0) {
+            return baseResponse;
+        }
+
+        final JsonObject response = new JsonObject();
+
+        if (baseResponse != null) {
+            // Copy metadata fields that the dashboard expects.
+            jme$copyIfPresent(baseResponse, response, "cachedResponseTime");
+            jme$copyIfPresent(baseResponse, response, "jmeRailOverlayMode");
+            jme$copyIfPresent(baseResponse, response, "jmeRailCullMaxPerCell");
+            jme$copyIfPresent(baseResponse, response, "customCss");
+            jme$copyIfPresent(baseResponse, response, "customJs");
+        }
+
+        final JsonArray railsSource = baseResponse != null && baseResponse.has("rails") && baseResponse.get("rails").isJsonArray()
+                ? baseResponse.getAsJsonArray("rails")
+                : new JsonArray();
+        final JsonArray vehiclesSource = baseResponse != null && baseResponse.has("vehicles") && baseResponse.get("vehicles").isJsonArray()
+                ? baseResponse.getAsJsonArray("vehicles")
+                : new JsonArray();
+
+        if (compact || !includeCurvePoints || offset > 0 || limit >= 0) {
+            response.add("rails", jme$buildRailsArray(railsSource, compact, includeCurvePoints, offset, limit));
+        } else {
+            response.add("rails", railsSource);
+        }
+        response.add("vehicles", vehiclesSource);
+
+        if (!response.has("cachedResponseTime")) {
+            response.addProperty("cachedResponseTime", System.currentTimeMillis());
+        }
+        return response;
+    }
+
+    @Unique
+    private static JsonArray jme$buildRailsArray(JsonArray railsSource, boolean compact, boolean includeCurvePoints, int offset, int limit) {
+        if (railsSource == null || railsSource.size() == 0) {
+            return new JsonArray();
+        }
+
+        final int safeOffset = Math.max(0, offset);
+        final int safeLimit = limit < 0 ? Integer.MAX_VALUE : Math.max(0, limit);
+        final int endExclusive = Math.min(railsSource.size(), safeOffset + safeLimit);
+
+        final JsonArray result = new JsonArray();
+        for (int i = safeOffset; i < endExclusive; i++) {
+            final JsonElement element = railsSource.get(i);
+            if (element == null || !element.isJsonObject()) {
+                continue;
+            }
+            final JsonObject rail = element.getAsJsonObject();
+
+            if (!compact && includeCurvePoints) {
+                result.add(rail);
+                continue;
+            }
+
+            final JsonObject railOut = compact ? new JsonObject() : rail.deepCopy();
+
+            if (compact) {
+                jme$copyIfPresent(rail, railOut, "id");
+                jme$copyIfPresent(rail, railOut, "position1");
+                jme$copyIfPresent(rail, railOut, "position2");
+                jme$copyIfPresent(rail, railOut, "speedLimit1");
+                jme$copyIfPresent(rail, railOut, "speedLimit2");
+                jme$copyIfPresent(rail, railOut, "canTravel1To2");
+                jme$copyIfPresent(rail, railOut, "canTravel2To1");
+                jme$copyIfPresent(rail, railOut, "signalColors");
+                jme$copyIfPresent(rail, railOut, "canHaveSignal");
+                jme$copyIfPresent(rail, railOut, "length");
+            }
+
+            if (includeCurvePoints) {
+                if (rail.has("curvePoints") && rail.get("curvePoints").isJsonArray()) {
+                    if (compact) {
+                        // Strip the `progress` field to reduce payload size.
+                        final JsonArray points = new JsonArray();
+                        final JsonArray sourcePoints = rail.getAsJsonArray("curvePoints");
+                        for (int p = 0; p < sourcePoints.size(); p++) {
+                            final JsonElement pointElement = sourcePoints.get(p);
+                            if (pointElement == null || !pointElement.isJsonObject()) {
+                                continue;
+                            }
+                            final JsonObject point = pointElement.getAsJsonObject();
+                            final JsonObject pointOut = new JsonObject();
+                            jme$copyIfPresent(point, pointOut, "x");
+                            jme$copyIfPresent(point, pointOut, "y");
+                            jme$copyIfPresent(point, pointOut, "z");
+                            points.add(pointOut);
+                        }
+                        railOut.add("curvePoints", points);
+                    } else {
+                        railOut.add("curvePoints", rail.getAsJsonArray("curvePoints"));
+                    }
+                }
+            } else {
+                railOut.remove("curvePoints");
+            }
+
+            result.add(railOut);
+        }
+
+        return result;
+    }
+
+    @Unique
+    private static void jme$copyIfPresent(JsonObject from, JsonObject to, String key) {
+        if (from == null || to == null || key == null || key.isEmpty()) {
+            return;
+        }
+        if (from.has(key)) {
+            to.add(key, from.get(key));
+        }
+    }
+
+    @Unique
+    private static boolean jme$parseBooleanParameter(Object2ObjectAVLTreeMap<String, String> parameters, String key, boolean fallback) {
+        if (parameters == null || key == null || key.isEmpty()) {
+            return fallback;
+        }
+        try {
+            final String raw = parameters.getOrDefault(key, "");
+            if (raw == null) {
+                return fallback;
+            }
+            final String value = raw.trim().toLowerCase(Locale.ENGLISH);
+            if (value.isEmpty()) {
+                return fallback;
+            }
+            if ("1".equals(value) || "true".equals(value) || "yes".equals(value) || "y".equals(value) || "on".equals(value)) {
+                return true;
+            }
+            if ("0".equals(value) || "false".equals(value) || "no".equals(value) || "n".equals(value) || "off".equals(value)) {
+                return false;
+            }
+            return fallback;
+        } catch (Exception ignored) {
+            return fallback;
+        }
+    }
+
+    @Unique
+    private static int jme$parseIntParameter(Object2ObjectAVLTreeMap<String, String> parameters, String key, int fallback, int min, int max) {
+        if (parameters == null || key == null || key.isEmpty()) {
+            return fallback;
+        }
+        try {
+            final String raw = parameters.getOrDefault(key, "");
+            if (raw == null) {
+                return fallback;
+            }
+            final String value = raw.trim();
+            if (value.isEmpty()) {
+                return fallback;
+            }
+            final int parsed = Integer.parseInt(value);
+            return Math.max(min, Math.min(max, parsed));
+        } catch (Exception ignored) {
+            return fallback;
         }
     }
 
@@ -213,6 +395,8 @@ public abstract class SystemMapServletMixin {
     @Unique
     private static void jme$patchRoutesArrayRouteTypes(JsonObject root) {
         final JsonObject container = root.has("data") && root.get("data").isJsonObject() ? root.getAsJsonObject("data") : root;
+        jme$applySystemMapLanguageDisplay(container);
+
         if (!container.has("routes") || !container.get("routes").isJsonArray()) {
             return;
         }
@@ -245,11 +429,493 @@ public abstract class SystemMapServletMixin {
 
             final String overrideRouteType = RouteTypeOverrideConfig.getRouteType(normalizedRouteId);
             if (!overrideRouteType.isEmpty()) {
-                // Keep the base MTR `type` unchanged for compatibility with upstream consumers
-                // (notably the built-in System Map path-finder). Expose the extended type separately.
+                // The upstream web UI only looks at `type` when grouping/rendering routes.
+                // Preserve the original value (for any downstream consumers) and also expose the override.
+                routeObject.addProperty("jmeBaseType", currentType);
                 routeObject.addProperty("jmeType", overrideRouteType);
+                routeObject.addProperty("type", overrideRouteType);
             }
         }
+    }
+
+    @Unique
+    private static JsonObject jme$handleConfigRequest(JsonReader jsonReader) {
+        final boolean requestReload = jsonReader != null && jsonReader.getBoolean("reload", false);
+        if (requestReload) {
+            JmeConfig.reload();
+            RouteTypeOverrideConfig.reload();
+        }
+
+        final boolean[] changed = {false};
+        if (!requestReload && jsonReader != null) {
+            jsonReader.unpackBoolean("use_mph", value -> {
+                JmeConfig.setUseMph(value);
+                changed[0] = true;
+            });
+            jsonReader.unpackBoolean("camera_tilt_enabled", value -> {
+                JmeConfig.setCameraTiltEnabled(value);
+                changed[0] = true;
+            });
+            jsonReader.unpackDouble("camera_tilt_strength", value -> {
+                JmeConfig.setCameraTiltStrength(value);
+                changed[0] = true;
+            });
+            jsonReader.unpackString("dashboard_route_list_mode", value -> {
+                JmeConfig.setDashboardRouteListMode(JmeConfig.DashboardRouteListMode.fromString(value));
+                changed[0] = true;
+            });
+            jsonReader.unpackBoolean("dashboard_map_auto_save_enabled", value -> {
+                JmeConfig.setDashboardMapAutoSaveEnabled(value);
+                changed[0] = true;
+            });
+            jsonReader.unpackString("dashboard_rail_overlay_mode", value -> {
+                JmeConfig.setDashboardRailOverlayMode(JmeConfig.DashboardRailOverlayMode.fromString(value));
+                changed[0] = true;
+            });
+            jsonReader.unpackInt("dashboard_rail_overlay_cull_max_per_cell", value -> {
+                JmeConfig.setDashboardRailOverlayCullMaxPerCell(value);
+                changed[0] = true;
+            });
+            jsonReader.unpackBoolean("system_map_overlay_cache_enabled", value -> {
+                JmeConfig.setSystemMapOverlayCacheEnabled(value);
+                changed[0] = true;
+            });
+            jsonReader.unpackBoolean("system_map_overlay_cache_persist_enabled", value -> {
+                JmeConfig.setSystemMapOverlayCachePersistEnabled(value);
+                changed[0] = true;
+            });
+            jsonReader.unpackString("system_map_language_display", value -> {
+                JmeConfig.setSystemMapLanguageDisplay(JmeConfig.SystemMapLanguageDisplay.fromString(value));
+                changed[0] = true;
+            });
+            jsonReader.unpackString("track_color_mode", value -> {
+                JmeConfig.setTrackColorMode(JmeConfig.TrackColorMode.fromString(value));
+                changed[0] = true;
+            });
+            jsonReader.unpackString("system_map_custom_css", value -> {
+                JmeConfig.setSystemMapCustomCss(value);
+                changed[0] = true;
+            });
+            jsonReader.unpackString("system_map_custom_js", value -> {
+                JmeConfig.setSystemMapCustomJs(value);
+                changed[0] = true;
+            });
+        }
+
+        if (changed[0]) {
+            JmeConfig.save();
+        }
+
+        final JsonObject response = new JsonObject();
+        response.addProperty("cachedResponseTime", System.currentTimeMillis());
+        response.addProperty("saved", changed[0]);
+
+        final JsonObject config = new JsonObject();
+        config.addProperty("use_mph", JmeConfig.useMph());
+        config.addProperty("camera_tilt_enabled", JmeConfig.cameraTiltEnabled());
+        config.addProperty("camera_tilt_strength", JmeConfig.cameraTiltStrength());
+        config.addProperty("dashboard_route_list_mode", JmeConfig.dashboardRouteListMode().name());
+        config.addProperty("dashboard_map_auto_save_enabled", JmeConfig.dashboardMapAutoSaveEnabled());
+        config.addProperty("dashboard_rail_overlay_mode", JmeConfig.dashboardRailOverlayMode().name());
+        config.addProperty("dashboard_rail_overlay_cull_max_per_cell", JmeConfig.dashboardRailOverlayCullMaxPerCell());
+        config.addProperty("system_map_overlay_cache_enabled", JmeConfig.systemMapOverlayCacheEnabled());
+        config.addProperty("system_map_overlay_cache_persist_enabled", JmeConfig.systemMapOverlayCachePersistEnabled());
+        config.addProperty("system_map_language_display", JmeConfig.systemMapLanguageDisplay().name());
+        config.addProperty("track_color_mode", JmeConfig.trackColorMode().name());
+
+        final JsonArray trackColorStops = new JsonArray();
+        final JmeConfig.TrackColorStop[] stops = JmeConfig.trackColorCustomGradientStops();
+        if (stops != null) {
+            for (final JmeConfig.TrackColorStop stop : stops) {
+                if (stop == null) {
+                    continue;
+                }
+                final JsonObject stopObject = new JsonObject();
+                stopObject.addProperty("speed_kmh", stop.speedKmh);
+                stopObject.addProperty("color", String.format(Locale.ROOT, "#%06X", stop.colorArgb & 0xFFFFFF));
+                trackColorStops.add(stopObject);
+            }
+        }
+        config.add("track_color_custom_gradient", trackColorStops);
+        config.add("track_color_resolved_gradient", jme$buildResolvedTrackColorGradient());
+        config.addProperty("system_map_custom_css", JmeConfig.getSystemMapCustomCss());
+        config.addProperty("system_map_custom_js", JmeConfig.getSystemMapCustomJs());
+        response.add("config", config);
+
+        final JsonObject enums = new JsonObject();
+        final JsonArray routeListModes = new JsonArray();
+        for (final JmeConfig.DashboardRouteListMode mode : JmeConfig.DashboardRouteListMode.values()) {
+            routeListModes.add(mode.name());
+        }
+        enums.add("dashboard_route_list_mode", routeListModes);
+
+        final JsonArray railOverlayModes = new JsonArray();
+        for (final JmeConfig.DashboardRailOverlayMode mode : JmeConfig.DashboardRailOverlayMode.values()) {
+            railOverlayModes.add(mode.name());
+        }
+        enums.add("dashboard_rail_overlay_mode", railOverlayModes);
+
+        final JsonArray languageDisplays = new JsonArray();
+        for (final JmeConfig.SystemMapLanguageDisplay display : JmeConfig.SystemMapLanguageDisplay.values()) {
+            languageDisplays.add(display.name());
+        }
+        enums.add("system_map_language_display", languageDisplays);
+
+        final JsonArray trackColorModes = new JsonArray();
+        for (final JmeConfig.TrackColorMode mode : JmeConfig.TrackColorMode.values()) {
+            trackColorModes.add(mode.name());
+        }
+        enums.add("track_color_mode", trackColorModes);
+
+        response.add("enums", enums);
+        return response;
+    }
+
+    @Unique
+    private static JsonArray jme$buildResolvedTrackColorGradient() {
+        final JmeConfig.TrackColorMode mode = JmeConfig.trackColorMode();
+
+        final JsonArray gradient = new JsonArray();
+
+        if (mode == JmeConfig.TrackColorMode.MTR_DEFAULT) {
+            // Mirror MagicRailSpeedColor's MTR palette (sorted, with copper at 250 and magenta at 400).
+            final java.util.TreeMap<Integer, Integer> bySpeed = new java.util.TreeMap<>();
+            jme$putMtrGradientStop(bySpeed, org.mtr.mod.data.RailType.WOODEN.speedLimit, org.mtr.mod.data.RailType.WOODEN.color);
+            jme$putMtrGradientStop(bySpeed, org.mtr.mod.data.RailType.STONE.speedLimit, org.mtr.mod.data.RailType.STONE.color);
+            jme$putMtrGradientStop(bySpeed, org.mtr.mod.data.RailType.EMERALD.speedLimit, org.mtr.mod.data.RailType.EMERALD.color);
+            jme$putMtrGradientStop(bySpeed, org.mtr.mod.data.RailType.IRON.speedLimit, org.mtr.mod.data.RailType.IRON.color);
+            jme$putMtrGradientStop(bySpeed, org.mtr.mod.data.RailType.BRICKS.speedLimit, org.mtr.mod.data.RailType.BRICKS.color);
+            jme$putMtrGradientStop(bySpeed, org.mtr.mod.data.RailType.OBSIDIAN.speedLimit, org.mtr.mod.data.RailType.OBSIDIAN.color);
+            jme$putMtrGradientStop(bySpeed, org.mtr.mod.data.RailType.PRISMARINE.speedLimit, org.mtr.mod.data.RailType.PRISMARINE.color);
+            jme$putMtrGradientStop(bySpeed, org.mtr.mod.data.RailType.BLAZE.speedLimit, org.mtr.mod.data.RailType.BLAZE.color);
+            jme$putMtrGradientStop(bySpeed, org.mtr.mod.data.RailType.QUARTZ.speedLimit, org.mtr.mod.data.RailType.QUARTZ.color);
+            jme$putMtrGradientStop(bySpeed, org.mtr.mod.data.RailType.DIAMOND.speedLimit, org.mtr.mod.data.RailType.DIAMOND.color);
+
+            // Requested: 250 km/h should be copper to stand out.
+            bySpeed.put(250, 0xFFB87333);
+            // Requested: 400 km/h is the purpur connector (magenta).
+            bySpeed.put(400, 0xFFB42AE6);
+
+            for (final Map.Entry<Integer, Integer> entry : bySpeed.entrySet()) {
+                if (entry == null) {
+                    continue;
+                }
+                final JsonObject stopObject = new JsonObject();
+                stopObject.addProperty("speed_kmh", entry.getKey());
+                stopObject.addProperty("color", String.format(Locale.ROOT, "#%06X", entry.getValue() & 0xFFFFFF));
+                gradient.add(stopObject);
+            }
+
+            return gradient;
+        }
+
+        if (mode == JmeConfig.TrackColorMode.CUSTOM_GRADIENT) {
+            final JmeConfig.TrackColorStop[] stops = JmeConfig.trackColorCustomGradientStops();
+            if (stops != null) {
+                for (final JmeConfig.TrackColorStop stop : stops) {
+                    if (stop == null) {
+                        continue;
+                    }
+                    final JsonObject stopObject = new JsonObject();
+                    stopObject.addProperty("speed_kmh", stop.speedKmh);
+                    stopObject.addProperty("color", String.format(Locale.ROOT, "#%06X", stop.colorArgb & 0xFFFFFF));
+                    gradient.add(stopObject);
+                }
+            }
+            return gradient;
+        }
+
+        // OpenRailwayMap-like default.
+        final int[][] stops = new int[][]{
+                {5, 0xFF102A8A},
+                {100, 0xFF25C977},
+                {180, 0xFFD9E344},
+                {220, 0xFFFFE028},
+                {300, 0xFFEF3A26},
+                {400, 0xFFB42AE6}
+        };
+
+        for (final int[] stop : stops) {
+            if (stop == null || stop.length < 2) {
+                continue;
+            }
+            final JsonObject stopObject = new JsonObject();
+            stopObject.addProperty("speed_kmh", stop[0]);
+            stopObject.addProperty("color", String.format(Locale.ROOT, "#%06X", stop[1] & 0xFFFFFF));
+            gradient.add(stopObject);
+        }
+
+        return gradient;
+    }
+
+    @Unique
+    private static void jme$putMtrGradientStop(java.util.TreeMap<Integer, Integer> bySpeed, int speedKmh, int color) {
+        if (bySpeed == null) {
+            return;
+        }
+        final int speed = Math.max(1, Math.min(400, speedKmh));
+        final int argb = 0xFF000000 | (color & 0xFFFFFF);
+        bySpeed.put(speed, argb);
+    }
+
+    @Unique
+    private static void jme$applySystemMapLanguageDisplay(JsonObject container) {
+        if (container == null) {
+            return;
+        }
+
+        final JmeConfig.SystemMapLanguageDisplay display = JmeConfig.systemMapLanguageDisplay();
+
+        if (container.has("stations") && container.get("stations").isJsonArray()) {
+            final JsonArray stations = container.getAsJsonArray("stations");
+            for (int i = 0; i < stations.size(); i++) {
+                final JsonElement stationElement = stations.get(i);
+                if (stationElement == null || !stationElement.isJsonObject()) {
+                    continue;
+                }
+                final JsonObject stationObject = stationElement.getAsJsonObject();
+                jme$patchNameField(stationObject, "name", display);
+            }
+        }
+
+        if (container.has("routes") && container.get("routes").isJsonArray()) {
+            final JsonArray routes = container.getAsJsonArray("routes");
+            for (int i = 0; i < routes.size(); i++) {
+                final JsonElement routeElement = routes.get(i);
+                if (routeElement == null || !routeElement.isJsonObject()) {
+                    continue;
+                }
+
+                final JsonObject routeObject = routeElement.getAsJsonObject();
+                // Preserve the upstream System Map route variation delimiter `||`.
+                // The web UI splits route names on `||` to build a route with variations;
+                // stripping pipes here breaks that grouping and shows each variation as a separate route.
+                jme$patchRouteNameField(routeObject, "name", display);
+                jme$patchRouteNameField(routeObject, "routeName", display);
+
+                if (routeObject.has("stations") && routeObject.get("stations").isJsonArray()) {
+                    final JsonArray routeStations = routeObject.getAsJsonArray("stations");
+                    for (int j = 0; j < routeStations.size(); j++) {
+                        final JsonElement routeStationElement = routeStations.get(j);
+                        if (routeStationElement == null || !routeStationElement.isJsonObject()) {
+                            continue;
+                        }
+                        final JsonObject routeStationObject = routeStationElement.getAsJsonObject();
+                        jme$patchNameField(routeStationObject, "name", display);
+                    }
+                }
+            }
+        }
+    }
+
+    @Unique
+    private static void jme$patchNameField(JsonObject obj, String fieldName, JmeConfig.SystemMapLanguageDisplay display) {
+        if (obj == null || fieldName == null || fieldName.isEmpty()) {
+            return;
+        }
+        if (!obj.has(fieldName) || !obj.get(fieldName).isJsonPrimitive()) {
+            return;
+        }
+
+        final String raw = obj.get(fieldName).getAsString();
+        final String patched = jme$formatMultilingualText(raw, display);
+        if (!patched.equals(raw)) {
+            obj.addProperty(fieldName, patched);
+        }
+    }
+
+    @Unique
+    private static void jme$patchRouteNameField(JsonObject obj, String fieldName, JmeConfig.SystemMapLanguageDisplay display) {
+        if (obj == null || fieldName == null || fieldName.isEmpty()) {
+            return;
+        }
+        if (!obj.has(fieldName) || !obj.get(fieldName).isJsonPrimitive()) {
+            return;
+        }
+
+        final String raw = obj.get(fieldName).getAsString();
+        final String patched = jme$formatRouteName(raw, display);
+        if (!patched.equals(raw)) {
+            obj.addProperty(fieldName, patched);
+        }
+    }
+
+    @Unique
+    private static String jme$formatMultilingualText(String raw, JmeConfig.SystemMapLanguageDisplay display) {
+        final String value = raw == null ? "" : raw.trim();
+        if (value.isEmpty()) {
+            return value;
+        }
+
+        final JmeConfig.SystemMapLanguageDisplay mode = display == null ? JmeConfig.SystemMapLanguageDisplay.NORMAL : display;
+
+        final String[] parts = value.split("\\|");
+        if (parts.length > 1) {
+            String bestCjk = "";
+            int bestCjkCount = -1;
+            String bestNonCjk = "";
+            int bestNonCjkCount = -1;
+
+            final StringBuilder joined = new StringBuilder();
+            for (final String partRaw : parts) {
+                final String part = partRaw == null ? "" : partRaw.trim();
+                if (part.isEmpty()) {
+                    continue;
+                }
+
+                if (joined.length() > 0) {
+                    joined.append(" / ");
+                }
+                joined.append(part);
+
+                final int cjkCount = jme$countCjk(part);
+                if (cjkCount > bestCjkCount) {
+                    bestCjkCount = cjkCount;
+                    bestCjk = part;
+                }
+                final int nonCjkCount = part.codePointCount(0, part.length()) - cjkCount;
+                if (nonCjkCount > bestNonCjkCount) {
+                    bestNonCjkCount = nonCjkCount;
+                    bestNonCjk = part;
+                }
+            }
+
+            if (mode == JmeConfig.SystemMapLanguageDisplay.CJK_ONLY) {
+                final String candidate = bestCjk.isEmpty() ? value : bestCjk;
+                return jme$filterByCjk(candidate, true);
+            } else if (mode == JmeConfig.SystemMapLanguageDisplay.NON_CJK_ONLY) {
+                final String candidate = bestNonCjk.isEmpty() ? value : bestNonCjk;
+                return jme$filterByCjk(candidate, false);
+            } else {
+                return joined.length() == 0 ? value.replace('|', ' ') : joined.toString();
+            }
+        }
+
+        if (mode == JmeConfig.SystemMapLanguageDisplay.CJK_ONLY) {
+            return jme$filterByCjk(value, true);
+        } else if (mode == JmeConfig.SystemMapLanguageDisplay.NON_CJK_ONLY) {
+            return jme$filterByCjk(value, false);
+        } else {
+            return value;
+        }
+    }
+
+    /**
+     * The upstream web System Map uses {@code name.split("||")} to determine the route name and its variations.
+     * Preserve a single {@code ||} delimiter so route variations remain grouped, and collapse any extra {@code ||}
+     * segments into the variation part.
+     *
+     * <p>This method still applies {@link #jme$formatMultilingualText} to each segment so the
+     * {@code system_map_language_display} setting works as expected.</p>
+     */
+    @Unique
+    private static String jme$formatRouteName(String raw, JmeConfig.SystemMapLanguageDisplay display) {
+        final String value = raw == null ? "" : raw.trim();
+        if (value.isEmpty()) {
+            return value;
+        }
+
+        if (!value.contains("||")) {
+            return jme$formatMultilingualText(value, display);
+        }
+
+        final String[] parts = value.split("\\|\\|");
+        if (parts.length <= 1) {
+            return jme$formatMultilingualText(value, display);
+        }
+
+        final String base = jme$formatMultilingualText(parts[0], display);
+
+        final StringBuilder variations = new StringBuilder();
+        for (int i = 1; i < parts.length; i++) {
+            final String part = parts[i] == null ? "" : parts[i].trim();
+            if (part.isEmpty()) {
+                continue;
+            }
+
+            final String formatted = jme$formatMultilingualText(part, display).trim();
+            if (formatted.isEmpty()) {
+                continue;
+            }
+
+            if (variations.length() > 0) {
+                variations.append(" / ");
+            }
+            variations.append(formatted);
+        }
+
+        if (variations.length() == 0) {
+            return base;
+        }
+
+        return base + "||" + variations;
+    }
+
+    @Unique
+    private static String jme$filterByCjk(String text, boolean keepCjk) {
+        if (text == null || text.isEmpty()) {
+            return "";
+        }
+
+        final StringBuilder out = new StringBuilder();
+        for (int i = 0; i < text.length(); ) {
+            final int codePoint = text.codePointAt(i);
+            i += Character.charCount(codePoint);
+
+            if (codePoint == '|') {
+                continue;
+            }
+
+            final boolean isCjk = jme$isCjk(codePoint);
+            if (keepCjk && !isCjk) {
+                // Keep ASCII digits/spaces/punctuation for readability alongside CJK names.
+                if (codePoint >= '0' && codePoint <= '9') {
+                    out.appendCodePoint(codePoint);
+                } else if (Character.isWhitespace(codePoint)) {
+                    out.append(' ');
+                } else if (codePoint == '-' || codePoint == '_' || codePoint == '/' || codePoint == '(' || codePoint == ')' || codePoint == '.' || codePoint == ',') {
+                    out.appendCodePoint(codePoint);
+                }
+                continue;
+            }
+            if (!keepCjk && isCjk) {
+                continue;
+            }
+            out.appendCodePoint(codePoint);
+        }
+
+        return out.toString().trim().replaceAll("\\s{2,}", " ");
+    }
+
+    @Unique
+    private static int jme$countCjk(String text) {
+        if (text == null || text.isEmpty()) {
+            return 0;
+        }
+        int count = 0;
+        for (int i = 0; i < text.length(); ) {
+            final int codePoint = text.codePointAt(i);
+            i += Character.charCount(codePoint);
+            if (jme$isCjk(codePoint)) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    @Unique
+    private static boolean jme$isCjk(int codePoint) {
+        return (codePoint >= 0x4E00 && codePoint <= 0x9FFF) // CJK Unified Ideographs
+                || (codePoint >= 0x3400 && codePoint <= 0x4DBF) // CJK Unified Ideographs Extension A
+                || (codePoint >= 0xF900 && codePoint <= 0xFAFF) // CJK Compatibility Ideographs
+                || (codePoint >= 0x2E80 && codePoint <= 0x2FFF) // CJK Radicals Supplement, Kangxi Radicals, etc.
+                || (codePoint >= 0x3000 && codePoint <= 0x303F) // CJK Symbols and Punctuation
+                || (codePoint >= 0x3040 && codePoint <= 0x309F) // Hiragana
+                || (codePoint >= 0x30A0 && codePoint <= 0x30FF) // Katakana
+                || (codePoint >= 0xAC00 && codePoint <= 0xD7AF) // Hangul Syllables
+                || (codePoint >= 0x1100 && codePoint <= 0x11FF) // Hangul Jamo
+                || (codePoint >= 0x3130 && codePoint <= 0x318F) // Hangul Compatibility Jamo
+                || (codePoint >= 0xFF00 && codePoint <= 0xFFEF); // Halfwidth and Fullwidth Forms
     }
 
     @Unique

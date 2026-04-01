@@ -70,6 +70,8 @@ public class DepotCancellationSettingsScreen extends ScreenExtension {
             }
         };
         thresholdSlider.setValueMapped(jme$toSliderValue(thresholdMinutes));
+        // SliderWidgetExtension doesn't always call updateMessage2() after programmatic value updates.
+        thresholdSlider.setMessage2(Text.cast(TextHelper.literal("Delay Threshold: " + thresholdMinutes + " min")));
         addChild(new ClickableWidget(thresholdSlider));
 
         actionButton = new ButtonWidgetExtension(panelX + 12, panelY + 102, panelWidth - 24, 20, jme$getActionLabel(), button -> {

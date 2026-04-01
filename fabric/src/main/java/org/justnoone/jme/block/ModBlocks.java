@@ -20,13 +20,11 @@ public class ModBlocks {
         registerPlatform(registry, "platform_german", false);
         registerPlatform(registry, "platform_polish", false);
         registerPlatform(registry, "platform_portuguese", false);
-        registerPlatform(registry, "platform_russian", false); // Backward-compatibility for existing worlds
         registerPlatform(registry, "platform_blue_american", false);
         registerPlatform(registry, "platform_swedish", false);
         registerPlatform(registry, "platform_german_slab", true);
         registerPlatform(registry, "platform_polish_slab", true);
         registerPlatform(registry, "platform_portuguese_slab", true);
-        registerPlatform(registry, "platform_russian_slab", true); // Backward-compatibility for existing worlds
         registerPlatform(registry, "platform_blue_american_slab", true);
         registerPlatform(registry, "platform_swedish_slab", true);
         registerPlatform(registry, "platform_czech", false);

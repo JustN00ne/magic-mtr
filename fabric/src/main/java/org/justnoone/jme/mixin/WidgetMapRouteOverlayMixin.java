@@ -4,6 +4,8 @@ import org.justnoone.jme.client.DashboardRouteRenderState;
 import org.justnoone.jme.client.DashboardMapOverlayCacheStore;
 import org.justnoone.jme.client.DashboardRailViewMode;
 import org.justnoone.jme.client.PositionAngleKey;
+import org.justnoone.jme.client.TrainDetectorPreviewState;
+import org.justnoone.jme.client.screen.TrainDetectorSensorScreen;
 import org.justnoone.jme.config.JmeConfig;
 import org.justnoone.jme.rail.AlternativePlatformRegistry;
 import org.justnoone.jme.rail.MagicRailSpeedColor;
@@ -22,6 +24,7 @@ import org.mtr.mapping.holder.ClientWorld;
 import org.mtr.mapping.holder.MinecraftClient;
 import org.mtr.mapping.holder.World;
 import org.mtr.mod.client.MinecraftClientData;
+import org.mtr.mod.data.RailType;
 import org.mtr.mod.data.VehicleExtension;
 import org.mtr.mod.screen.WidgetMap;
 import org.mtr.mod.Init;
@@ -31,6 +34,7 @@ import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import org.spongepowered.asm.mixin.injection.callback.LocalCapture;
 
 import java.awt.Color;
 import java.util.AbstractMap;
@@ -67,8 +71,20 @@ public abstract class WidgetMapRouteOverlayMixin {
     @Unique
     private static int jme$mergedGraphHash = Integer.MIN_VALUE;
 
-    @Inject(method = "render", at = @At("TAIL"), remap = false)
-    private void jme$renderRouteOverlay(GraphicsHolder graphicsHolder, int mouseX, int mouseY, float delta, CallbackInfo ci) {
+    @Inject(
+            method = "render",
+            at = @At(value = "INVOKE", target = "Lorg/mtr/mapping/mapper/GuiDrawing;beginDrawingRectangle()V", ordinal = 1, shift = At.Shift.AFTER),
+            locals = LocalCapture.CAPTURE_FAILSOFT,
+            remap = false
+    )
+    private void jme$renderRouteOverlay(GraphicsHolder graphicsHolder, int mouseX, int mouseY, float delta, CallbackInfo ci, GuiDrawing guiDrawing, org.mtr.libraries.it.unimi.dsi.fastutil.doubles.DoubleDoubleImmutablePair mouseWorldPos, org.mtr.libraries.it.unimi.dsi.fastutil.ints.IntIntImmutablePair topLeft, org.mtr.libraries.it.unimi.dsi.fastutil.ints.IntIntImmutablePair bottomRight) {
+        if (guiDrawing == null) {
+            return;
+        }
+
+        final org.mtr.mapping.holder.Screen currentScreen = MinecraftClient.getInstance().getCurrentScreenMapped();
+        final boolean isTrainDetectorPreview = currentScreen != null && currentScreen.data instanceof TrainDetectorSensorScreen;
+
         final Route editingRoute = showStations ? DashboardRouteRenderState.getEditingRoute() : null;
         final List<Platform> routePlatforms = new ArrayList<>();
         if (editingRoute != null) {
@@ -100,23 +116,29 @@ public abstract class WidgetMapRouteOverlayMixin {
             currentRailsHash = 0;
         }
 
-        final GuiDrawing guiDrawing = new GuiDrawing(graphicsHolder);
-        guiDrawing.beginDrawingRectangle();
-
+        // We're already inside WidgetMap's rectangle draw pass here.
+        // Draw the rail overlay first so MTR's platform/siding selection squares remain on top.
         if (editingRoute != null) {
             // Grey out the dashboard map while a route is being edited.
             guiDrawing.drawRectangle(jme$getX2(), jme$getY2(), jme$getX2() + mapWidth, jme$getY2() + mapHeight, 0x66545454);
         }
 
-        if (scale >= 0.1D) {
+        // Draw vehicles first so the rail overlay sits on top (the "tiny dot" shouldn't break the rails).
+        if (scale >= 0.075D) {
+            jme$drawVisibleVehicles(guiDrawing, editingRoute, mapWidth, mapHeight);
+        }
+
+        if (scale >= 0.075D) {
             final JmeConfig.DashboardRailOverlayMode overlayMode = JmeConfig.dashboardRailOverlayMode();
             if (overlayMode != JmeConfig.DashboardRailOverlayMode.OFF) {
                 final boolean speedMode = DashboardRailViewMode.isSpeedMode();
                 final int networkColor = editingRoute == null ? jme$withAlpha(0x3F8BFF, 0x95) : jme$withAlpha(0x8A8A8A, 0x6F);
                 final List<DashboardMapOverlayCacheStore.RailSnapshot> railsToDraw = jme$selectAllKnownRailsForOverlay(overlayMode, mapWidth, mapHeight);
                 jme$drawKnownRails(guiDrawing, railsToDraw, networkColor, Math.max(1.0D, lineThickness * 0.68D), mapWidth, mapHeight, speedMode, editingRoute != null);
-                final int signalColor = speedMode ? (editingRoute == null ? jme$withAlpha(0xDCE7FF, 0x8C) : jme$withAlpha(0x9A9A9A, 0x6A)) : networkColor;
-                jme$drawKnownSignalArrows(guiDrawing, railsToDraw, signalColor, Math.max(0.9D, lineThickness * 0.6D), mapWidth, mapHeight);
+                if (scale >= 0.1D) {
+                    final int signalColor = speedMode ? (editingRoute == null ? jme$withAlpha(0xDCE7FF, 0x8C) : jme$withAlpha(0x9A9A9A, 0x6A)) : networkColor;
+                    jme$drawKnownSignalArrows(guiDrawing, railsToDraw, signalColor, Math.max(0.9D, lineThickness * 0.6D), mapWidth, mapHeight);
+                }
             }
         }
 
@@ -155,11 +177,29 @@ public abstract class WidgetMapRouteOverlayMixin {
             }
         }
 
-        if (scale >= 0.075D) {
-            jme$drawVisibleVehicles(guiDrawing, editingRoute, mapWidth, mapHeight);
-        }
+        if (isTrainDetectorPreview) {
+            final List<Object[]> previewEdges = TrainDetectorPreviewState.getPreviewEdges();
+            if (previewEdges != null && !previewEdges.isEmpty()) {
+                final int glowColor = jme$withAlpha(0xFF6A00, 0x55);
+                final int coreColor = jme$withAlpha(0xFF6A00, 0xE6);
+                final double glowThickness = Math.max(1.8D, lineThickness * 2.2D);
+                final double coreThickness = Math.max(1.25D, lineThickness * 1.25D);
 
-        guiDrawing.finishDrawingRectangle();
+                for (final Object[] edge : previewEdges) {
+                    if (edge == null || edge.length < 3) {
+                        continue;
+                    }
+                    final Position from = edge[0] instanceof Position ? (Position) edge[0] : null;
+                    final Position to = edge[1] instanceof Position ? (Position) edge[1] : null;
+                    final Rail rail = edge[2] instanceof Rail ? (Rail) edge[2] : null;
+                    if (from == null || to == null || rail == null || rail.railMath == null) {
+                        continue;
+                    }
+                    jme$drawRailEdge(guiDrawing, from, to, rail, glowColor, glowThickness, mapWidth, mapHeight);
+                    jme$drawRailEdge(guiDrawing, from, to, rail, coreColor, coreThickness, mapWidth, mapHeight);
+                }
+            }
+        }
     }
 
     @Unique
@@ -352,6 +392,8 @@ public abstract class WidgetMapRouteOverlayMixin {
 
         final int cellSize = 26;
         final int maxPerCell = Math.max(1, Math.min(64, JmeConfig.dashboardRailOverlayCullMaxPerCell()));
+        final boolean shouldCull = overlayMode == JmeConfig.DashboardRailOverlayMode.CULL
+                || (overlayMode == JmeConfig.DashboardRailOverlayMode.ALL && scale < 0.1D);
         final Map<Long, Integer> countsByCell = new HashMap<>();
         final List<DashboardMapOverlayCacheStore.RailSnapshot> result = new ArrayList<>();
 
@@ -371,7 +413,7 @@ public abstract class WidgetMapRouteOverlayMixin {
                 continue;
             }
 
-            if (overlayMode == JmeConfig.DashboardRailOverlayMode.CULL) {
+            if (shouldCull) {
                 final int cellX = (int) Math.floor(mapX / cellSize);
                 final int cellY = (int) Math.floor(mapY / cellSize);
                 final long cellKey = (((long) cellX) << 32) ^ (cellY & 0xFFFFFFFFL);
@@ -409,9 +451,28 @@ public abstract class WidgetMapRouteOverlayMixin {
                 continue;
             }
 
-            final int railColor = speedMode ? jme$getRailSpeedColor(rail.speedKmh, alpha) : color;
+            final int railColor = jme$getRailOverlayColor(rail, color, alpha, speedMode);
             jme$drawRailPolyline(guiDrawing, rail.points, railColor, thickness, mapWidth, mapHeight);
         }
+    }
+
+    @Unique
+    private static int jme$getRailOverlayColor(DashboardMapOverlayCacheStore.RailSnapshot rail, int fallbackColor, int alpha, boolean speedMode) {
+        if (rail == null) {
+            return jme$withAlpha(0x3F8BFF, alpha);
+        }
+
+        if (rail.isPlatform) {
+            return jme$withAlpha(RailType.PLATFORM.color, alpha);
+        }
+        if (rail.isSiding) {
+            return jme$withAlpha(RailType.SIDING.color, alpha);
+        }
+        if (rail.canTurnBack) {
+            return jme$withAlpha(RailType.TURN_BACK.color, alpha);
+        }
+
+        return speedMode ? jme$getRailSpeedColor(rail.speedKmh, alpha) : jme$withAlpha(fallbackColor, alpha);
     }
 
     @Unique

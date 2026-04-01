@@ -1,3 +1,25 @@
+:root {
+  --jme-panel-bg: rgba(18, 18, 22, 0.86);
+  --jme-panel-bg-soft: rgba(18, 18, 22, 0.72);
+  --jme-panel-bg-hover: rgba(18, 18, 22, 0.84);
+  --jme-panel-border: rgba(255, 255, 255, 0.16);
+  --jme-text: rgba(255, 255, 255, 0.92);
+
+  --jme-accent-strong: rgba(255, 90, 87, 0.55);
+  --jme-accent-soft: rgba(255, 90, 87, 0.18);
+  --jme-accent-solid: rgba(255, 90, 87, 0.32);
+
+  --jme-focus-strong: rgba(123, 183, 255, 0.72);
+  --jme-focus-soft: rgba(123, 183, 255, 0.18);
+
+  --jme-loading-border: rgba(123, 183, 255, 0.5);
+  --jme-loading-bg: rgba(123, 183, 255, 0.12);
+  --jme-success-border: rgba(37, 201, 119, 0.55);
+  --jme-success-bg: rgba(37, 201, 119, 0.14);
+  --jme-error-border: rgba(255, 90, 87, 0.55);
+  --jme-error-bg: rgba(255, 90, 87, 0.14);
+}
+
 .wrapper {
   position: relative;
 }
@@ -12,7 +34,11 @@
 }
 
 #jme-map-menu-root {
-  position: absolute;
+  display: none !important;
+}
+
+#jme-map-menu-root {
+  position: fixed;
   top: 12px;
   right: 12px;
   z-index: 30;
@@ -27,9 +53,9 @@
   width: 40px;
   height: 40px;
   padding: 0;
-  border: 1px solid rgba(255, 255, 255, 0.16);
+  border: 1px solid var(--jme-panel-border);
   border-radius: 12px;
-  background: rgba(18, 18, 22, 0.72);
+  background: var(--jme-panel-bg-soft);
   color: #ffffff;
   cursor: pointer;
   display: grid;
@@ -40,12 +66,12 @@
 }
 
 #jme-map-menu-root.open #jme-map-menu-button {
-  border-color: rgba(255, 90, 87, 0.55);
-  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.28), 0 0 0 2px rgba(255, 90, 87, 0.18);
+  border-color: var(--jme-accent-strong);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.28), 0 0 0 2px var(--jme-accent-soft);
 }
 
 #jme-map-menu-button:hover {
-  background: rgba(18, 18, 22, 0.84);
+  background: var(--jme-panel-bg-hover);
 }
 
 #jme-map-menu-button:active {
@@ -63,13 +89,15 @@
   width: 270px;
   max-width: calc(100vw - 24px);
   padding: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.16);
+  border: 1px solid var(--jme-panel-border);
   border-radius: 14px;
-  background: rgba(18, 18, 22, 0.86);
-  color: rgba(255, 255, 255, 0.92);
+  background: var(--jme-panel-bg);
+  color: var(--jme-text);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
   box-shadow: 0 14px 34px rgba(0, 0, 0, 0.3);
+  max-height: calc(100vh - 96px);
+  overflow: auto;
 }
 
 .jme-menu-header {
@@ -80,12 +108,32 @@
   margin-bottom: 6px;
 }
 
+.jme-menu-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .jme-menu-title {
   font-size: 12px;
   font-weight: 750;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   opacity: 0.92;
+}
+
+.jme-menu-icon {
+  border: 0;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.75);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 10px;
+}
+
+.jme-menu-icon:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.95);
 }
 
 .jme-menu-close {
@@ -113,6 +161,32 @@
   margin-bottom: 8px;
 }
 
+.jme-menu-status {
+  margin-top: 10px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.jme-menu-status.loading {
+  border-color: var(--jme-loading-border);
+  background: var(--jme-loading-bg);
+}
+
+.jme-menu-status.error {
+  border-color: var(--jme-error-border);
+  background: var(--jme-error-bg);
+}
+
+.jme-menu-status.success {
+  border-color: var(--jme-success-border);
+  background: var(--jme-success-bg);
+}
+
 .jme-menu-row {
   display: flex;
   flex-wrap: wrap;
@@ -123,6 +197,10 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+.jme-menu-subsection {
+  margin-top: 10px;
 }
 
 .jme-menu-chip {
@@ -142,12 +220,119 @@
 }
 
 .jme-menu-chip.active {
-  background: rgba(255, 90, 87, 0.18);
-  border-color: rgba(255, 90, 87, 0.5);
+  background: var(--jme-accent-soft);
+  border-color: var(--jme-accent-strong);
 }
 
 .jme-menu-chip .material-icons {
   font-size: 18px;
+}
+
+.jme-menu-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.9);
+  cursor: pointer;
+  user-select: none;
+}
+
+.jme-menu-toggle:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.jme-menu-toggle input[type="checkbox"] {
+  width: 40px;
+  height: 22px;
+  margin: 0;
+  padding: 0;
+  appearance: none;
+  -webkit-appearance: none;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: rgba(0, 0, 0, 0.35);
+  position: relative;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.jme-menu-toggle input[type="checkbox"]::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.9);
+  transition: left 160ms ease, background 160ms ease;
+}
+
+.jme-menu-toggle input[type="checkbox"]:checked {
+  border-color: var(--jme-accent-strong);
+  background: var(--jme-accent-solid);
+}
+
+.jme-menu-toggle input[type="checkbox"]:checked::after {
+  left: 20px;
+  background: rgba(255, 255, 255, 0.95);
+}
+
+.jme-menu-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.jme-menu-field-label {
+  font-size: 12px;
+  opacity: 0.85;
+}
+
+.jme-menu-control {
+  width: 100%;
+  padding: 9px 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.9);
+  outline: none;
+}
+
+.jme-menu-control:focus {
+  border-color: var(--jme-focus-strong);
+  box-shadow: 0 0 0 2px var(--jme-focus-soft);
+}
+
+.jme-menu-textarea {
+  width: 100%;
+  min-height: 140px;
+  resize: vertical;
+  padding: 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(0, 0, 0, 0.22);
+  color: rgba(255, 255, 255, 0.92);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 12px;
+  line-height: 1.4;
+  outline: none;
+}
+
+.jme-menu-textarea:focus {
+  border-color: var(--jme-accent-strong);
+  box-shadow: 0 0 0 2px var(--jme-accent-soft);
+}
+
+.jme-menu-help {
+  font-size: 11px;
+  opacity: 0.65;
+  line-height: 1.35;
 }
 
 .jme-menu-action {

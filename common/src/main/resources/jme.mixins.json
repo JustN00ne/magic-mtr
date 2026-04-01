@@ -17,6 +17,7 @@
     "SidingSpeedLimitMixin",
     "TrainScheduleSensorRailDetectMixin",
     "SystemMapServletMixin",
+    "ServletBaseGzipMixin",
     "VehicleDelayAccessor",
     "VehicleAlternativePlatformRerouteMixin",
     "VehicleExtraDataAlternativePlatformMixin",

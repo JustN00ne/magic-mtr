@@ -96,11 +96,17 @@ public final class DashboardMapOverlayCacheStore {
                 final long speedForward = rail.getSpeedLimitKilometersPerHour(false);
                 final long speedReverse = rail.getSpeedLimitKilometersPerHour(true);
                 final int speedKmh = (int) Math.max(1L, Math.min(1000L, Math.max(speedForward, speedReverse)));
+                final boolean isPlatform = rail.isPlatform();
+                final boolean isSiding = rail.isSiding();
+                final boolean canTurnBack = rail.canTurnBack();
 
                 if (existing.speedKmh == speedKmh
                         && existing.allowForward == allowForward
                         && existing.allowReverse == allowReverse
-                        && existing.hasSignals == hasSignals) {
+                        && existing.hasSignals == hasSignals
+                        && existing.isPlatform == isPlatform
+                        && existing.isSiding == isSiding
+                        && existing.canTurnBack == canTurnBack) {
                     continue;
                 }
             }
@@ -304,8 +310,11 @@ public final class DashboardMapOverlayCacheStore {
                     final boolean allowForward = !railObject.has("allow_fwd") || railObject.get("allow_fwd").getAsBoolean();
                     final boolean allowReverse = !railObject.has("allow_rev") || railObject.get("allow_rev").getAsBoolean();
                     final boolean hasSignals = railObject.has("has_signals") && railObject.get("has_signals").getAsBoolean();
+                    final boolean isPlatform = railObject.has("is_platform") && railObject.get("is_platform").getAsBoolean();
+                    final boolean isSiding = railObject.has("is_siding") && railObject.get("is_siding").getAsBoolean();
+                    final boolean canTurnBack = railObject.has("can_turn_back") && railObject.get("can_turn_back").getAsBoolean();
 
-                    final RailSnapshot snapshot = new RailSnapshot(id, points, Math.max(1, speedKmh), allowForward, allowReverse, hasSignals);
+                    final RailSnapshot snapshot = new RailSnapshot(id, points, Math.max(1, speedKmh), allowForward, allowReverse, hasSignals, isPlatform, isSiding, canTurnBack);
                     cache.railsById.put(id, snapshot);
                     cache.railIndexById.put(id, cache.railsList.size());
                     cache.railsList.add(snapshot);
@@ -360,6 +369,9 @@ public final class DashboardMapOverlayCacheStore {
                 railObject.addProperty("allow_fwd", rail.allowForward);
                 railObject.addProperty("allow_rev", rail.allowReverse);
                 railObject.addProperty("has_signals", rail.hasSignals);
+                railObject.addProperty("is_platform", rail.isPlatform);
+                railObject.addProperty("is_siding", rail.isSiding);
+                railObject.addProperty("can_turn_back", rail.canTurnBack);
 
                 final JsonArray pointsArray = new JsonArray();
                 for (final double[] point : rail.points) {
@@ -446,14 +458,20 @@ public final class DashboardMapOverlayCacheStore {
         public final boolean allowForward;
         public final boolean allowReverse;
         public final boolean hasSignals;
+        public final boolean isPlatform;
+        public final boolean isSiding;
+        public final boolean canTurnBack;
 
-        private RailSnapshot(String id, List<double[]> points, int speedKmh, boolean allowForward, boolean allowReverse, boolean hasSignals) {
+        private RailSnapshot(String id, List<double[]> points, int speedKmh, boolean allowForward, boolean allowReverse, boolean hasSignals, boolean isPlatform, boolean isSiding, boolean canTurnBack) {
             this.id = id;
             this.points = points;
             this.speedKmh = speedKmh;
             this.allowForward = allowForward;
             this.allowReverse = allowReverse;
             this.hasSignals = hasSignals;
+            this.isPlatform = isPlatform;
+            this.isSiding = isSiding;
+            this.canTurnBack = canTurnBack;
         }
 
         public static RailSnapshot fromRail(Rail rail) {
@@ -486,10 +504,13 @@ public final class DashboardMapOverlayCacheStore {
             final long speedForward = rail.getSpeedLimitKilometersPerHour(false);
             final long speedReverse = rail.getSpeedLimitKilometersPerHour(true);
             final int speedKmh = (int) Math.max(1L, Math.min(1000L, Math.max(speedForward, speedReverse)));
+            final boolean isPlatform = rail.isPlatform();
+            final boolean isSiding = rail.isSiding();
+            final boolean canTurnBack = rail.canTurnBack();
 
             final List<double[]> points = buildRailPolyline(rail);
             if (points.size() < 2) {
-                return new RailSnapshot(id, buildFallbackPoints(from, to), speedKmh, allowForward, allowReverse, hasSignals);
+                return new RailSnapshot(id, buildFallbackPoints(from, to), speedKmh, allowForward, allowReverse, hasSignals, isPlatform, isSiding, canTurnBack);
             }
 
             // Orient points so they start near the first node in the rail id.
@@ -501,7 +522,7 @@ public final class DashboardMapOverlayCacheStore {
                 Collections.reverse(points);
             }
 
-            return new RailSnapshot(id, points, speedKmh, allowForward, allowReverse, hasSignals);
+            return new RailSnapshot(id, points, speedKmh, allowForward, allowReverse, hasSignals, isPlatform, isSiding, canTurnBack);
         }
 
         private static List<double[]> buildFallbackPoints(Position from, Position to) {

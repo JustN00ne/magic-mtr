@@ -6,13 +6,15 @@
 
   const REFRESH_ROUTES_MS = 30000;
   const REFRESH_RAILS_MS = 3000;
+  const REFRESH_CONFIG_MS = 4500;
   const TRANSFORM_REFRESH_MS = 120;
   const MIN_MATCHES_FOR_TRANSFORM = 4;
   const MAX_TRANSFORM_ERROR_PX = 72;
   const MAX_OFFSCREEN_MARGIN = 0.75;
+  const REQUEST_TIMEOUT_MS = 6500;
 
-  const SPEED_STOPS = [5, 100, 180, 220, 300, 400];
-  const SPEED_COLORS = [
+  const DEFAULT_SPEED_STOPS = [5, 100, 180, 220, 300, 400];
+  const DEFAULT_SPEED_COLORS = [
     [16, 42, 138],
     [37, 201, 119],
     [217, 227, 68],
@@ -20,6 +22,9 @@
     [239, 58, 38],
     [180, 42, 230],
   ];
+
+  let trackSpeedStops = DEFAULT_SPEED_STOPS.slice();
+  let trackSpeedColors = DEFAULT_SPEED_COLORS.slice();
 
   const state = {
     ready: false,
@@ -49,12 +54,21 @@
     lastSampleAt: 0,
     syntheticProbeQueue: [],
     lastSyntheticProbeAt: 0,
+    jmeConfig: null,
+    jmeEnums: null,
+    configRequestInFlight: false,
+    configFetchedAt: 0,
+    configPatchChain: Promise.resolve(),
+    menuStatusEl: null,
   };
 
   patchRequestTracking();
   bootstrap();
 
   function bootstrap() {
+    ensureGoogleIconsLoaded();
+    initMenu();
+
     if (state.ready) {
       return;
     }
@@ -66,7 +80,6 @@
     }
 
     state.wrapper = wrapper;
-    ensureGoogleIconsLoaded();
     initOverlay();
     initTransformSampling();
 
@@ -82,6 +95,12 @@
         fetchRails();
       }
     }, REFRESH_RAILS_MS);
+
+    setInterval(() => {
+      if (!isPageHidden() && state.menuOpen) {
+        refreshConfig(false);
+      }
+    }, REFRESH_CONFIG_MS);
 
     requestAnimationFrame(renderLoop);
   }
@@ -152,7 +171,7 @@
     }
     state.routesRequestInFlight = true;
     try {
-      const response = await fetch(apiUrl("stations-and-routes"), { cache: "no-store" });
+      const response = await fetchWithTimeout(apiUrl("stations-and-routes"), { cache: "no-store" }, REQUEST_TIMEOUT_MS);
       if (!response.ok) {
         return;
       }
@@ -181,7 +200,7 @@
     }
     state.railsRequestInFlight = true;
     try {
-      const response = await fetch(apiUrl("rails"), { cache: "no-store" });
+      const response = await fetchWithTimeout(apiUrl("rails"), { cache: "no-store" }, REQUEST_TIMEOUT_MS);
       if (!response.ok) {
         return;
       }
@@ -191,6 +210,9 @@
       applyServerOverlaySettings(data);
       state.rails = Array.isArray(data.rails) ? data.rails : [];
       state.vehicles = Array.isArray(data.vehicles) ? data.vehicles : [];
+      if (state.menuOpen) {
+        updateMenuState();
+      }
     } catch (ignored) {
       // Keep previous snapshot.
     } finally {
@@ -207,6 +229,22 @@
       return {};
     }
     return payload.data && typeof payload.data === "object" ? payload.data : payload;
+  }
+
+  async function fetchWithTimeout(url, init, timeoutMs) {
+    const timeout = Number(timeoutMs);
+    if (typeof AbortController !== "function" || !Number.isFinite(timeout) || timeout <= 0) {
+      return fetch(url, init);
+    }
+
+    const controller = new AbortController();
+    const id = setTimeout(() => controller.abort(), timeout);
+    try {
+      const mergedInit = init && typeof init === "object" ? init : {};
+      return await fetch(url, { ...mergedInit, signal: controller.signal });
+    } finally {
+      clearTimeout(id);
+    }
   }
 
   function applyServerOverlaySettings(data) {
@@ -694,15 +732,18 @@
   }
 
   function railSpeedColor(speedKmh) {
-    const speed = clamp(Number(speedKmh) || 0, SPEED_STOPS[0], SPEED_STOPS[SPEED_STOPS.length - 1]);
+    const stops = Array.isArray(trackSpeedStops) && trackSpeedStops.length >= 2 ? trackSpeedStops : DEFAULT_SPEED_STOPS;
+    const colors = Array.isArray(trackSpeedColors) && trackSpeedColors.length >= 2 ? trackSpeedColors : DEFAULT_SPEED_COLORS;
 
-    for (let i = 0; i < SPEED_STOPS.length - 1; i++) {
-      const start = SPEED_STOPS[i];
-      const end = SPEED_STOPS[i + 1];
+    const speed = clamp(Number(speedKmh) || 0, stops[0], stops[stops.length - 1]);
+
+    for (let i = 0; i < stops.length - 1; i++) {
+      const start = stops[i];
+      const end = stops[i + 1];
       if (speed <= end) {
         const t = end === start ? 0 : (speed - start) / (end - start);
-        const c1 = SPEED_COLORS[i];
-        const c2 = SPEED_COLORS[i + 1];
+        const c1 = colors[i];
+        const c2 = colors[i + 1];
         const r = Math.round(c1[0] + (c2[0] - c1[0]) * t);
         const g = Math.round(c1[1] + (c2[1] - c1[1]) * t);
         const b = Math.round(c1[2] + (c2[2] - c1[2]) * t);
@@ -710,7 +751,7 @@
       }
     }
 
-    const last = SPEED_COLORS[SPEED_COLORS.length - 1];
+    const last = colors[colors.length - 1];
     return `rgb(${last[0]}, ${last[1]}, ${last[2]})`;
   }
 
@@ -1072,12 +1113,16 @@
   }
 
   function initMenu() {
-    if (!state.wrapper) {
+    const mount = document.body || document.documentElement;
+    if (!mount) {
       return;
     }
 
-    const existing = state.wrapper.querySelector("#jme-map-menu-root");
+    const existing = document.getElementById("jme-map-menu-root");
     if (existing) {
+      if (state.menuPanel && state.menuRoot) {
+        return;
+      }
       existing.remove();
     }
 
@@ -1111,14 +1156,88 @@
     panel.innerHTML = `
       <div class="jme-menu-header">
         <div class="jme-menu-title">MAGIC</div>
-        <button type="button" class="jme-menu-close material-icons" aria-label="Close">close</button>
+        <div class="jme-menu-header-actions">
+          <button type="button" class="jme-menu-icon material-icons" data-jme-action="reload" aria-label="Reload config">refresh</button>
+          <button type="button" class="jme-menu-close material-icons" aria-label="Close">close</button>
+        </div>
       </div>
+      <div class="jme-menu-status" data-jme-status hidden></div>
       <div class="jme-menu-section">
         <div class="jme-menu-section-title">Rails Overlay</div>
         <div class="jme-menu-row">
           <button type="button" class="jme-menu-chip" data-rail-mode="all"><span class="material-icons">polyline</span><span>All</span></button>
           <button type="button" class="jme-menu-chip" data-rail-mode="cull"><span class="material-icons">grain</span><span>Cull</span></button>
           <button type="button" class="jme-menu-chip" data-rail-mode="off"><span class="material-icons">visibility_off</span><span>Off</span></button>
+        </div>
+        <div class="jme-menu-col jme-menu-subsection" data-jme-cull-settings hidden>
+          <label class="jme-menu-field">
+            <span class="jme-menu-field-label">Cull max per cell</span>
+            <input class="jme-menu-control" type="number" min="1" max="64" step="1" data-jme-key="dashboard_rail_overlay_cull_max_per_cell" data-jme-kind="int" />
+          </label>
+          <div class="jme-menu-help">Higher values draw more rails but may reduce FPS.</div>
+        </div>
+      </div>
+      <div class="jme-menu-section">
+        <div class="jme-menu-section-title">Config</div>
+        <div class="jme-menu-col">
+          <label class="jme-menu-toggle">
+            <span class="jme-menu-toggle-text">Use mph</span>
+            <input type="checkbox" data-jme-key="use_mph" data-jme-kind="bool" />
+          </label>
+
+          <label class="jme-menu-toggle">
+            <span class="jme-menu-toggle-text">Camera tilt</span>
+            <input type="checkbox" data-jme-key="camera_tilt_enabled" data-jme-kind="bool" />
+          </label>
+
+          <label class="jme-menu-field">
+            <span class="jme-menu-field-label">Camera tilt strength</span>
+            <input class="jme-menu-control" type="number" min="0" max="2" step="0.05" data-jme-key="camera_tilt_strength" data-jme-kind="double" />
+          </label>
+
+          <label class="jme-menu-field">
+            <span class="jme-menu-field-label">Route list mode</span>
+            <select class="jme-menu-control" data-jme-key="dashboard_route_list_mode" data-jme-kind="enum" data-jme-enum="dashboard_route_list_mode"></select>
+          </label>
+
+          <label class="jme-menu-toggle">
+            <span class="jme-menu-toggle-text">Map auto-save</span>
+            <input type="checkbox" data-jme-key="dashboard_map_auto_save_enabled" data-jme-kind="bool" />
+          </label>
+
+          <label class="jme-menu-field">
+            <span class="jme-menu-field-label">Name language</span>
+            <select class="jme-menu-control" data-jme-key="system_map_language_display" data-jme-kind="enum" data-jme-enum="system_map_language_display"></select>
+          </label>
+
+          <label class="jme-menu-toggle">
+            <span class="jme-menu-toggle-text">Overlay cache</span>
+            <input type="checkbox" data-jme-key="system_map_overlay_cache_enabled" data-jme-kind="bool" />
+          </label>
+
+          <label class="jme-menu-toggle">
+            <span class="jme-menu-toggle-text">Persist cache to disk</span>
+            <input type="checkbox" data-jme-key="system_map_overlay_cache_persist_enabled" data-jme-kind="bool" />
+          </label>
+        </div>
+      </div>
+      <div class="jme-menu-section">
+        <div class="jme-menu-section-title">Custom Styling</div>
+        <div class="jme-menu-col">
+          <div class="jme-menu-help">Custom CSS is injected into the System Map page. Use preview for live changes.</div>
+          <textarea class="jme-menu-textarea" data-jme-editor="system_map_custom_css" spellcheck="false" placeholder="/* custom css */"></textarea>
+          <div class="jme-menu-row">
+            <button type="button" class="jme-menu-chip" data-jme-action="css_preview"><span class="material-icons">visibility</span><span>Preview</span></button>
+            <button type="button" class="jme-menu-chip" data-jme-action="css_save"><span class="material-icons">save</span><span>Save CSS</span></button>
+            <button type="button" class="jme-menu-chip" data-jme-action="css_clear"><span class="material-icons">delete</span><span>Clear</span></button>
+          </div>
+
+          <div class="jme-menu-help">Custom JS runs on page load (save then refresh the page).</div>
+          <textarea class="jme-menu-textarea" data-jme-editor="system_map_custom_js" spellcheck="false" placeholder="// custom js"></textarea>
+          <div class="jme-menu-row">
+            <button type="button" class="jme-menu-chip" data-jme-action="js_save"><span class="material-icons">save</span><span>Save JS</span></button>
+            <button type="button" class="jme-menu-chip" data-jme-action="js_clear"><span class="material-icons">delete</span><span>Clear</span></button>
+          </div>
         </div>
       </div>
       <div class="jme-menu-section">
@@ -1133,11 +1252,12 @@
 
     root.appendChild(button);
     root.appendChild(panel);
-    state.wrapper.appendChild(root);
+    mount.appendChild(root);
 
     state.menuRoot = root;
     state.menuButton = button;
     state.menuPanel = panel;
+    state.menuStatusEl = panel.querySelector("[data-jme-status]");
 
     button.addEventListener("click", event => {
       event.stopPropagation();
@@ -1149,14 +1269,18 @@
       setMenuOpen(false);
     });
 
+    // Prevent map drag/zoom when interacting with the menu.
+    ["pointerdown", "mousedown", "touchstart"].forEach(type => {
+      panel.addEventListener(type, event => event.stopPropagation());
+    });
+    panel.addEventListener("wheel", event => event.stopPropagation(), { passive: true });
+
     panel.querySelectorAll("[data-rail-mode]").forEach(chip => {
       chip.addEventListener("click", event => {
         event.stopPropagation();
         const mode = chip.getAttribute("data-rail-mode");
         if (mode === "all" || mode === "cull" || mode === "off") {
-          state.railOverlayMode = mode;
-          saveSettings();
-          updateMenuState();
+          setRailOverlayMode(mode);
         }
       });
     });
@@ -1175,6 +1299,35 @@
       });
     });
 
+    panel.querySelectorAll("[data-jme-key]").forEach(control => {
+      if (!control || control.tagName === "TEXTAREA") {
+        return;
+      }
+      control.addEventListener("change", event => {
+        event.stopPropagation();
+        const key = control.getAttribute("data-jme-key");
+        const kind = control.getAttribute("data-jme-kind");
+        if (!key) {
+          return;
+        }
+        const patch = {};
+        const parsed = parseControlValue(control, kind);
+        if (parsed === undefined) {
+          return;
+        }
+        patch[key] = parsed;
+        patchConfig(patch, key);
+      });
+    });
+
+    panel.querySelectorAll("[data-jme-action]").forEach(action => {
+      action.addEventListener("click", event => {
+        event.stopPropagation();
+        const type = action.getAttribute("data-jme-action");
+        handleMenuAction(type);
+      });
+    });
+
     if (!window.__jmeMapMenuOutsideClick) {
       window.__jmeMapMenuOutsideClick = true;
       document.addEventListener("click", event => {
@@ -1188,7 +1341,19 @@
       });
     }
 
+    if (!window.__jmeMapMenuEscapeKey) {
+      window.__jmeMapMenuEscapeKey = true;
+      document.addEventListener("keydown", event => {
+        if (event && event.key === "Escape") {
+          setMenuOpen(false);
+        }
+      });
+    }
+
     updateMenuState();
+    if (!state.configFetchedAt) {
+      refreshConfig(true);
+    }
   }
 
   function setMenuOpen(open) {
@@ -1198,6 +1363,9 @@
     }
     if (state.menuRoot) {
       state.menuRoot.classList.toggle("open", state.menuOpen);
+    }
+    if (state.menuOpen) {
+      refreshConfig(false);
     }
   }
 
@@ -1209,6 +1377,400 @@
       const mode = chip.getAttribute("data-rail-mode");
       chip.classList.toggle("active", mode === state.railOverlayMode);
     });
+
+    const cullSettings = state.menuPanel.querySelector("[data-jme-cull-settings]");
+    if (cullSettings) {
+      cullSettings.hidden = state.railOverlayMode !== "cull";
+    }
+  }
+
+  function parseControlValue(control, kind) {
+    try {
+      const normalizedKind = String(kind || "").trim().toLowerCase();
+      if (normalizedKind === "bool") {
+        return !!control.checked;
+      }
+      if (normalizedKind === "int") {
+        const num = parseNumeric(control.value);
+        return Number.isFinite(num) ? Math.round(num) : undefined;
+      }
+      if (normalizedKind === "double") {
+        const num = parseNumeric(control.value);
+        return Number.isFinite(num) ? num : undefined;
+      }
+      return String(control.value || "");
+    } catch (ignored) {
+      return undefined;
+    }
+  }
+
+  function setMenuStatus(message, kind) {
+    if (!state.menuStatusEl) {
+      return;
+    }
+    const text = String(message || "").trim();
+    state.menuStatusEl.textContent = text;
+    state.menuStatusEl.hidden = !text;
+    state.menuStatusEl.classList.toggle("loading", kind === "loading");
+    state.menuStatusEl.classList.toggle("error", kind === "error");
+    state.menuStatusEl.classList.toggle("success", kind === "success");
+  }
+
+  async function refreshConfig(force) {
+    const now = Date.now();
+    if (!force && state.configFetchedAt && now - state.configFetchedAt < 5000) {
+      return;
+    }
+    if (state.configRequestInFlight) {
+      return;
+    }
+
+    state.configRequestInFlight = true;
+    setMenuStatus("Loading config…", "loading");
+    try {
+      const response = await fetchWithTimeout(apiUrl("jme-config"), { cache: "no-store" }, REQUEST_TIMEOUT_MS);
+      if (!response.ok) {
+        setMenuStatus(`Failed to load config (${response.status})`, "error");
+        return;
+      }
+
+      const payload = await response.json();
+      const data = unwrapData(payload);
+      applyConfigPayload(data);
+      state.configFetchedAt = Date.now();
+      setMenuStatus("", "");
+    } catch (ignored) {
+      setMenuStatus("Failed to load config", "error");
+    } finally {
+      state.configRequestInFlight = false;
+    }
+  }
+
+  function applyConfigPayload(data) {
+    if (!data || typeof data !== "object") {
+      return;
+    }
+
+    state.jmeConfig = data.config && typeof data.config === "object" ? data.config : state.jmeConfig;
+    state.jmeEnums = data.enums && typeof data.enums === "object" ? data.enums : state.jmeEnums;
+
+    if (state.jmeConfig) {
+      const overlayMode = String(state.jmeConfig.dashboard_rail_overlay_mode || "").trim().toLowerCase();
+      if (overlayMode === "all" || overlayMode === "cull" || overlayMode === "off") {
+        state.railOverlayMode = overlayMode;
+      }
+      const maxPerCell = parseNumeric(state.jmeConfig.dashboard_rail_overlay_cull_max_per_cell);
+      if (Number.isFinite(maxPerCell)) {
+        state.railCullMaxPerCell = clamp(Math.round(maxPerCell), 1, 64);
+      }
+    }
+
+    applyTrackColorGradientFromConfig();
+    updateMenuFromConfig();
+    updateMenuState();
+  }
+
+  function applyTrackColorGradientFromConfig() {
+    const cfg = state.jmeConfig || {};
+    const raw = Array.isArray(cfg.track_color_resolved_gradient) ? cfg.track_color_resolved_gradient : null;
+    if (!raw || raw.length < 2) {
+      trackSpeedStops = DEFAULT_SPEED_STOPS.slice();
+      trackSpeedColors = DEFAULT_SPEED_COLORS.slice();
+      return;
+    }
+
+    const parsed = raw
+      .map(entry => {
+        const speed = clamp(Math.round(parseNumeric(entry && entry.speed_kmh) || 0), 1, 400);
+        const rgb = parseColorToRgbArray(entry && entry.color);
+        if (!rgb) {
+          return null;
+        }
+        return { speed, rgb };
+      })
+      .filter(Boolean)
+      .sort((a, b) => a.speed - b.speed);
+
+    if (parsed.length < 2) {
+      trackSpeedStops = DEFAULT_SPEED_STOPS.slice();
+      trackSpeedColors = DEFAULT_SPEED_COLORS.slice();
+      return;
+    }
+
+    // Deduplicate by speed (last wins).
+    const bySpeed = new Map();
+    parsed.forEach(entry => bySpeed.set(entry.speed, entry.rgb));
+    const speeds = Array.from(bySpeed.keys()).sort((a, b) => a - b);
+    if (speeds.length < 2) {
+      trackSpeedStops = DEFAULT_SPEED_STOPS.slice();
+      trackSpeedColors = DEFAULT_SPEED_COLORS.slice();
+      return;
+    }
+
+    trackSpeedStops = speeds;
+    trackSpeedColors = speeds.map(speed => bySpeed.get(speed));
+  }
+
+  function parseColorToRgbArray(raw) {
+    const text = String(raw || "").trim();
+    if (!text) {
+      return null;
+    }
+
+    let normalized = text;
+    if (normalized.startsWith("#")) {
+      normalized = normalized.substring(1);
+    }
+    if (normalized.length === 8) {
+      normalized = normalized.substring(2);
+    }
+    if (normalized.length !== 6) {
+      return null;
+    }
+    const value = parseInt(normalized, 16);
+    if (!Number.isFinite(value)) {
+      return null;
+    }
+    return [(value >> 16) & 255, (value >> 8) & 255, value & 255];
+  }
+
+  function updateMenuFromConfig() {
+    if (!state.menuPanel || !state.jmeConfig) {
+      return;
+    }
+
+    fillEnumSelects();
+
+    state.menuPanel.querySelectorAll("[data-jme-key]").forEach(control => {
+      const key = control.getAttribute("data-jme-key");
+      if (!key) {
+        return;
+      }
+      const value = state.jmeConfig[key];
+      if (control.tagName === "INPUT") {
+        const type = (control.getAttribute("type") || "").toLowerCase();
+        if (type === "checkbox") {
+          control.checked = !!value;
+        } else {
+          control.value = value === undefined || value === null ? "" : String(value);
+        }
+      } else if (control.tagName === "SELECT") {
+        const stringValue = value === undefined || value === null ? "" : String(value);
+        control.value = stringValue;
+      }
+    });
+
+    state.menuPanel.querySelectorAll("[data-jme-editor]").forEach(textarea => {
+      const key = textarea.getAttribute("data-jme-editor");
+      if (!key) {
+        return;
+      }
+      const value = state.jmeConfig[key];
+      textarea.value = value === undefined || value === null ? "" : String(value);
+    });
+  }
+
+  function fillEnumSelects() {
+    if (!state.menuPanel || !state.jmeEnums || typeof state.jmeEnums !== "object") {
+      return;
+    }
+
+    state.menuPanel.querySelectorAll("select[data-jme-enum]").forEach(select => {
+      const enumKey = select.getAttribute("data-jme-enum");
+      if (!enumKey) {
+        return;
+      }
+      const options = state.jmeEnums[enumKey];
+      if (!Array.isArray(options) || !options.length) {
+        return;
+      }
+
+      const currentValue = select.value;
+      select.innerHTML = "";
+      options.forEach(option => {
+        const opt = document.createElement("option");
+        opt.value = String(option);
+        opt.textContent = humanizeEnum(option);
+        select.appendChild(opt);
+      });
+      if (currentValue) {
+        select.value = currentValue;
+      }
+    });
+  }
+
+  function humanizeEnum(value) {
+    const raw = String(value || "").trim();
+    if (!raw) {
+      return "";
+    }
+    const upper = raw.toUpperCase();
+    if (upper === "CJK_ONLY") {
+      return "CJK only";
+    }
+    if (upper === "NON_CJK_ONLY") {
+      return "Non-CJK only";
+    }
+    return raw.toLowerCase().replace(/_/g, " ").replace(/\b[a-z]/g, c => c.toUpperCase());
+  }
+
+  function handleMenuAction(type) {
+    const action = String(type || "").trim().toLowerCase();
+    if (action === "reload") {
+      reloadConfigFromDisk();
+    } else if (action === "css_preview") {
+      previewCustomCss();
+    } else if (action === "css_save") {
+      saveCustomEditor("system_map_custom_css");
+    } else if (action === "css_clear") {
+      clearCustomEditor("system_map_custom_css", true);
+    } else if (action === "js_save") {
+      saveCustomEditor("system_map_custom_js");
+    } else if (action === "js_clear") {
+      clearCustomEditor("system_map_custom_js", false);
+    }
+  }
+
+  async function reloadConfigFromDisk() {
+    setMenuStatus("Reloading…", "loading");
+    try {
+      const response = await fetchWithTimeout(apiUrl("jme-config"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reload: true }),
+        cache: "no-store",
+      }, REQUEST_TIMEOUT_MS);
+      if (!response.ok) {
+        setMenuStatus(`Reload failed (${response.status})`, "error");
+        return;
+      }
+      const payload = await response.json();
+      const data = unwrapData(payload);
+      applyConfigPayload(data);
+      setMenuStatus("Reloaded", "success");
+      setTimeout(() => setMenuStatus("", ""), 1200);
+    } catch (ignored) {
+      setMenuStatus("Reload failed", "error");
+    }
+  }
+
+  function getEditorValue(key) {
+    if (!state.menuPanel) {
+      return "";
+    }
+    const textarea = state.menuPanel.querySelector(`[data-jme-editor="${cssEscape(key)}"]`);
+    return textarea ? String(textarea.value || "") : "";
+  }
+
+  function clearCustomEditor(key, alsoPreviewCss) {
+    if (!state.menuPanel) {
+      return;
+    }
+    const textarea = state.menuPanel.querySelector(`[data-jme-editor="${cssEscape(key)}"]`);
+    if (textarea) {
+      textarea.value = "";
+    }
+    if (alsoPreviewCss && key === "system_map_custom_css") {
+      setLivePreviewCss("");
+    }
+    patchConfig({ [key]: "" }, key);
+  }
+
+  function saveCustomEditor(key) {
+    const value = getEditorValue(key);
+    if (key === "system_map_custom_css") {
+      setLivePreviewCss(value);
+    }
+    patchConfig({ [key]: value }, key);
+  }
+
+  function previewCustomCss() {
+    const value = getEditorValue("system_map_custom_css");
+    setLivePreviewCss(value);
+    setMenuStatus("Preview applied", "success");
+    setTimeout(() => setMenuStatus("", ""), 1000);
+  }
+
+  function setLivePreviewCss(css) {
+    try {
+      const id = "jme-system-map-custom-css-preview";
+      let style = document.getElementById(id);
+      if (!style) {
+        style = document.createElement("style");
+        style.id = id;
+        (document.head || document.body || document.documentElement).appendChild(style);
+      }
+      style.textContent = String(css || "");
+    } catch (ignored) {
+      // Ignore preview failures.
+    }
+  }
+
+  function cssEscape(value) {
+    try {
+      if (typeof window.CSS !== "undefined" && typeof window.CSS.escape === "function") {
+        return window.CSS.escape(String(value));
+      }
+    } catch (ignored) {
+    }
+    return String(value).replace(/\"/g, "\\\"");
+  }
+
+  function setRailOverlayMode(mode) {
+    const normalized = String(mode || "").trim().toLowerCase();
+    if (normalized !== "all" && normalized !== "cull" && normalized !== "off") {
+      return;
+    }
+    state.railOverlayMode = normalized;
+    updateMenuState();
+    patchConfig({ dashboard_rail_overlay_mode: normalized.toUpperCase() }, "dashboard_rail_overlay_mode");
+  }
+
+  function patchConfig(patch, keyHint) {
+    const patchObject = patch && typeof patch === "object" ? patch : null;
+    if (!patchObject) {
+      return;
+    }
+
+    state.configPatchChain = state.configPatchChain
+      .catch(() => null)
+      .then(() => postConfigPatch(patchObject, keyHint));
+  }
+
+  async function postConfigPatch(patchObject, keyHint) {
+    setMenuStatus("Saving…", "loading");
+    try {
+      const response = await fetchWithTimeout(apiUrl("jme-config"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(patchObject),
+        cache: "no-store",
+      }, REQUEST_TIMEOUT_MS);
+      if (!response.ok) {
+        setMenuStatus(`Save failed (${response.status})`, "error");
+        return;
+      }
+
+      const payload = await response.json();
+      const data = unwrapData(payload);
+      applyConfigPayload(data);
+
+      setMenuStatus("Saved", "success");
+      setTimeout(() => setMenuStatus("", ""), 1000);
+
+      if (keyHint === "dashboard_rail_overlay_mode"
+        || keyHint === "dashboard_rail_overlay_cull_max_per_cell"
+        || keyHint === "system_map_overlay_cache_enabled"
+        || keyHint === "system_map_overlay_cache_persist_enabled") {
+        fetchRails();
+      }
+
+      if (keyHint === "system_map_language_display") {
+        fetchStationsAndRoutes();
+      }
+    } catch (ignored) {
+      setMenuStatus("Save failed", "error");
+    }
   }
 
   function initTransformSampling() {

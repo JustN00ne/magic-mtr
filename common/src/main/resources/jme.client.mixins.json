@@ -7,6 +7,7 @@
     "BlockNodeBrushProfileMixin",
     "ClientPacketHelperTrainDetectorMixin",
     "ColorSelectorScreenLayoutMixin",
+    "ConfigScreenMagicSettingsButtonMixin",
     "DashboardScreenAccessor",
     "DashboardScreenAlternativePlatformMixin",
     "DashboardScreenMagicMenuMixin",
@@ -26,6 +27,7 @@
     "SavedRailScreenBaseAccessor",
     "SidingScreenMixin",
     "SavedRailBasePositionAccessor",
+    "TranslationHolderVehicleSpeedMixin",
     "WidgetMapAccessor",
     "WidgetMapRouteOverlayMixin"
   ],

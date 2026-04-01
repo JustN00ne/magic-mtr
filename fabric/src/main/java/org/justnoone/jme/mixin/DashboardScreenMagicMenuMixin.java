@@ -31,6 +31,10 @@ public abstract class DashboardScreenMagicMenuMixin implements IGui, OverlayClic
     @Unique
     private static final Identifier JME_MAGIC_ICON_TEXTURE = new Identifier("jme", "textures/item/magic_icon.png");
 
+    // Hidden for the main release UI.
+    @Unique
+    private static final boolean JME_ENABLE_MAGIC_DASHBOARD_BUTTON = true;
+
     @Unique
     private ButtonWidgetExtension jme$magicMenuButton;
     @Unique
@@ -40,6 +44,13 @@ public abstract class DashboardScreenMagicMenuMixin implements IGui, OverlayClic
 
     @Inject(method = "<init>", at = @At("TAIL"), remap = false)
     private void jme$createMagicMenuButton(org.mtr.core.data.TransportMode transportMode, CallbackInfo ci) {
+        if (!JME_ENABLE_MAGIC_DASHBOARD_BUTTON) {
+            jme$magicMenuButton = null;
+            jme$magicMenuButtonAdded = false;
+            jme$magicMenuOpen = false;
+            return;
+        }
+
         jme$magicMenuButton = new ButtonWidgetExtension(0, 0, 0, SQUARE_SIZE, TextHelper.literal(""), button -> jme$magicMenuOpen = !jme$magicMenuOpen);
         jme$magicMenuButtonAdded = false;
         jme$magicMenuOpen = false;
@@ -47,6 +58,10 @@ public abstract class DashboardScreenMagicMenuMixin implements IGui, OverlayClic
 
     @Inject(method = "init2", at = @At("TAIL"), remap = false)
     private void jme$initMagicMenuButton(CallbackInfo ci) {
+        if (!JME_ENABLE_MAGIC_DASHBOARD_BUTTON) {
+            return;
+        }
+
         if (jme$magicMenuButton == null) {
             return;
         }
@@ -69,6 +84,10 @@ public abstract class DashboardScreenMagicMenuMixin implements IGui, OverlayClic
 
     @Inject(method = "render", at = @At("TAIL"), remap = false)
     private void jme$renderMagicMenu(GraphicsHolder graphicsHolder, int mouseX, int mouseY, float delta, CallbackInfo ci) {
+        if (!JME_ENABLE_MAGIC_DASHBOARD_BUTTON) {
+            return;
+        }
+
         if (jme$magicMenuButton == null) {
             return;
         }
@@ -133,6 +152,10 @@ public abstract class DashboardScreenMagicMenuMixin implements IGui, OverlayClic
 
     @Unique
     private void jme$drawMagicLogo(GraphicsHolder graphicsHolder) {
+        if (!JME_ENABLE_MAGIC_DASHBOARD_BUTTON) {
+            return;
+        }
+
         if (jme$magicMenuButton == null) {
             return;
         }
@@ -155,6 +178,10 @@ public abstract class DashboardScreenMagicMenuMixin implements IGui, OverlayClic
     @Unique
     @Override
     public boolean jme$handleOverlayClick(double mouseX, double mouseY, int button) {
+        if (!JME_ENABLE_MAGIC_DASHBOARD_BUTTON) {
+            return false;
+        }
+
         if (jme$magicMenuButton == null) {
             return false;
         }

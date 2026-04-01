@@ -145,6 +145,10 @@ public abstract class RailModifierScreenMixin implements IGui {
         jme$tiltStartSlider.setValueMapped(jme$toTiltSliderValue(jme$tiltStartDegrees));
         jme$tiltMiddleSlider.setValueMapped(jme$toTiltSliderValue(jme$tiltMiddleDegrees));
         jme$tiltEndSlider.setValueMapped(jme$toTiltSliderValue(jme$tiltEndDegrees));
+        // SliderWidgetExtension doesn't always call updateMessage2() after programmatic value updates.
+        jme$tiltStartSlider.setMessage2(Text.cast(TextHelper.literal(jme$tiltStartDegrees + " deg")));
+        jme$tiltMiddleSlider.setMessage2(Text.cast(TextHelper.literal(jme$tiltMiddleDegrees + " deg")));
+        jme$tiltEndSlider.setMessage2(Text.cast(TextHelper.literal(jme$tiltEndDegrees + " deg")));
         jme$suppressSync = false;
 
         jme$refreshTiltSectionVisibility();

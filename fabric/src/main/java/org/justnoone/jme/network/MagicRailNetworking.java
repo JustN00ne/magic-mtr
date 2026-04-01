@@ -101,18 +101,28 @@ public final class MagicRailNetworking {
 
         MagicNetworkingCompat.registerServerReceiver(MagicRailConstants.SET_TRAIN_DETECTOR_RANGE_PACKET_ID, (server, player, buf) -> {
             final BlockPos blockPos = buf.readBlockPos();
-            final int nodeRange = buf.readVarInt();
-            boolean useSecondsOffset = false;
-            int secondsOffset = 0;
+            final int first = buf.readVarInt();
+
+            // Protocol:
+            // - legacy: <pos> <nodeRange> <useSecondsOffset?> <secondsOffset?>
+            // - v2:     <pos> 0 <startDistance> <endDistance>
+            if (first == 0) {
+                final int startDistance = buf.readVarInt();
+                final int endDistance = buf.readVarInt();
+                MagicNetworkingCompat.executeOnServer(server, () -> applyTrainDetectorConfig(player, blockPos, startDistance, endDistance));
+                return;
+            }
+
+            // Legacy fallback.
+            final int nodeRange = first;
             if (buf.readableBytes() > 0) {
-                useSecondsOffset = buf.readBoolean();
+                buf.readBoolean();
             }
             if (buf.readableBytes() > 0) {
-                secondsOffset = buf.readVarInt();
+                buf.readVarInt();
             }
-            final boolean finalUseSecondsOffset = useSecondsOffset;
-            final int finalSecondsOffset = secondsOffset;
-            MagicNetworkingCompat.executeOnServer(server, () -> applyTrainDetectorConfig(player, blockPos, nodeRange, finalUseSecondsOffset, finalSecondsOffset));
+            final int endDistance = nodeRange * 64;
+            MagicNetworkingCompat.executeOnServer(server, () -> applyTrainDetectorConfig(player, blockPos, 0, endDistance));
         });
 
         MagicNetworkingCompat.registerServerReceiver(MagicRailConstants.SET_ROUTE_TYPE_OVERRIDE_PACKET_ID, (server, player, buf) -> {
@@ -181,7 +191,7 @@ public final class MagicRailNetworking {
         MagicRailTiltRegistry.setTiltAbsolute(railId, tiltStart, tiltMiddle, tiltEnd);
     }
 
-    private static void applyTrainDetectorConfig(ServerPlayerEntity player, BlockPos blockPos, int nodeRange, boolean useSecondsOffset, int secondsOffset) {
+    private static void applyTrainDetectorConfig(ServerPlayerEntity player, BlockPos blockPos, int startDistance, int endDistance) {
         final net.minecraft.world.World playerWorld = jme$getPlayerWorld(player);
         if (player == null || playerWorld == null || blockPos == null) {
             return;
@@ -190,9 +200,8 @@ public final class MagicRailNetworking {
         final net.minecraft.block.entity.BlockEntity blockEntity = playerWorld.getBlockEntity(blockPos);
         if (blockEntity instanceof BlockTrainDetector.BlockEntity) {
             final BlockTrainDetector.BlockEntity detectorBlockEntity = (BlockTrainDetector.BlockEntity) blockEntity;
-            detectorBlockEntity.setNodeRange(nodeRange);
-            detectorBlockEntity.setUseSecondsOffset(useSecondsOffset);
-            detectorBlockEntity.setSecondsOffset(secondsOffset);
+            detectorBlockEntity.setStartDistance(startDistance);
+            detectorBlockEntity.setEndDistance(endDistance);
         }
     }
 

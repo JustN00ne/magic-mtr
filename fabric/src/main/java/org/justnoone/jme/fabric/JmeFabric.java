@@ -4,6 +4,7 @@ import net.fabricmc.api.ModInitializer;
 import net.fabricmc.loader.api.FabricLoader;
 import org.justnoone.jme.Jme;
 import org.justnoone.jme.block.ModBlocks;
+import org.justnoone.jme.config.JmeConfig;
 import org.justnoone.jme.item.ModItemGroups;
 import org.justnoone.jme.item.ModItems;
 import org.justnoone.jme.network.MagicRailNetworking;
@@ -18,14 +19,23 @@ public class JmeFabric implements ModInitializer {
     @Override
     public void onInitialize() {
         jme$logStartupBanner();
+        JmeConfig.ensureConfigExists();
         final Registry registry = new Registry();
-        ModItems.registerModItems(registry);
         ModItemGroups.registerModItemGroups(registry);
+        ModItems.registerModItems(registry);
         ModBlocks.registerModBlocks(registry);
         ModItemGroups.fillTabs();
         Jme.init(registry);
         registry.init();
         MagicRailNetworking.registerServer();
+
+        // Optional: BlueMap integration (markers for rails/trains).
+        // This is safe to call even if BlueMap isn't installed (it will no-op).
+        try {
+            org.justnoone.jme.fabric.bluemap.BlueMapIntegrationBootstrap.initIfEnabled();
+        } catch (Exception e) {
+            LOGGER.warn("Failed to initialize BlueMap integration", e);
+        }
     }
 
     private static void jme$logStartupBanner() {

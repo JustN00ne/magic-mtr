@@ -17,11 +17,12 @@ public abstract class WebserverResourcesMixin {
 
     private static final String JME_DEFAULT_MAP_CSS = jme$readClasspathResource("/assets/jme/system_map/jme_system_map.css");
     private static final String JME_DEFAULT_MAP_JS = jme$readClasspathResource("/assets/jme/system_map/jme_system_map.js");
-    private static final String JME_ROUTE_TYPE_METRO = "train_metro:new eo(\"subway\",\"Metro\"),";
-    private static final String JME_ROUTE_TYPE_BUS = "train_bus:new eo(\"directions_bus\",\"Bus\"),";
-    private static final String JME_ROUTE_TYPE_TRAM = "train_tram:new eo(\"tram\",\"Tram\"),";
-    private static final String JME_ROUTE_TYPE_SBAHN = "train_sbahn:new eo(\"directions_railway_2\",\"S-Bahn\"),";
-    private static final String JME_ROUTE_TYPES_ANCHOR_PREFIX = "train_high_speed:new eo(";
+    // Don't depend on minified constructor names like `new eo(...)` which change between builds.
+    // The upstream system map only reads `icon` and `text`, so plain object literals are sufficient.
+    private static final String JME_ROUTE_TYPE_METRO = "train_metro:{icon:\"subway\",text:\"Metro\"},";
+    private static final String JME_ROUTE_TYPE_BUS = "train_bus:{icon:\"directions_bus\",text:\"Bus\"},";
+    private static final String JME_ROUTE_TYPE_TRAM = "train_tram:{icon:\"tram\",text:\"Tram\"},";
+    private static final String JME_ROUTE_TYPE_SBAHN = "train_sbahn:{icon:\"directions_railway_2\",text:\"S-Bahn\"},";
 
     @Inject(method = "get", at = @At("RETURN"), cancellable = true)
     private static void jme$injectCustomCssAndJs(String resource, CallbackInfoReturnable<String> cir) {
@@ -30,7 +31,7 @@ public abstract class WebserverResourcesMixin {
             return;
         }
 
-        if (jme$looksLikeMainBundle(resource, currentContent)) {
+        if (jme$looksLikeRouteTypesBundle(resource, currentContent)) {
             cir.setReturnValue(jme$patchRouteTypeEntries(currentContent));
             return;
         }
@@ -62,20 +63,20 @@ public abstract class WebserverResourcesMixin {
         cir.setReturnValue(updatedHtml);
     }
 
-    private static boolean jme$looksLikeMainBundle(String resource, String text) {
-        if (text == null || !text.contains("train_normal:new eo(") || !text.contains("train_high_speed:new eo(")) {
+    private static boolean jme$looksLikeRouteTypesBundle(String resource, String text) {
+        if (text == null || text.isEmpty()) {
+            return false;
+        }
+
+        if (!text.contains("train_normal:") || !text.contains("train_high_speed:") || !text.contains("boat_normal:")) {
             return false;
         }
 
         if (resource == null || resource.isEmpty()) {
-            return true;
-        }
-
-        final String normalizedResource = jme$normalizeResourcePath(resource);
-        if (!normalizedResource.endsWith(".js")) {
             return false;
         }
-        return normalizedResource.contains("main-") || normalizedResource.contains("main.");
+
+        return jme$normalizeResourcePath(resource).endsWith(".js");
     }
 
     private static String jme$patchRouteTypeEntries(String bundleText) {
@@ -84,16 +85,16 @@ public abstract class WebserverResourcesMixin {
         }
 
         final StringBuilder missingRouteTypes = new StringBuilder();
-        if (!bundleText.contains("train_metro:new eo(")) {
+        if (!bundleText.contains("train_metro:")) {
             missingRouteTypes.append(JME_ROUTE_TYPE_METRO);
         }
-        if (!bundleText.contains("train_bus:new eo(")) {
+        if (!bundleText.contains("train_bus:")) {
             missingRouteTypes.append(JME_ROUTE_TYPE_BUS);
         }
-        if (!bundleText.contains("train_tram:new eo(")) {
+        if (!bundleText.contains("train_tram:")) {
             missingRouteTypes.append(JME_ROUTE_TYPE_TRAM);
         }
-        if (!bundleText.contains("train_sbahn:new eo(")) {
+        if (!bundleText.contains("train_sbahn:")) {
             missingRouteTypes.append(JME_ROUTE_TYPE_SBAHN);
         }
 
@@ -101,18 +102,94 @@ public abstract class WebserverResourcesMixin {
             return bundleText;
         }
 
-        final int anchorStart = bundleText.indexOf(JME_ROUTE_TYPES_ANCHOR_PREFIX);
+        final int anchorStart = bundleText.indexOf("train_high_speed:");
         if (anchorStart < 0) {
             return bundleText;
         }
 
-        final int anchorInsertIndex = bundleText.indexOf("),", anchorStart);
-        if (anchorInsertIndex < 0) {
+        final int entrySeparatorIndex = jme$findObjectEntrySeparator(bundleText, anchorStart);
+        if (entrySeparatorIndex < 0) {
             return bundleText;
         }
 
-        final int insertIndex = anchorInsertIndex + 2;
+        final int insertIndex = entrySeparatorIndex + 1;
         return bundleText.substring(0, insertIndex) + missingRouteTypes + bundleText.substring(insertIndex);
+    }
+
+    private static int jme$findObjectEntrySeparator(String text, int entryKeyIndex) {
+        if (text == null || entryKeyIndex < 0) {
+            return -1;
+        }
+
+        final int colonIndex = text.indexOf(':', entryKeyIndex);
+        if (colonIndex < 0) {
+            return -1;
+        }
+
+        int parenDepth = 0;
+        int braceDepth = 0;
+        int bracketDepth = 0;
+        boolean inString = false;
+        boolean escape = false;
+        char quote = 0;
+
+        for (int i = colonIndex + 1; i < text.length(); i++) {
+            final char c = text.charAt(i);
+
+            if (inString) {
+                if (escape) {
+                    escape = false;
+                } else if (c == '\\') {
+                    escape = true;
+                } else if (c == quote) {
+                    inString = false;
+                    quote = 0;
+                }
+                continue;
+            }
+
+            if (c == '"' || c == '\'' || c == '`') {
+                inString = true;
+                quote = c;
+                continue;
+            }
+
+            switch (c) {
+                case '(':
+                    parenDepth++;
+                    break;
+                case ')':
+                    if (parenDepth > 0) {
+                        parenDepth--;
+                    }
+                    break;
+                case '{':
+                    braceDepth++;
+                    break;
+                case '}':
+                    if (braceDepth > 0) {
+                        braceDepth--;
+                    }
+                    break;
+                case '[':
+                    bracketDepth++;
+                    break;
+                case ']':
+                    if (bracketDepth > 0) {
+                        bracketDepth--;
+                    }
+                    break;
+                case ',':
+                    if (parenDepth == 0 && braceDepth == 0 && bracketDepth == 0) {
+                        return i;
+                    }
+                    break;
+                default:
+                    break;
+            }
+        }
+
+        return -1;
     }
 
     private static boolean jme$shouldInject(String resource, String text) {

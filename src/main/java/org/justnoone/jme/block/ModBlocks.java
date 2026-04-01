@@ -24,8 +24,6 @@ public class ModBlocks {
             new BlockPlatform(new BlockSettings(AbstractBlock.Settings.copy(Blocks.STONE)), false));
     public static final Block PLATFORM_POLISH = registerBlock("platform_polish",
             new BlockPlatform(new BlockSettings(AbstractBlock.Settings.copy(Blocks.STONE)), false));
-    public static final Block PLATFORM_RUSSIAN = registerBlock("platform_russian",
-            new BlockPlatform(new BlockSettings(AbstractBlock.Settings.copy(Blocks.STONE)), false));
     public static final Block PLATFORM_BLUE_AMERICAN = registerBlock("platform_blue_american",
             new BlockPlatform(new BlockSettings(AbstractBlock.Settings.copy(Blocks.STONE)), false));
     public static final Block PLATFORM_SWEDISH = registerBlock("platform_swedish",
@@ -33,8 +31,6 @@ public class ModBlocks {
     public static final Block PLATFORM_GERMAN_SLAB = registerBlock("platform_german_slab",
             new BlockPlatformSlab(new BlockSettings(AbstractBlock.Settings.copy(Blocks.STONE))));
     public static final Block PLATFORM_POLISH_SLAB = registerBlock("platform_polish_slab",
-            new BlockPlatformSlab(new BlockSettings(AbstractBlock.Settings.copy(Blocks.STONE))));
-    public static final Block PLATFORM_RUSSIAN_SLAB = registerBlock("platform_russian_slab",
             new BlockPlatformSlab(new BlockSettings(AbstractBlock.Settings.copy(Blocks.STONE))));
     public static final Block PLATFORM_BLUE_AMERICAN_SLAB = registerBlock("platform_blue_american_slab",
             new BlockPlatformSlab(new BlockSettings(AbstractBlock.Settings.copy(Blocks.STONE))));
@@ -89,13 +85,11 @@ public class ModBlocks {
             entries.add(PLATFORM_GERMAN);
             entries.add(PLATFORM_POLISH);
             entries.add(PLATFORM_CZECH);
-            entries.add(PLATFORM_RUSSIAN);
             entries.add(PLATFORM_BLUE_AMERICAN);
             entries.add(PLATFORM_SWEDISH);
             entries.add(PLATFORM_GERMAN_SLAB);
             entries.add(PLATFORM_POLISH_SLAB);
             entries.add(PLATFORM_CZECH_SLAB);
-            entries.add(PLATFORM_RUSSIAN_SLAB);
             entries.add(PLATFORM_BLUE_AMERICAN_SLAB);
             entries.add(PLATFORM_SWEDISH_SLAB);
         });

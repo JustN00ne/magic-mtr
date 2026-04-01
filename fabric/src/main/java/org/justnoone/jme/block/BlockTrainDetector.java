@@ -2,6 +2,7 @@ package org.justnoone.jme.block;
 
 import org.justnoone.jme.Jme;
 import org.mtr.core.Main;
+import org.mtr.core.data.Data;
 import org.mtr.core.data.PathData;
 import org.mtr.core.data.Position;
 import org.mtr.core.data.Rail;
@@ -26,9 +27,13 @@ import java.lang.reflect.Field;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Comparator;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
+import java.util.PriorityQueue;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -46,6 +51,10 @@ public class BlockTrainDetector extends BlockTrainPoweredSensorBase {
     private static final int DEFAULT_NODE_RANGE = 6;
     private static final int MIN_NODE_RANGE = 1;
     private static final int MAX_NODE_RANGE = 64;
+    private static final int DEFAULT_START_DISTANCE_BLOCKS = 0;
+    private static final int DEFAULT_END_DISTANCE_BLOCKS = 128;
+    private static final int MIN_DISTANCE_BLOCKS = 0;
+    private static final int MAX_DISTANCE_BLOCKS = 8192;
     private static final int MIN_SECONDS_OFFSET = -86400;
     private static final int MAX_SECONDS_OFFSET = 86400;
     private static final int NODE_SEARCH_VERTICAL_RADIUS_BLOCKS = 6;
@@ -54,6 +63,8 @@ public class BlockTrainDetector extends BlockTrainPoweredSensorBase {
     private static final String KEY_NODE_RANGE = "jme_train_detector_nodes";
     private static final String KEY_SECONDS_OFFSET = "jme_train_detector_seconds_offset";
     private static final String KEY_USE_SECONDS_OFFSET = "jme_train_detector_use_seconds_offset";
+    private static final String KEY_START_DISTANCE = "jme_train_detector_start_distance";
+    private static final String KEY_END_DISTANCE = "jme_train_detector_end_distance";
     // Shared across all detectors for the same dimension. Keep a small value, but not every tick.
     // Refresh at ~1 tick; seconds mode relies on up-to-date rail progress.
     private static final long OCCUPANCY_REFRESH_MILLIS = 50;
@@ -82,25 +93,17 @@ public class BlockTrainDetector extends BlockTrainPoweredSensorBase {
             return;
         }
 
-        final boolean shouldPower;
-        if (blockEntity.getUseSecondsOffset()) {
-            final DetectorRailLocation detectorRailLocation = blockEntity.getDetectorRailLocation(simulator, pos);
-            if (detectorRailLocation == null) {
-                return;
-            }
-            shouldPower = hasMatchingTrainAtSecondsOffset(detectorRailLocation, blockEntity.getSecondsOffset(), cache, blockEntity);
-        } else {
-            if (cache.occupancyByNode.isEmpty()) {
-                return;
-            }
-            final Position detectorNode = blockEntity.getDetectorNode(simulator, pos);
-            if (detectorNode == null) {
-                return;
-            }
-            final int nodeRange = blockEntity.getNodeRange();
-            final Object2IntAVLTreeMap<Position> reachableNodeDepths = collectReachableNodeDepths(simulator, detectorNode, nodeRange);
-            shouldPower = !reachableNodeDepths.isEmpty() && hasMatchingTrainInNodes(reachableNodeDepths, cache.occupancyByNode, blockEntity);
+        final DetectorRailLocation detectorRailLocation = blockEntity.getDetectorRailLocation(simulator, pos);
+        if (detectorRailLocation == null) {
+            return;
         }
+
+        final Map<Position, Double> nodeDistances = blockEntity.getOrBuildNodeDistances(simulator, detectorRailLocation);
+        if (nodeDistances == null) {
+            return;
+        }
+
+        final boolean shouldPower = hasMatchingTrainInDistanceRange(detectorRailLocation, nodeDistances, blockEntity.getStartDistance(), blockEntity.getEndDistance(), cache.vehicleSnapshots, blockEntity);
 
         if (shouldPower) {
             ((BlockTrainPoweredSensorBase) state.getBlock().data).power(world, state, pos);
@@ -323,6 +326,393 @@ public class BlockTrainDetector extends BlockTrainPoweredSensorBase {
         return Double.NaN;
     }
 
+    private static boolean hasMatchingTrainInDistanceRange(
+            DetectorRailLocation detectorRailLocation,
+            Map<Position, Double> nodeDistances,
+            int startDistanceBlocks,
+            int endDistanceBlocks,
+            java.util.List<VehicleSnapshot> snapshots,
+            BlockEntity blockEntity
+    ) {
+        if (detectorRailLocation == null || nodeDistances == null || snapshots == null || snapshots.isEmpty() || blockEntity == null) {
+            return false;
+        }
+
+        int start = clampDistance(startDistanceBlocks);
+        int end = clampDistance(endDistanceBlocks);
+        if (end < start) {
+            final int tmp = start;
+            start = end;
+            end = tmp;
+        }
+
+        if (end <= 0) {
+            return false;
+        }
+
+        for (final VehicleSnapshot snapshot : snapshots) {
+            if (snapshot == null) {
+                continue;
+            }
+            if (!blockEntity.matchesFilter(snapshot.routeId, snapshot.speed)) {
+                continue;
+            }
+
+            // Scan only the segments overlapped by the train's full length (tail->head).
+            int index = snapshot.headIndex;
+            while (index >= 0 && index < snapshot.path.size()) {
+                final PathData pathData = snapshot.path.get(index);
+                if (pathData == null) {
+                    index--;
+                    continue;
+                }
+
+                // Stop once the segment is fully behind the tail.
+                if (pathData.getEndDistance() <= snapshot.tailProgress) {
+                    break;
+                }
+
+                if (isTrainOverDetectorDistanceRange(detectorRailLocation, nodeDistances, start, end, snapshot, pathData)) {
+                    return true;
+                }
+
+                index--;
+            }
+        }
+
+        return false;
+    }
+
+    private static boolean isTrainOverDetectorDistanceRange(
+            DetectorRailLocation detectorRailLocation,
+            Map<Position, Double> nodeDistances,
+            int startDistanceBlocks,
+            int endDistanceBlocks,
+            VehicleSnapshot snapshot,
+            PathData pathData
+    ) {
+        if (detectorRailLocation == null || nodeDistances == null || snapshot == null || pathData == null) {
+            return false;
+        }
+
+        final double segmentStart = pathData.getStartDistance();
+        final double segmentEnd = pathData.getEndDistance();
+        final double segmentLength = segmentEnd - segmentStart;
+        if (!(segmentLength > 0) || Double.isNaN(segmentLength) || Double.isInfinite(segmentLength)) {
+            return false;
+        }
+
+        // Determine which portion of this segment is occupied by the train.
+        final double occupiedStart = Math.max(segmentStart, snapshot.tailProgress);
+        final double occupiedEnd = Math.min(segmentEnd, snapshot.railProgress);
+        if (!(occupiedEnd > occupiedStart)) {
+            return false;
+        }
+
+        final double tStart = toOffsetFromOrderedPosition1(pathData, occupiedStart, segmentStart, segmentLength);
+        final double tEnd = toOffsetFromOrderedPosition1(pathData, occupiedEnd, segmentStart, segmentLength);
+        final double tMin = Math.max(0, Math.min(segmentLength, Math.min(tStart, tEnd)));
+        final double tMax = Math.max(0, Math.min(segmentLength, Math.max(tStart, tEnd)));
+
+        final double minDist;
+        final double maxDist;
+
+        if (detectorRailLocation.matches(pathData)) {
+            // Detector point is on this segment; distance is simply along the rail in either direction.
+            final double detectorOffset = clamp(detectorRailLocation.offsetFromOrderedPosition1, 0, segmentLength);
+            final double d1 = Math.abs(tMin - detectorOffset);
+            final double d2 = Math.abs(tMax - detectorOffset);
+            minDist = (detectorOffset >= tMin && detectorOffset <= tMax) ? 0 : Math.min(d1, d2);
+            maxDist = Math.max(d1, d2);
+        } else {
+            final double dPos1 = getDistance(nodeDistances, pathData.getOrderedPosition1());
+            final double dPos2 = getDistance(nodeDistances, pathData.getOrderedPosition2());
+            if (Double.isInfinite(dPos1) && Double.isInfinite(dPos2)) {
+                return false;
+            }
+
+            final double distAtMin = distanceAlongEdge(tMin, dPos1, dPos2, segmentLength);
+            final double distAtMax = distanceAlongEdge(tMax, dPos1, dPos2, segmentLength);
+            minDist = Math.min(distAtMin, distAtMax);
+            double localMax = Math.max(distAtMin, distAtMax);
+
+            if (!Double.isInfinite(dPos1) && !Double.isInfinite(dPos2)) {
+                final double tSwitch = (dPos2 + segmentLength - dPos1) / 2D;
+                if (tSwitch >= tMin && tSwitch <= tMax) {
+                    localMax = Math.max(localMax, distanceAlongEdge(tSwitch, dPos1, dPos2, segmentLength));
+                }
+            }
+
+            maxDist = localMax;
+        }
+
+        return maxDist >= startDistanceBlocks - SECONDS_DISTANCE_EPSILON && minDist <= endDistanceBlocks + SECONDS_DISTANCE_EPSILON;
+    }
+
+    private static double toOffsetFromOrderedPosition1(PathData pathData, double progress, double segmentStart, double segmentLength) {
+        final double offsetFromStart = clamp(progress - segmentStart, 0, segmentLength);
+        return pathData.reversePositions ? segmentLength - offsetFromStart : offsetFromStart;
+    }
+
+    private static double distanceAlongEdge(double tFromOrderedPosition1, double distanceToOrderedPosition1, double distanceToOrderedPosition2, double edgeLength) {
+        final double via1 = Double.isInfinite(distanceToOrderedPosition1) ? Double.POSITIVE_INFINITY : distanceToOrderedPosition1 + tFromOrderedPosition1;
+        final double via2 = Double.isInfinite(distanceToOrderedPosition2) ? Double.POSITIVE_INFINITY : distanceToOrderedPosition2 + (edgeLength - tFromOrderedPosition1);
+        return Math.min(via1, via2);
+    }
+
+    private static double getDistance(Map<Position, Double> distances, Position position) {
+        if (distances == null || position == null) {
+            return Double.POSITIVE_INFINITY;
+        }
+        final Double value = distances.get(position);
+        return value == null ? Double.POSITIVE_INFINITY : value;
+    }
+
+    private static Map<Position, Double> computeNodeDistances(Data data, DetectorRailLocation detectorRailLocation, int maxDistanceBlocks) {
+        final HashMap<Position, Double> distances = new HashMap<>();
+
+        if (data == null || detectorRailLocation == null || data.positionsToRail == null || data.positionsToRail.isEmpty()) {
+            return distances;
+        }
+
+        final int clampedMaxDistanceBlocks = clampDistance(maxDistanceBlocks);
+        if (clampedMaxDistanceBlocks <= 0) {
+            // Still populate the endpoints so the starting segment can be evaluated consistently.
+            final double railLength = Math.max(0, detectorRailLocation.railLength);
+            final double offset = clamp(detectorRailLocation.offsetFromOrderedPosition1, 0, railLength);
+            if (detectorRailLocation.orderedPosition1 != null) {
+                distances.put(detectorRailLocation.orderedPosition1, offset);
+            }
+            if (detectorRailLocation.orderedPosition2 != null) {
+                distances.put(detectorRailLocation.orderedPosition2, railLength - offset);
+            }
+            return distances;
+        }
+
+        final double railLength = Math.max(0, detectorRailLocation.railLength);
+        final double offset = clamp(detectorRailLocation.offsetFromOrderedPosition1, 0, railLength);
+        final Position start1 = detectorRailLocation.orderedPosition1;
+        final Position start2 = detectorRailLocation.orderedPosition2;
+
+        final PriorityQueue<NodeDistance> queue = new PriorityQueue<>(Comparator.comparingDouble(o -> o.distance));
+
+        if (start1 != null) {
+            distances.put(start1, offset);
+            queue.add(new NodeDistance(start1, offset));
+        }
+        if (start2 != null) {
+            final double d2 = railLength - offset;
+            final double existing = getDistance(distances, start2);
+            if (d2 < existing) {
+                distances.put(start2, d2);
+                queue.add(new NodeDistance(start2, d2));
+            }
+        }
+
+        while (!queue.isEmpty()) {
+            final NodeDistance current = queue.poll();
+            if (current == null || current.node == null) {
+                continue;
+            }
+            if (current.distance > clampedMaxDistanceBlocks + 0.5D) {
+                // Distances beyond the activation end don't affect reachability for <= end.
+                continue;
+            }
+            if (current.distance > getDistance(distances, current.node) + SECONDS_DISTANCE_EPSILON) {
+                continue;
+            }
+
+            final java.util.Map<Position, Rail> connections = data.positionsToRail.get(current.node);
+            if (connections == null || connections.isEmpty()) {
+                continue;
+            }
+
+            for (final java.util.Map.Entry<Position, Rail> entry : connections.entrySet()) {
+                final Position next = entry.getKey();
+                final Rail rail = entry.getValue();
+                if (next == null || rail == null || rail.railMath == null) {
+                    continue;
+                }
+
+                final double length = rail.railMath.getLength();
+                if (!(length > 0) || Double.isNaN(length) || Double.isInfinite(length)) {
+                    continue;
+                }
+
+                final double newDistance = current.distance + length;
+                if (newDistance > clampedMaxDistanceBlocks + length) {
+                    // Don't flood the queue with faraway nodes; segments leaving nodes within range are still evaluable.
+                    continue;
+                }
+
+                if (newDistance + SECONDS_DISTANCE_EPSILON < getDistance(distances, next)) {
+                    distances.put(next, newDistance);
+                    queue.add(new NodeDistance(next, newDistance));
+                }
+            }
+        }
+
+        return distances;
+    }
+
+    private static final class NodeDistance {
+        private final Position node;
+        private final double distance;
+
+        private NodeDistance(Position node, double distance) {
+            this.node = node;
+            this.distance = distance;
+        }
+    }
+
+    public static List<Object[]> computePreviewEdges(Data data, BlockPos detectorPos, int startDistanceBlocks, int endDistanceBlocks) {
+        if (data == null || detectorPos == null) {
+            return Collections.emptyList();
+        }
+
+        int start = clampDistance(startDistanceBlocks);
+        int end = clampDistance(endDistanceBlocks);
+        if (end < start) {
+            final int tmp = start;
+            start = end;
+            end = tmp;
+        }
+
+        if (end <= 0) {
+            return Collections.emptyList();
+        }
+
+        final DetectorRailLocation detectorRailLocation = findClosestRailLocation(data, detectorPos, 64);
+        if (detectorRailLocation == null) {
+            return Collections.emptyList();
+        }
+
+        final Map<Position, Double> nodeDistances = computeNodeDistances(data, detectorRailLocation, end);
+        return computePreviewEdges(data, detectorRailLocation, nodeDistances, start, end);
+    }
+
+    private static List<Object[]> computePreviewEdges(Data data, DetectorRailLocation detectorRailLocation, Map<Position, Double> nodeDistances, int startDistanceBlocks, int endDistanceBlocks) {
+        if (data == null || detectorRailLocation == null || nodeDistances == null) {
+            return Collections.emptyList();
+        }
+
+        final List<Object[]> result = new ArrayList<>();
+        final Set<SegmentKey> seen = new HashSet<>();
+
+        final SegmentKey detectorKey = new SegmentKey(detectorRailLocation.orderedPosition1, detectorRailLocation.orderedPosition2);
+
+        // Always include the detector segment itself if it overlaps the chosen distance range.
+        final double detectorRailLength = Math.max(0, detectorRailLocation.railLength);
+        final double detectorOffset = clamp(detectorRailLocation.offsetFromOrderedPosition1, 0, detectorRailLength);
+        final double detectorMax = Math.max(detectorOffset, detectorRailLength - detectorOffset);
+        if (detectorMax >= startDistanceBlocks - SECONDS_DISTANCE_EPSILON && 0 <= endDistanceBlocks + SECONDS_DISTANCE_EPSILON) {
+            final Rail detectorRail = data.railIdMap.get(detectorRailLocation.railHexId);
+            if (detectorRail != null) {
+                result.add(new Object[]{detectorRailLocation.orderedPosition1, detectorRailLocation.orderedPosition2, detectorRail});
+                seen.add(detectorKey);
+            }
+        }
+
+        for (final Position node : nodeDistances.keySet()) {
+            if (node == null) {
+                continue;
+            }
+
+            final java.util.Map<Position, Rail> connections = data.positionsToRail.get(node);
+            if (connections == null || connections.isEmpty()) {
+                continue;
+            }
+
+            for (final java.util.Map.Entry<Position, Rail> entry : connections.entrySet()) {
+                final Position other = entry.getKey();
+                final Rail rail = entry.getValue();
+                if (other == null || rail == null || rail.railMath == null) {
+                    continue;
+                }
+
+                final double length = rail.railMath.getLength();
+                if (!(length > 0) || Double.isNaN(length) || Double.isInfinite(length)) {
+                    continue;
+                }
+
+                final SegmentKey key = new SegmentKey(node, other);
+                if (seen.contains(key)) {
+                    continue;
+                }
+
+                if (key.equals(detectorKey)) {
+                    // Already handled above.
+                    seen.add(key);
+                    continue;
+                }
+
+                final double d1 = getDistance(nodeDistances, node);
+                final double d2 = getDistance(nodeDistances, other);
+                if (Double.isInfinite(d1) && Double.isInfinite(d2)) {
+                    continue;
+                }
+
+                final double globalMin;
+                final double globalMax;
+
+                if (Double.isInfinite(d1) || Double.isInfinite(d2)) {
+                    final double finite = Double.isInfinite(d1) ? d2 : d1;
+                    globalMin = finite;
+                    globalMax = finite + length;
+                } else {
+                    globalMin = Math.min(d1, d2);
+                    final double diff = Math.abs(d1 - d2);
+                    globalMax = diff >= length ? globalMin + length : (d1 + d2 + length) / 2D;
+                }
+
+                if (globalMax >= startDistanceBlocks - SECONDS_DISTANCE_EPSILON && globalMin <= endDistanceBlocks + SECONDS_DISTANCE_EPSILON) {
+                    result.add(new Object[]{node, other, rail});
+                    seen.add(key);
+                }
+            }
+        }
+
+        return result;
+    }
+
+    private static final class SegmentKey {
+
+        private final Position position1;
+        private final Position position2;
+
+        private SegmentKey(Position position1, Position position2) {
+            if (position1 != null && position2 != null && position1.compareTo(position2) > 0) {
+                this.position1 = position2;
+                this.position2 = position1;
+            } else {
+                this.position1 = position1;
+                this.position2 = position2;
+            }
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            if (this == obj) {
+                return true;
+            }
+            if (!(obj instanceof SegmentKey)) {
+                return false;
+            }
+            final SegmentKey other = (SegmentKey) obj;
+            if (position1 == null ? other.position1 != null : !position1.equals(other.position1)) {
+                return false;
+            }
+            return position2 == null ? other.position2 == null : position2.equals(other.position2);
+        }
+
+        @Override
+        public int hashCode() {
+            int result = position1 == null ? 0 : position1.hashCode();
+            result = 31 * result + (position2 == null ? 0 : position2.hashCode());
+            return result;
+        }
+    }
+
     private static Object2IntAVLTreeMap<Position> collectReachableNodeDepths(Simulator simulator, Position startNode, int maxDepth) {
         final Object2IntAVLTreeMap<Position> depths = new Object2IntAVLTreeMap<>();
         if (simulator == null || startNode == null || maxDepth < 0) {
@@ -524,6 +914,10 @@ public class BlockTrainDetector extends BlockTrainPoweredSensorBase {
         return Math.max(MIN_SECONDS_OFFSET, Math.min(MAX_SECONDS_OFFSET, secondsOffset));
     }
 
+    private static int clampDistance(int distanceBlocks) {
+        return Math.max(MIN_DISTANCE_BLOCKS, Math.min(MAX_DISTANCE_BLOCKS, distanceBlocks));
+    }
+
     private static Collection<?> getSidingVehicles(Siding siding) {
         if (siding == null) {
             return null;
@@ -650,11 +1044,18 @@ public class BlockTrainDetector extends BlockTrainPoweredSensorBase {
         private int nodeRange = DEFAULT_NODE_RANGE;
         private int secondsOffset;
         private boolean useSecondsOffset;
+        private int startDistance = DEFAULT_START_DISTANCE_BLOCKS;
+        private int endDistance = DEFAULT_END_DISTANCE_BLOCKS;
         private DetectorRailLocation cachedDetectorRailLocation;
         private int tickCounter;
         private int detectorNodeRefreshCounter;
         private Position cachedDetectorNode;
         private int detectorRailRefreshCounter;
+        private int nodeDistancesRefreshCounter;
+        private DetectorRailLocation cachedNodeDistancesRailLocation;
+        private int cachedNodeDistancesStartDistance;
+        private int cachedNodeDistancesEndDistance;
+        private Map<Position, Double> cachedNodeDistances;
         private final Set<Long> occupiedVehicleIds = new HashSet<>();
         private final Map<Long, Long> tailClearedAtMillisByVehicle = new HashMap<>();
 
@@ -669,6 +1070,20 @@ public class BlockTrainDetector extends BlockTrainPoweredSensorBase {
             nodeRange = rawNodeRange <= 0 ? DEFAULT_NODE_RANGE : Math.max(MIN_NODE_RANGE, Math.min(MAX_NODE_RANGE, rawNodeRange));
             secondsOffset = clampSecondsOffset(compoundTag.getInt(KEY_SECONDS_OFFSET));
             useSecondsOffset = compoundTag.getBoolean(KEY_USE_SECONDS_OFFSET);
+
+            if (compoundTag.contains(KEY_START_DISTANCE, 3) || compoundTag.contains(KEY_END_DISTANCE, 3)) {
+                startDistance = clampDistance(compoundTag.getInt(KEY_START_DISTANCE));
+                endDistance = clampDistance(compoundTag.getInt(KEY_END_DISTANCE));
+            } else {
+                // Backward compatibility: map node range to a rough block distance.
+                startDistance = DEFAULT_START_DISTANCE_BLOCKS;
+                endDistance = clampDistance(nodeRange * 64);
+            }
+            if (endDistance < startDistance) {
+                final int tmp = startDistance;
+                startDistance = endDistance;
+                endDistance = tmp;
+            }
         }
 
         @Override
@@ -677,6 +1092,8 @@ public class BlockTrainDetector extends BlockTrainPoweredSensorBase {
             compoundTag.putInt(KEY_NODE_RANGE, nodeRange);
             compoundTag.putInt(KEY_SECONDS_OFFSET, secondsOffset);
             compoundTag.putBoolean(KEY_USE_SECONDS_OFFSET, useSecondsOffset);
+            compoundTag.putInt(KEY_START_DISTANCE, startDistance);
+            compoundTag.putInt(KEY_END_DISTANCE, endDistance);
         }
 
         @Override
@@ -716,6 +1133,25 @@ public class BlockTrainDetector extends BlockTrainPoweredSensorBase {
             detectorRailRefreshCounter = 0;
             cachedDetectorRailLocation = findClosestRailLocation(simulator, detectorPos, 64);
             return cachedDetectorRailLocation;
+        }
+
+        private Map<Position, Double> getOrBuildNodeDistances(Simulator simulator, DetectorRailLocation detectorRailLocation) {
+            nodeDistancesRefreshCounter++;
+            if (cachedNodeDistances != null
+                    && nodeDistancesRefreshCounter < 200
+                    && cachedNodeDistancesRailLocation != null
+                    && cachedNodeDistancesRailLocation.railHexId.equals(detectorRailLocation.railHexId)
+                    && cachedNodeDistancesStartDistance == startDistance
+                    && cachedNodeDistancesEndDistance == endDistance) {
+                return cachedNodeDistances;
+            }
+
+            nodeDistancesRefreshCounter = 0;
+            cachedNodeDistancesRailLocation = detectorRailLocation;
+            cachedNodeDistancesStartDistance = startDistance;
+            cachedNodeDistancesEndDistance = endDistance;
+            cachedNodeDistances = computeNodeDistances(simulator, detectorRailLocation, endDistance);
+            return cachedNodeDistances;
         }
 
         private void updateTailClearedTimes(long nowMillis, DetectorRailLocation detectorRailLocation, java.util.List<VehicleSnapshot> snapshots, long keepMillis) {
@@ -790,6 +1226,38 @@ public class BlockTrainDetector extends BlockTrainPoweredSensorBase {
         public void setUseSecondsOffset(boolean useSecondsOffset) {
             if (this.useSecondsOffset != useSecondsOffset) {
                 this.useSecondsOffset = useSecondsOffset;
+                markDirty2();
+            }
+        }
+
+        public int getStartDistance() {
+            return startDistance;
+        }
+
+        public void setStartDistance(int startDistance) {
+            final int clamped = clampDistance(startDistance);
+            if (this.startDistance != clamped) {
+                this.startDistance = clamped;
+                if (endDistance < this.startDistance) {
+                    endDistance = this.startDistance;
+                }
+                cachedNodeDistances = null;
+                markDirty2();
+            }
+        }
+
+        public int getEndDistance() {
+            return endDistance;
+        }
+
+        public void setEndDistance(int endDistance) {
+            final int clamped = clampDistance(endDistance);
+            if (this.endDistance != clamped) {
+                this.endDistance = clamped;
+                if (this.endDistance < startDistance) {
+                    startDistance = this.endDistance;
+                }
+                cachedNodeDistances = null;
                 markDirty2();
             }
         }
@@ -921,8 +1389,8 @@ public class BlockTrainDetector extends BlockTrainPoweredSensorBase {
         return value;
     }
 
-    private static DetectorRailLocation findClosestRailLocation(Simulator simulator, BlockPos detectorPos, double searchRadiusBlocks) {
-        if (simulator == null || detectorPos == null || simulator.rails == null || simulator.rails.isEmpty()) {
+    private static DetectorRailLocation findClosestRailLocation(Data data, BlockPos detectorPos, double searchRadiusBlocks) {
+        if (data == null || detectorPos == null || data.rails == null || data.rails.isEmpty()) {
             return null;
         }
 
@@ -934,7 +1402,7 @@ public class BlockTrainDetector extends BlockTrainPoweredSensorBase {
         double bestRailLength = 0;
         double bestDistanceSquared = maxDistanceSquared;
 
-        for (final Rail rail : simulator.rails) {
+        for (final Rail rail : data.rails) {
             if (rail == null || rail.railMath == null) {
                 continue;
             }

@@ -1,7 +1,14 @@
 import groovy.json.JsonSlurper
 import org.gradle.api.file.DuplicatesStrategy
 
+import java.nio.channels.FileChannel
+import java.nio.channels.FileLock
+import java.nio.charset.StandardCharsets
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
+import java.nio.file.StandardOpenOption
 import java.net.URLEncoder
+import java.security.MessageDigest
 
 plugins {
     id "fabric-loom" version "1.7-SNAPSHOT"
@@ -15,8 +22,99 @@ def dependencyCompatMcVer = ["1.19": "1.19.2", "1.21.1": "1.20.4"].get(mcVer, mc
 
 def jsonSlurper = new JsonSlurper()
 
+def sha1Hex = { String text ->
+    final MessageDigest md = MessageDigest.getInstance("SHA-1")
+    final byte[] digest = md.digest((text == null ? "" : text).getBytes("UTF-8"))
+    digest.encodeHex().toString()
+}
+
+def urlCacheDir = new File(gradle.gradleUserHomeDir, "jme-url-cache/v1")
+if (!urlCacheDir.exists()) {
+    urlCacheDir.mkdirs()
+}
+
 def fetchJson = { String url ->
-    new URL(url).withInputStream { stream -> jsonSlurper.parse(stream) }
+    final String cacheKey = sha1Hex(url)
+    final File cacheFile = new File(urlCacheDir, "${cacheKey}.json")
+    final File lockFile = new File(urlCacheDir, "${cacheKey}.lock")
+
+    def readCached = {
+        if (!cacheFile.exists() || cacheFile.length() <= 0) {
+            return null
+        }
+        try {
+            return jsonSlurper.parse(cacheFile)
+        } catch (Exception ignored) {
+            // Corrupted/partial cache; drop it and refetch.
+            cacheFile.delete()
+            return null
+        }
+    }
+
+    FileChannel channel = null
+    FileLock lock = null
+    try {
+        channel = FileChannel.open(lockFile.toPath(), StandardOpenOption.CREATE, StandardOpenOption.WRITE)
+        lock = channel.lock()
+
+        final Object cached = readCached()
+        if (cached != null) {
+            return cached
+        }
+
+        Exception lastException = null
+        for (int attempt = 1; attempt <= 5; attempt++) {
+            try {
+                final URLConnection connection = new URL(url).openConnection()
+                connection.setConnectTimeout(15_000)
+                connection.setReadTimeout(30_000)
+                connection.setRequestProperty("User-Agent", "JMEM-Gradle")
+                connection.setRequestProperty("Accept", "application/json")
+
+                final String text = connection.getInputStream().withCloseable { stream ->
+                    new InputStreamReader(stream, StandardCharsets.UTF_8).withCloseable { reader -> reader.text }
+                }
+
+                // Parse before caching so we never persist HTML error pages, etc.
+                final Object parsed = jsonSlurper.parseText(text)
+
+                final File tmpFile = new File(urlCacheDir, "${cacheKey}.${System.currentTimeMillis()}.tmp")
+                tmpFile.setText(text, "UTF-8")
+                Files.move(tmpFile.toPath(), cacheFile.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
+                return parsed
+            } catch (Exception e) {
+                lastException = e
+                if (attempt < 5) {
+                    // Exponential backoff with a little jitter.
+                    final long base = (long) (250L * Math.pow(2D, attempt - 1))
+                    final long jitter = (long) (Math.random() * 250L)
+                    sleep(base + jitter)
+                }
+            }
+        }
+
+        // As a last resort, allow a stale cache (e.g. offline build after a previous successful run).
+        final Object stale = readCached()
+        if (stale != null) {
+            logger.warn("Failed to fetch ${url}; using cached response from ${cacheFile}.")
+            return stale
+        }
+
+        throw new GradleException("Failed to fetch ${url}", lastException)
+    } finally {
+        if (lock != null) {
+            try {
+                lock.release()
+            } catch (Exception ignored) {
+            }
+        }
+        if (channel != null) {
+            try {
+                channel.close()
+            } catch (Exception ignored) {
+            }
+        }
+    }
 }
 
 def firstModrinthVersion = { String projectId, String loader, String gameVersion ->
@@ -51,6 +149,7 @@ def resolvedYarnVersion = {
 def resolvedFabricApiVersion = firstModrinthVersion("fabric-api", "fabric", mcVer)
 def resolvedModMenuVersion = firstModrinthVersion("modmenu", "fabric", mcVer)
 def resolvedMtrVersion = firstModrinthVersion("minecraft-transit-railway", "fabric", dependencyCompatMcVer)
+def resolvedBlueMapVersion = firstModrinthVersion("bluemap", "fabric", mcVer)
 
 version = project.mod_version
 group = project.maven_group
@@ -92,6 +191,7 @@ dependencies {
     modImplementation "net.fabricmc.fabric-api:fabric-api:${resolvedFabricApiVersion}"
     modImplementation "maven.modrinth:minecraft-transit-railway:${resolvedMtrVersion}"
     modImplementation "com.terraformersmc:modmenu:${resolvedModMenuVersion}"
+    modCompileOnly "maven.modrinth:bluemap:${resolvedBlueMapVersion}"
 
     compileOnly "com.google.code.findbugs:jsr305:3.0.2"
     implementation "org.tukaani:xz:1.9"
@@ -110,6 +210,22 @@ processResources {
                 "minecraft_version": mcVer,
                 "loader_version": resolvedLoaderVersion
         )
+    }
+
+    // Custom connector textures are authored at repo root (requested),
+    // but must be packaged under the normal Minecraft assets path.
+    def magicConnectorTexture = rootProject.file("rail_connector_magic.png")
+    if (magicConnectorTexture.exists()) {
+        from(magicConnectorTexture) {
+            into("assets/jme/textures/item")
+        }
+    }
+
+    def magicConnectorOneWayTexture = rootProject.file("rail_connector_magic_one_way.png")
+    if (magicConnectorOneWayTexture.exists()) {
+        from(magicConnectorOneWayTexture) {
+            into("assets/jme/textures/item")
+        }
     }
 }
 
