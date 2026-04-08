@@ -242,6 +242,17 @@ public abstract class SidingDynamicPlatformRerouteMixin {
             return null;
         }
 
+        // Validate that the new path from siding is complete and reachable
+        // This prevents selecting alternative platforms when the path would be invalid
+        if (dynamicSidingToMainRoute.isEmpty()) {
+            return null;
+        }
+        final PathData lastSegmentToNewPlatform = dynamicSidingToMainRoute.get(dynamicSidingToMainRoute.size() - 1);
+        if (lastSegmentToNewPlatform != null && lastSegmentToNewPlatform.getDwellTime() <= 0) {
+            // Last segment doesn't lead to a station - this path is incomplete/invalid
+            return null;
+        }
+
         final ObjectArrayList<PathData> dynamicMainRoute = new ObjectArrayList<>(dynamicFirstLeg);
         // The first segment of the main route leg often duplicates the last segment of the
         // siding->platform leg (the platform rail itself). Remove the overlap to keep transitions
@@ -249,6 +260,20 @@ public abstract class SidingDynamicPlatformRerouteMixin {
         jme$removeOverlappingFirstSegment(dynamicSidingToMainRoute, dynamicMainRoute);
         jme$appendMainRouteTail(pathMainRoute, dynamicMainRoute, firstStopSelection[2]);
         if (dynamicMainRoute.isEmpty() || jme$hasInvalidImmediateOppositeRailTransition(dynamicMainRoute)) {
+            return null;
+        }
+
+        // Ensure siding-to-platform path properly ends at the chosen platform
+        final long chosenPlatformId = selectedFirstStop.getId();
+        boolean endsAtChosenPlatform = false;
+        for (final PathData pd : dynamicSidingToMainRoute) {
+            if (pd != null && pd.getSavedRailBaseId() == chosenPlatformId && pd.getDwellTime() > 0) {
+                endsAtChosenPlatform = true;
+                break;
+            }
+        }
+        if (!endsAtChosenPlatform) {
+            // Path doesn't properly reach the chosen platform
             return null;
         }
 
