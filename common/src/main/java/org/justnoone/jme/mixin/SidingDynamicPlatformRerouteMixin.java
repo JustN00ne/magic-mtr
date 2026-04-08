@@ -618,6 +618,13 @@ public abstract class SidingDynamicPlatformRerouteMixin {
             return false;
         }
 
+        // Check if this platform is currently being deployed to by another train
+        synchronized (CONCURRENCY_LOCK) {
+            if (DEPLOYING_RESERVATIONS.containsKey(platformId)) {
+                return true;
+            }
+        }
+
         for (final Siding depotSiding : sidingsToCheck) {
             if (depotSiding == null) {
                 continue;
