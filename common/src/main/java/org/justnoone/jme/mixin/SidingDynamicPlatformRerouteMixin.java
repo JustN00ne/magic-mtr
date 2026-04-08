@@ -64,7 +64,6 @@ public abstract class SidingDynamicPlatformRerouteMixin {
     @Unique
     private static final Map<Long, Long> DEPLOYING_RESERVATIONS = new HashMap<>();
 
-
     @Unique
     private static final long PATHFIND_TIME_BUDGET_MILLIS = 120;
 
@@ -146,9 +145,7 @@ public abstract class SidingDynamicPlatformRerouteMixin {
         }
 
         try {
-            // Keep this stable for a given deployment. Using wall-clock time makes the chosen platform
-            // non-deterministic if MTR ends up calling startUp more than once in the same deployment window.
-            final long selectionSeed = jme$mix64(siding.getId() ^ vehicle.getId() ^ departureIndex ^ (sidingDepartureTime << 1));
+            final long selectionSeed = jme$mix64(siding.getId() ^ vehicle.getId() ^ departureIndex ^ (sidingDepartureTime << 1) ^ System.currentTimeMillis());
             final VehicleExtraData dynamicVehicleExtraData = jme$buildDynamicVehicleExtraData(
                     siding,
                     depot.getId(),
@@ -451,8 +448,6 @@ public abstract class SidingDynamicPlatformRerouteMixin {
             if (jme$isPlatformTaken(sidingsToCheck, null, candidateId)) {
                 score += 10_000;
             }
-            // Load-balancing is handled via DEPLOYING_RESERVATIONS expiry (5s)
-            // Additional scoring not needed - primary platform selection already enables distribution
             candidateScores.put(candidateId, score);
         }
 
@@ -979,6 +974,8 @@ public abstract class SidingDynamicPlatformRerouteMixin {
         return z ^ (z >>> 33);
     }
 
+    @Unique
+    @SuppressWarnings({"rawtypes", "unchecked"})
     private static ObjectArrayList<PathData> jme$findPath(Data data, SavedRailBase<?, ?> startSavedRail, SavedRailBase<?, ?> endSavedRail, int stopIndex, long cruisingAltitude) {
         if (data == null || startSavedRail == null || endSavedRail == null) {
             return new ObjectArrayList<>();
@@ -994,9 +991,6 @@ public abstract class SidingDynamicPlatformRerouteMixin {
         final ObjectArrayList<PathData> cached = PathCache.getCopy(startId, endId, stopIndex, cruisingAltitude, startMillis);
         if (cached != null) {
             return cached;
-        }
-        if (PathCache.isFailureCached(startId, endId, stopIndex, cruisingAltitude, startMillis)) {
-            return new ObjectArrayList<>();
         }
 
         final TransportMode transportMode = startSavedRail.getTransportMode();
@@ -1029,7 +1023,6 @@ public abstract class SidingDynamicPlatformRerouteMixin {
         }
 
         if (failed[0] || !pathFinders.isEmpty() || path.size() < 2) {
-            PathCache.putFailure(startId, endId, stopIndex, cruisingAltitude, startMillis);
             return new ObjectArrayList<>();
         }
 
@@ -1225,6 +1218,8 @@ public abstract class SidingDynamicPlatformRerouteMixin {
         }
     }
 
+    @Unique
+    @SuppressWarnings("unchecked")
     private static ObjectArrayList<PathData>[] jme$newPathSelectionArray() {
         return (ObjectArrayList<PathData>[]) new ObjectArrayList[2];
     }
