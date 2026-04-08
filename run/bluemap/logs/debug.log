@@ -1,228 +1,139 @@
-[2026-04-08 17:02:34][INFO] Loading resources...
-[2026-04-08 17:02:34][FINE] Loading resources from: mods/BlueMap-5.3-fabric-1.20.jar ...
-[2026-04-08 17:02:34][FINE] Loading resources from: mods/modmenu-7.2.2.jar ...
-[2026-04-08 17:02:34][FINE] Loading resources from: mods/cloth-config-11.1.136-fabric.jar ...
-[2026-04-08 17:02:34][FINE] Loading resources from: bluemap/resourceExtensions.zip ...
-[2026-04-08 17:02:34][FINE] Loading resources from: bluemap/minecraft-client-1.20.1.jar ...
-[2026-04-08 17:02:34][INFO] Loading textures...
-[2026-04-08 17:02:34][FINE] Loading textures from: mods/BlueMap-5.3-fabric-1.20.jar ...
-[2026-04-08 17:02:34][FINE] Loading textures from: mods/modmenu-7.2.2.jar ...
-[2026-04-08 17:02:34][FINE] Loading textures from: mods/cloth-config-11.1.136-fabric.jar ...
-[2026-04-08 17:02:34][FINE] Loading textures from: bluemap/resourceExtensions.zip ...
-[2026-04-08 17:02:34][FINE] Loading textures from: bluemap/minecraft-client-1.20.1.jar ...
-[2026-04-08 17:02:36][INFO] Baking resources...
-[2026-04-08 17:02:36][INFO] Resources loaded.
-[2026-04-08 17:02:36][FINE] Loading world saves/New World#minecraft:the_nether ...
-[2026-04-08 17:02:36][FINE] Loading datapack...
-[2026-04-08 17:02:36][FINE] Loading datapack from: mods/BlueMap-5.3-fabric-1.20.jar ...
-[2026-04-08 17:02:36][FINE] Loading datapack from: mods/modmenu-7.2.2.jar ...
-[2026-04-08 17:02:36][FINE] Loading datapack from: mods/cloth-config-11.1.136-fabric.jar ...
-[2026-04-08 17:02:36][FINE] Loading datapack from: bluemap/resourceExtensions.zip ...
-[2026-04-08 17:02:36][FINE] Loading datapack from: bluemap/minecraft-client-1.20.1.jar ...
-[2026-04-08 17:02:36][FINE] Baking datapack...
-[2026-04-08 17:02:36][FINE] Datapack loaded.
-[2026-04-08 17:02:36][INFO] Initializing Storage: 'file' (Type: 'bluemap:file')
-[2026-04-08 17:02:36][INFO] Loading map 'new_world_the_nether'...
-[2026-04-08 17:02:36][FINE] Loading render-state for map 'new_world_the_nether'
-[2026-04-08 17:02:36][FINE] Loading textures for map 'new_world_the_nether'
-[2026-04-08 17:02:37][FINE] Loading world saves/New World#minecraft:overworld ...
-[2026-04-08 17:02:37][FINE] Loading datapack...
-[2026-04-08 17:02:37][FINE] Loading datapack from: mods/BlueMap-5.3-fabric-1.20.jar ...
-[2026-04-08 17:02:37][FINE] Loading datapack from: mods/modmenu-7.2.2.jar ...
-[2026-04-08 17:02:37][FINE] Loading datapack from: mods/cloth-config-11.1.136-fabric.jar ...
-[2026-04-08 17:02:37][FINE] Loading datapack from: bluemap/resourceExtensions.zip ...
-[2026-04-08 17:02:37][FINE] Loading datapack from: bluemap/minecraft-client-1.20.1.jar ...
-[2026-04-08 17:02:37][FINE] Baking datapack...
-[2026-04-08 17:02:37][FINE] Datapack loaded.
-[2026-04-08 17:02:37][INFO] Loading map 'new_world'...
-[2026-04-08 17:02:37][FINE] Loading render-state for map 'new_world'
-[2026-04-08 17:02:37][FINE] Loading textures for map 'new_world'
-[2026-04-08 17:02:37][FINE] Loading world saves/New World#minecraft:the_end ...
-[2026-04-08 17:02:37][FINE] Loading datapack...
-[2026-04-08 17:02:37][FINE] Loading datapack from: mods/BlueMap-5.3-fabric-1.20.jar ...
-[2026-04-08 17:02:37][FINE] Loading datapack from: mods/modmenu-7.2.2.jar ...
-[2026-04-08 17:02:37][FINE] Loading datapack from: mods/cloth-config-11.1.136-fabric.jar ...
-[2026-04-08 17:02:37][FINE] Loading datapack from: bluemap/resourceExtensions.zip ...
-[2026-04-08 17:02:37][FINE] Loading datapack from: bluemap/minecraft-client-1.20.1.jar ...
-[2026-04-08 17:02:37][FINE] Baking datapack...
-[2026-04-08 17:02:37][FINE] Datapack loaded.
-[2026-04-08 17:02:37][INFO] Loading map 'new_world_the_end'...
-[2026-04-08 17:02:37][FINE] Loading render-state for map 'new_world_the_end'
-[2026-04-08 17:02:37][FINE] Loading textures for map 'new_world_the_end'
-[2026-04-08 17:02:37][INFO] WebServer bound to all network interfaces on port 8100
-[2026-04-08 17:02:37][INFO] WebServer started.
-[2026-04-08 17:02:37][FINE] Started watching map 'new_world_the_nether' for updates...
-[2026-04-08 17:02:37][FINE] Started watching map 'new_world' for updates...
-[2026-04-08 17:02:37][FINE] Started watching map 'new_world_the_end' for updates...
-[2026-04-08 17:02:37][INFO] BlueMap loaded!
-[2026-04-08 17:02:51][FINE] Scheduled update for region-file: (-1, -1) (Map: new_world)
-[2026-04-08 17:03:02][FINE] Scheduled update for region-file: (0, 0) (Map: new_world)
-[2026-04-08 17:03:03][FINE] Scheduled update for region-file: (-1, 0) (Map: new_world)
-[2026-04-08 17:03:04][FINE] Scheduled update for region-file: (-1, 1) (Map: new_world)
-[2026-04-08 17:03:04][FINE] Scheduled update for region-file: (0, 1) (Map: new_world)
-[2026-04-08 17:03:04][FINE] Scheduled update for region-file: (-2, 0) (Map: new_world)
-[2026-04-08 17:03:04][FINE] Scheduled update for region-file: (0, 2) (Map: new_world)
-[2026-04-08 17:03:04][FINE] Scheduled update for region-file: (1, 0) (Map: new_world)
-[2026-04-08 17:03:04][FINE] Scheduled update for region-file: (0, -1) (Map: new_world)
-[2026-04-08 17:03:04][FINE] Scheduled update for region-file: (1, 1) (Map: new_world)
-[2026-04-08 17:03:04][FINE] Scheduled update for region-file: (-2, 1) (Map: new_world)
-[2026-04-08 17:03:04][FINE] Scheduled update for region-file: (-1, 2) (Map: new_world)
-[2026-04-08 17:03:04][FINE] Scheduled update for region-file: (-1, -1) (Map: new_world)
-[2026-04-08 17:03:04][FINE] Scheduled update for region-file: (1, -1) (Map: new_world)
-[2026-04-08 17:03:04][FINE] Scheduled update for region-file: (-2, 2) (Map: new_world)
-[2026-04-08 17:03:04][FINE] Scheduled update for region-file: (-2, -1) (Map: new_world)
-[2026-04-08 17:03:04][FINE] Scheduled update for region-file: (1, 2) (Map: new_world)
-[2026-04-08 17:03:07][FINE] Scheduled update for region-file: (0, 0) (Map: new_world)
-[2026-04-08 17:03:10][FINE] Scheduled update for region-file: (-1, 0) (Map: new_world)
-[2026-04-08 17:03:18][FINE] Scheduled update for region-file: (0, 0) (Map: new_world)
-[2026-04-08 17:03:21][FINE] Scheduled update for region-file: (-1, -1) (Map: new_world)
-[2026-04-08 17:03:28][FINE] Scheduled update for region-file: (0, 0) (Map: new_world)
-[2026-04-08 17:03:33][FINE] Scheduled update for region-file: (-1, -1) (Map: new_world)
-[2026-04-08 17:03:38][FINE] Scheduled update for region-file: (0, 0) (Map: new_world)
-[2026-04-08 17:03:46][FINE] Scheduled update for region-file: (-1, -1) (Map: new_world)
-[2026-04-08 17:03:48][FINE] Scheduled update for region-file: (0, 0) (Map: new_world)
-[2026-04-08 17:03:57][FINE] Scheduled update for region-file: (-2, -1) (Map: new_world)
-[2026-04-08 17:03:57][FINE] Scheduled update for region-file: (0, -1) (Map: new_world)
-[2026-04-08 17:03:57][FINE] Scheduled update for region-file: (1, -1) (Map: new_world)
-[2026-04-08 17:03:58][FINE] Scheduled update for region-file: (0, 0) (Map: new_world)
-[2026-04-08 17:04:01][FINE] Scheduled update for region-file: (-1, -1) (Map: new_world)
-[2026-04-08 17:04:08][FINE] Scheduled update for region-file: (0, 0) (Map: new_world)
-[2026-04-08 17:04:11][FINE] Scheduled update for region-file: (1, 2) (Map: new_world)
-[2026-04-08 17:04:11][FINE] Scheduled update for region-file: (0, 2) (Map: new_world)
-[2026-04-08 17:04:11][FINE] Scheduled update for region-file: (-1, 2) (Map: new_world)
-[2026-04-08 17:04:11][FINE] Scheduled update for region-file: (-2, 2) (Map: new_world)
-[2026-04-08 17:04:18][FINE] Scheduled update for region-file: (-1, 0) (Map: new_world)
-[2026-04-08 17:04:19][FINE] Scheduled update for region-file: (0, 0) (Map: new_world)
-[2026-04-08 17:04:21][FINE] Scheduled update for region-file: (-1, 2) (Map: new_world)
-[2026-04-08 17:04:21][FINE] Scheduled update for region-file: (0, 2) (Map: new_world)
-[2026-04-08 17:04:24][FINE] Scheduled update for region-file: (-2, 2) (Map: new_world)
-[2026-04-08 17:04:28][FINE] Scheduled update for region-file: (1, 0) (Map: new_world)
-[2026-04-08 17:04:28][FINE] Scheduled update for region-file: (-2, 1) (Map: new_world)
-[2026-04-08 17:04:29][FINE] Scheduled update for region-file: (1, 1) (Map: new_world)
-[2026-04-08 17:04:29][FINE] Scheduled update for region-file: (-2, -1) (Map: new_world)
-[2026-04-08 17:04:29][FINE] Scheduled update for region-file: (1, -1) (Map: new_world)
-[2026-04-08 17:04:29][FINE] Scheduled update for region-file: (0, -1) (Map: new_world)
-[2026-04-08 17:04:32][FINE] Scheduled update for region-file: (0, 0) (Map: new_world)
-[2026-04-08 17:04:33][FINE] Scheduled update for region-file: (-1, -1) (Map: new_world)
-[2026-04-08 17:04:38][FINE] Scheduled update for region-file: (0, 0) (Map: new_world)
-[2026-04-08 17:04:42][FINE] Scheduled update for region-file: (-1, -1) (Map: new_world)
-[2026-04-08 17:04:45][FINE] Scheduled update for region-file: (1, 0) (Map: new_world)
-[2026-04-08 17:04:45][FINE] Scheduled update for region-file: (1, 1) (Map: new_world)
-[2026-04-08 17:04:46][FINE] Scheduled update for region-file: (-2, 0) (Map: new_world)
-[2026-04-08 17:04:47][FINE] Scheduled update for region-file: (0, -2) (Map: new_world)
-[2026-04-08 17:04:48][FINE] Scheduled update for region-file: (-1, -2) (Map: new_world)
-[2026-04-08 17:04:49][FINE] Scheduled update for region-file: (1, -2) (Map: new_world)
-[2026-04-08 17:04:49][FINE] Scheduled update for region-file: (-2, -2) (Map: new_world)
-[2026-04-08 17:04:49][FINE] Scheduled update for region-file: (0, 0) (Map: new_world)
-[2026-04-08 17:04:52][FINE] Scheduled update for region-file: (-2, 0) (Map: new_world)
-[2026-04-08 17:04:52][FINE] Scheduled update for region-file: (-2, -1) (Map: new_world)
-[2026-04-08 17:04:52][FINE] Scheduled update for region-file: (1, -1) (Map: new_world)
-[2026-04-08 17:04:52][FINE] Scheduled update for region-file: (-1, -1) (Map: new_world)
-[2026-04-08 17:04:54][FINE] Scheduled update for region-file: (0, 1) (Map: new_world)
-[2026-04-08 17:04:55][FINE] Scheduled update for region-file: (-1, 1) (Map: new_world)
-[2026-04-08 17:04:56][FINE] Scheduled update for region-file: (-2, 1) (Map: new_world)
-[2026-04-08 17:04:56][FINE] Scheduled update for region-file: (1, 0) (Map: new_world)
-[2026-04-08 17:04:56][FINE] Scheduled update for region-file: (1, 1) (Map: new_world)
-[2026-04-08 17:04:56][FINE] Scheduled update for region-file: (0, 2) (Map: new_world)
-[2026-04-08 17:04:56][FINE] Scheduled update for region-file: (1, 2) (Map: new_world)
-[2026-04-08 17:04:56][FINE] Scheduled update for region-file: (-2, 2) (Map: new_world)
-[2026-04-08 17:04:56][FINE] Scheduled update for region-file: (-1, 2) (Map: new_world)
-[2026-04-08 17:04:59][FINE] Scheduled update for region-file: (-1, -1) (Map: new_world)
-[2026-04-08 17:04:59][FINE] Scheduled update for region-file: (0, 0) (Map: new_world)
-[2026-04-08 17:05:04][FINE] Scheduled update for region-file: (-2, 1) (Map: new_world)
-[2026-04-08 17:05:04][FINE] Scheduled update for region-file: (-2, 2) (Map: new_world)
-[2026-04-08 17:05:05][FINE] Scheduled update for region-file: (0, 0) (Map: new_world)
-[2026-04-08 17:05:05][FINE] Scheduled update for region-file: (-1, 0) (Map: new_world)
-[2026-04-08 17:05:05][FINE] Scheduled update for region-file: (0, 2) (Map: new_world)
-[2026-04-08 17:05:12][FINE] Scheduled update for region-file: (0, 0) (Map: new_world)
-[2026-04-08 17:05:14][FINE] Scheduled update for region-file: (-1, -1) (Map: new_world)
-[2026-04-08 17:05:22][FINE] Scheduled update for region-file: (0, 0) (Map: new_world)
-[2026-04-08 17:05:26][FINE] Scheduled update for region-file: (-1, -1) (Map: new_world)
-[2026-04-08 17:05:31][FINE] Scheduled update for region-file: (0, 0) (Map: new_world)
-[2026-04-08 17:05:39][FINE] Scheduled update for region-file: (-1, -1) (Map: new_world)
-[2026-04-08 17:05:41][FINE] Scheduled update for region-file: (0, 0) (Map: new_world)
-[2026-04-08 17:05:49][FINE] Scheduled update for region-file: (-1, -1) (Map: new_world)
-[2026-04-08 17:05:51][FINE] Scheduled update for region-file: (0, 0) (Map: new_world)
-[2026-04-08 17:05:54][FINE] Scheduled update for region-file: (-1, -1) (Map: new_world)
-[2026-04-08 17:06:01][FINE] Scheduled update for region-file: (0, 0) (Map: new_world)
-[2026-04-08 17:06:11][FINE] Scheduled update for region-file: (0, 0) (Map: new_world)
-[2026-04-08 17:06:11][FINE] Scheduled update for region-file: (-1, -1) (Map: new_world)
-[2026-04-08 17:06:21][FINE] Scheduled update for region-file: (0, 0) (Map: new_world)
-[2026-04-08 17:06:23][FINE] Scheduled update for region-file: (-1, -1) (Map: new_world)
-[2026-04-08 17:06:31][FINE] Scheduled update for region-file: (0, 0) (Map: new_world)
-[2026-04-08 17:06:36][FINE] Scheduled update for region-file: (-1, -1) (Map: new_world)
-[2026-04-08 17:06:41][FINE] Scheduled update for region-file: (0, 0) (Map: new_world)
-[2026-04-08 17:06:46][FINE] Scheduled update for region-file: (-1, -1) (Map: new_world)
-[2026-04-08 17:06:51][FINE] Scheduled update for region-file: (-1, -1) (Map: new_world)
-[2026-04-08 17:07:01][FINE] Scheduled update for region-file: (0, 0) (Map: new_world)
-[2026-04-08 17:07:08][FINE] Scheduled update for region-file: (-1, -1) (Map: new_world)
-[2026-04-08 17:07:11][FINE] Scheduled update for region-file: (0, 0) (Map: new_world)
-[2026-04-08 17:07:20][FINE] Scheduled update for region-file: (-1, -1) (Map: new_world)
-[2026-04-08 17:07:21][FINE] Scheduled update for region-file: (0, 0) (Map: new_world)
-[2026-04-08 17:07:31][FINE] Scheduled update for region-file: (0, 0) (Map: new_world)
-[2026-04-08 17:07:33][FINE] Scheduled update for region-file: (-1, -1) (Map: new_world)
-[2026-04-08 17:07:41][FINE] Scheduled update for region-file: (0, 0) (Map: new_world)
-[2026-04-08 17:07:43][FINE] Scheduled update for region-file: (-1, -1) (Map: new_world)
-[2026-04-08 17:07:47][FINE] Scheduled update for region-file: (1, -1) (Map: new_world)
-[2026-04-08 17:07:47][FINE] Scheduled update for region-file: (-2, -1) (Map: new_world)
-[2026-04-08 17:07:47][FINE] Scheduled update for region-file: (-2, 2) (Map: new_world)
-[2026-04-08 17:07:47][FINE] Scheduled update for region-file: (-1, 2) (Map: new_world)
-[2026-04-08 17:07:47][FINE] Scheduled update for region-file: (0, 2) (Map: new_world)
-[2026-04-08 17:07:47][FINE] Scheduled update for region-file: (1, 2) (Map: new_world)
-[2026-04-08 17:07:48][FINE] Scheduled update for region-file: (-1, -1) (Map: new_world)
-[2026-04-08 17:07:51][FINE] Scheduled update for region-file: (0, 0) (Map: new_world)
-[2026-04-08 17:07:55][FINE] Scheduled update for region-file: (1, 2) (Map: new_world)
-[2026-04-08 17:08:02][FINE] Scheduled update for region-file: (0, 0) (Map: new_world)
-[2026-04-08 17:08:05][FINE] Scheduled update for region-file: (-1, -1) (Map: new_world)
-[2026-04-08 17:08:16][FINE] Scheduled update for region-file: (0, 0) (Map: new_world)
-[2026-04-08 17:08:17][FINE] Scheduled update for region-file: (-1, -1) (Map: new_world)
-[2026-04-08 17:08:26][FINE] Scheduled update for region-file: (0, 0) (Map: new_world)
-[2026-04-08 17:08:30][FINE] Scheduled update for region-file: (-1, -1) (Map: new_world)
-[2026-04-08 17:08:36][FINE] Scheduled update for region-file: (0, 0) (Map: new_world)
-[2026-04-08 17:08:40][FINE] Scheduled update for region-file: (-1, -1) (Map: new_world)
-[2026-04-08 17:08:45][FINE] Scheduled update for region-file: (-1, -1) (Map: new_world)
-[2026-04-08 17:08:48][FINE] Scheduled update for region-file: (0, 0) (Map: new_world)
-[2026-04-08 17:08:58][FINE] Scheduled update for region-file: (0, 0) (Map: new_world)
-[2026-04-08 17:09:02][FINE] Scheduled update for region-file: (-1, -1) (Map: new_world)
-[2026-04-08 17:09:08][FINE] Scheduled update for region-file: (0, 0) (Map: new_world)
-[2026-04-08 17:09:14][FINE] Scheduled update for region-file: (-1, -1) (Map: new_world)
-[2026-04-08 17:09:16][FINE] Scheduled update for region-file: (0, 0) (Map: new_world)
-[2026-04-08 17:09:27][FINE] Scheduled update for region-file: (-1, -1) (Map: new_world)
-[2026-04-08 17:09:28][FINE] Scheduled update for region-file: (0, 0) (Map: new_world)
-[2026-04-08 17:09:37][FINE] Scheduled update for region-file: (-1, -1) (Map: new_world)
-[2026-04-08 17:09:38][FINE] Scheduled update for region-file: (0, 0) (Map: new_world)
-[2026-04-08 17:09:42][FINE] Scheduled update for region-file: (-1, -1) (Map: new_world)
-[2026-04-08 17:09:48][FINE] Scheduled update for region-file: (0, 0) (Map: new_world)
-[2026-04-08 17:09:58][FINE] Scheduled update for region-file: (0, 0) (Map: new_world)
-[2026-04-08 17:09:59][FINE] Scheduled update for region-file: (-1, -1) (Map: new_world)
-[2026-04-08 17:10:08][FINE] Scheduled update for region-file: (0, 0) (Map: new_world)
-[2026-04-08 17:10:11][FINE] Scheduled update for region-file: (-1, -1) (Map: new_world)
-[2026-04-08 17:10:18][FINE] Scheduled update for region-file: (0, 0) (Map: new_world)
-[2026-04-08 17:10:24][FINE] Scheduled update for region-file: (-1, -1) (Map: new_world)
-[2026-04-08 17:10:34][FINE] Scheduled update for region-file: (-1, -1) (Map: new_world)
-[2026-04-08 17:10:38][FINE] Scheduled update for region-file: (0, 0) (Map: new_world)
-[2026-04-08 17:10:39][FINE] Scheduled update for region-file: (-1, -1) (Map: new_world)
-[2026-04-08 17:10:48][FINE] Scheduled update for region-file: (0, 0) (Map: new_world)
-[2026-04-08 17:10:56][FINE] Scheduled update for region-file: (-1, -1) (Map: new_world)
-[2026-04-08 17:10:58][FINE] Scheduled update for region-file: (0, 0) (Map: new_world)
-[2026-04-08 17:11:08][FINE] Scheduled update for region-file: (-1, -1) (Map: new_world)
-[2026-04-08 17:11:08][FINE] Scheduled update for region-file: (0, 0) (Map: new_world)
-[2026-04-08 17:11:16][FINE] Scheduled update for region-file: (0, 0) (Map: new_world)
-[2026-04-08 17:11:21][FINE] Scheduled update for region-file: (-1, -1) (Map: new_world)
-[2026-04-08 17:11:26][FINE] Scheduled update for region-file: (0, 0) (Map: new_world)
-[2026-04-08 17:11:31][FINE] Scheduled update for region-file: (-1, -1) (Map: new_world)
-[2026-04-08 17:11:36][FINE] Scheduled update for region-file: (-1, -1) (Map: new_world)
-[2026-04-08 17:11:45][FINE] Scheduled update for region-file: (0, 0) (Map: new_world)
-[2026-04-08 17:11:53][FINE] Scheduled update for region-file: (-1, -1) (Map: new_world)
-[2026-04-08 17:11:58][FINE] Scheduled update for region-file: (0, 0) (Map: new_world)
-[2026-04-08 17:12:05][FINE] Scheduled update for region-file: (-1, -1) (Map: new_world)
-[2026-04-08 17:12:08][FINE] Scheduled update for region-file: (0, 0) (Map: new_world)
-[2026-04-08 17:12:18][FINE] Scheduled update for region-file: (-1, -1) (Map: new_world)
-[2026-04-08 17:12:18][FINE] Scheduled update for region-file: (0, 0) (Map: new_world)
-[2026-04-08 17:12:24][FINE] Scheduled update for region-file: (0, 0) (Map: new_world)
-[2026-04-08 17:12:28][FINE] Scheduled update for region-file: (-1, -1) (Map: new_world)
-[2026-04-08 17:12:33][FINE] Scheduled update for region-file: (-1, -1) (Map: new_world)
-[2026-04-08 17:12:34][FINE] Scheduled update for region-file: (0, 0) (Map: new_world)
-[2026-04-08 17:12:45][FINE] Scheduled update for region-file: (0, 0) (Map: new_world)
-[2026-04-08 17:12:50][FINE] Scheduled update for region-file: (-1, -1) (Map: new_world)
-[2026-04-08 17:12:55][FINE] Scheduled update for region-file: (0, 0) (Map: new_world)
+[2026-04-08 18:16:11][INFO] Loading resources...
+[2026-04-08 18:16:11][FINE] Loading resources from: mods/BlueMap-5.3-fabric-1.20.jar ...
+[2026-04-08 18:16:11][FINE] Loading resources from: mods/modmenu-7.2.2.jar ...
+[2026-04-08 18:16:11][FINE] Loading resources from: mods/cloth-config-11.1.136-fabric.jar ...
+[2026-04-08 18:16:11][FINE] Loading resources from: bluemap/resourceExtensions.zip ...
+[2026-04-08 18:16:11][FINE] Loading resources from: bluemap/minecraft-client-1.20.1.jar ...
+[2026-04-08 18:16:12][INFO] Loading textures...
+[2026-04-08 18:16:12][FINE] Loading textures from: mods/BlueMap-5.3-fabric-1.20.jar ...
+[2026-04-08 18:16:12][FINE] Loading textures from: mods/modmenu-7.2.2.jar ...
+[2026-04-08 18:16:12][FINE] Loading textures from: mods/cloth-config-11.1.136-fabric.jar ...
+[2026-04-08 18:16:12][FINE] Loading textures from: bluemap/resourceExtensions.zip ...
+[2026-04-08 18:16:12][FINE] Loading textures from: bluemap/minecraft-client-1.20.1.jar ...
+[2026-04-08 18:16:14][INFO] Baking resources...
+[2026-04-08 18:16:14][INFO] Resources loaded.
+[2026-04-08 18:16:14][FINE] Loading world saves/New World#minecraft:the_nether ...
+[2026-04-08 18:16:14][FINE] Loading datapack...
+[2026-04-08 18:16:14][FINE] Loading datapack from: mods/BlueMap-5.3-fabric-1.20.jar ...
+[2026-04-08 18:16:14][FINE] Loading datapack from: mods/modmenu-7.2.2.jar ...
+[2026-04-08 18:16:14][FINE] Loading datapack from: mods/cloth-config-11.1.136-fabric.jar ...
+[2026-04-08 18:16:14][FINE] Loading datapack from: bluemap/resourceExtensions.zip ...
+[2026-04-08 18:16:14][FINE] Loading datapack from: bluemap/minecraft-client-1.20.1.jar ...
+[2026-04-08 18:16:14][FINE] Baking datapack...
+[2026-04-08 18:16:14][FINE] Datapack loaded.
+[2026-04-08 18:16:14][INFO] Initializing Storage: 'file' (Type: 'bluemap:file')
+[2026-04-08 18:16:14][INFO] Loading map 'new_world_the_nether'...
+[2026-04-08 18:16:14][FINE] Loading render-state for map 'new_world_the_nether'
+[2026-04-08 18:16:14][FINE] Loading textures for map 'new_world_the_nether'
+[2026-04-08 18:16:15][FINE] Loading world saves/New World#minecraft:overworld ...
+[2026-04-08 18:16:15][FINE] Loading datapack...
+[2026-04-08 18:16:15][FINE] Loading datapack from: mods/BlueMap-5.3-fabric-1.20.jar ...
+[2026-04-08 18:16:15][FINE] Loading datapack from: mods/modmenu-7.2.2.jar ...
+[2026-04-08 18:16:15][FINE] Loading datapack from: mods/cloth-config-11.1.136-fabric.jar ...
+[2026-04-08 18:16:15][FINE] Loading datapack from: bluemap/resourceExtensions.zip ...
+[2026-04-08 18:16:15][FINE] Loading datapack from: bluemap/minecraft-client-1.20.1.jar ...
+[2026-04-08 18:16:15][FINE] Baking datapack...
+[2026-04-08 18:16:15][FINE] Datapack loaded.
+[2026-04-08 18:16:15][INFO] Loading map 'new_world'...
+[2026-04-08 18:16:15][FINE] Loading render-state for map 'new_world'
+[2026-04-08 18:16:15][FINE] Loading textures for map 'new_world'
+[2026-04-08 18:16:15][FINE] Loading world saves/New World#minecraft:the_end ...
+[2026-04-08 18:16:15][FINE] Loading datapack...
+[2026-04-08 18:16:15][FINE] Loading datapack from: mods/BlueMap-5.3-fabric-1.20.jar ...
+[2026-04-08 18:16:15][FINE] Loading datapack from: mods/modmenu-7.2.2.jar ...
+[2026-04-08 18:16:15][FINE] Loading datapack from: mods/cloth-config-11.1.136-fabric.jar ...
+[2026-04-08 18:16:15][FINE] Loading datapack from: bluemap/resourceExtensions.zip ...
+[2026-04-08 18:16:15][FINE] Loading datapack from: bluemap/minecraft-client-1.20.1.jar ...
+[2026-04-08 18:16:15][FINE] Baking datapack...
+[2026-04-08 18:16:15][FINE] Datapack loaded.
+[2026-04-08 18:16:15][INFO] Loading map 'new_world_the_end'...
+[2026-04-08 18:16:15][FINE] Loading render-state for map 'new_world_the_end'
+[2026-04-08 18:16:15][FINE] Loading textures for map 'new_world_the_end'
+[2026-04-08 18:16:15][INFO] WebServer bound to all network interfaces on port 8100
+[2026-04-08 18:16:15][INFO] WebServer started.
+[2026-04-08 18:16:15][FINE] Started watching map 'new_world_the_nether' for updates...
+[2026-04-08 18:16:15][FINE] Started watching map 'new_world' for updates...
+[2026-04-08 18:16:15][FINE] Started watching map 'new_world_the_end' for updates...
+[2026-04-08 18:16:15][INFO] BlueMap loaded!
+[2026-04-08 18:16:23][FINE] Scheduled update for region-file: (-1, -1) (Map: new_world)
+[2026-04-08 18:16:23][FINE] Scheduled update for region-file: (0, -1) (Map: new_world)
+[2026-04-08 18:16:23][FINE] Scheduled update for region-file: (-1, 1) (Map: new_world)
+[2026-04-08 18:16:23][FINE] Scheduled update for region-file: (0, 1) (Map: new_world)
+[2026-04-08 18:16:24][FINE] Scheduled update for region-file: (0, 0) (Map: new_world)
+[2026-04-08 18:16:24][FINE] Scheduled update for region-file: (-1, 0) (Map: new_world)
+[2026-04-08 18:16:55][FINE] Scheduled update for region-file: (-1, -1) (Map: new_world)
+[2026-04-08 18:17:03][FINE] Scheduled update for region-file: (0, 1) (Map: new_world)
+[2026-04-08 18:17:05][FINE] Scheduled update for region-file: (-1, -1) (Map: new_world)
+[2026-04-08 18:17:05][FINE] Scheduled update for region-file: (-1, 1) (Map: new_world)
+[2026-04-08 18:17:06][FINE] Scheduled update for region-file: (1, 1) (Map: new_world)
+[2026-04-08 18:17:06][FINE] Scheduled update for region-file: (-1, 0) (Map: new_world)
+[2026-04-08 18:17:06][FINE] Scheduled update for region-file: (0, 0) (Map: new_world)
+[2026-04-08 18:17:06][FINE] Scheduled update for region-file: (1, 0) (Map: new_world)
+[2026-04-08 18:17:06][FINE] Scheduled update for region-file: (-2, 1) (Map: new_world)
+[2026-04-08 18:17:06][FINE] Scheduled update for region-file: (-2, 0) (Map: new_world)
+[2026-04-08 18:17:07][FINE] Scheduled update for region-file: (0, 2) (Map: new_world)
+[2026-04-08 18:17:07][FINE] Scheduled update for region-file: (-1, 2) (Map: new_world)
+[2026-04-08 18:17:07][FINE] Scheduled update for region-file: (1, 2) (Map: new_world)
+[2026-04-08 18:17:07][FINE] Scheduled update for region-file: (-2, 2) (Map: new_world)
+[2026-04-08 18:17:19][FINE] Scheduled update for region-file: (0, 2) (Map: new_world)
+[2026-04-08 18:17:19][FINE] Scheduled update for region-file: (-2, -1) (Map: new_world)
+[2026-04-08 18:17:19][FINE] Scheduled update for region-file: (1, -1) (Map: new_world)
+[2026-04-08 18:17:19][FINE] Scheduled update for region-file: (1, 2) (Map: new_world)
+[2026-04-08 18:17:19][FINE] Scheduled update for region-file: (1, 1) (Map: new_world)
+[2026-04-08 18:17:19][FINE] Scheduled update for region-file: (-1, 2) (Map: new_world)
+[2026-04-08 18:17:19][FINE] Scheduled update for region-file: (1, 0) (Map: new_world)
+[2026-04-08 18:17:19][FINE] Scheduled update for region-file: (-2, 2) (Map: new_world)
+[2026-04-08 18:17:19][FINE] Scheduled update for region-file: (-2, 1) (Map: new_world)
+[2026-04-08 18:17:19][FINE] Scheduled update for region-file: (-2, 0) (Map: new_world)
+[2026-04-08 18:17:20][FINE] Scheduled update for region-file: (0, 0) (Map: new_world)
+[2026-04-08 18:17:25][FINE] Scheduled update for region-file: (-1, -1) (Map: new_world)
+[2026-04-08 18:17:28][FINE] Scheduled update for region-file: (-2, 2) (Map: new_world)
+[2026-04-08 18:17:28][FINE] Scheduled update for region-file: (-2, 0) (Map: new_world)
+[2026-04-08 18:17:28][FINE] Scheduled update for region-file: (-2, 1) (Map: new_world)
+[2026-04-08 18:17:29][FINE] Scheduled update for region-file: (-1, 0) (Map: new_world)
+[2026-04-08 18:17:30][FINE] Scheduled update for region-file: (0, 0) (Map: new_world)
+[2026-04-08 18:17:37][FINE] Scheduled update for region-file: (-1, -1) (Map: new_world)
+[2026-04-08 18:17:40][FINE] Scheduled update for region-file: (0, 0) (Map: new_world)
+[2026-04-08 18:17:45][FINE] Scheduled update for region-file: (-1, -1) (Map: new_world)
+[2026-04-08 18:17:46][FINE] Scheduled update for region-file: (-1, 0) (Map: new_world)
+[2026-04-08 18:17:47][FINE] Scheduled update for region-file: (0, 0) (Map: new_world)
+[2026-04-08 18:17:58][FINE] Scheduled update for region-file: (0, 0) (Map: new_world)
+[2026-04-08 18:18:09][FINE] Scheduled update for region-file: (0, 0) (Map: new_world)
+[2026-04-08 18:18:32][FINE] Scheduled update for region-file: (-1, -1) (Map: new_world)
+[2026-04-08 18:18:32][FINE] Scheduled update for region-file: (0, 0) (Map: new_world)
+[2026-04-08 18:18:42][FINE] Scheduled update for region-file: (-1, -1) (Map: new_world)
+[2026-04-08 18:18:42][FINE] Scheduled update for region-file: (0, 0) (Map: new_world)
+[2026-04-08 18:18:52][FINE] Scheduled update for region-file: (-1, -1) (Map: new_world)
+[2026-04-08 18:18:53][FINE] Scheduled update for region-file: (0, 0) (Map: new_world)
+[2026-04-08 18:19:02][FINE] Scheduled update for region-file: (-1, -1) (Map: new_world)
+[2026-04-08 18:19:03][FINE] Scheduled update for region-file: (0, 0) (Map: new_world)
+[2026-04-08 18:19:13][FINE] Scheduled update for region-file: (0, 0) (Map: new_world)
+[2026-04-08 18:19:18][FINE] Scheduled update for region-file: (-1, -1) (Map: new_world)
+[2026-04-08 18:19:23][FINE] Scheduled update for region-file: (0, 0) (Map: new_world)
+[2026-04-08 18:19:29][FINE] Scheduled update for region-file: (-1, -1) (Map: new_world)
+[2026-04-08 18:19:33][FINE] Scheduled update for region-file: (0, 0) (Map: new_world)
+[2026-04-08 18:19:43][FINE] Scheduled update for region-file: (-1, -1) (Map: new_world)
+[2026-04-08 18:19:43][FINE] Scheduled update for region-file: (0, 0) (Map: new_world)
+[2026-04-08 18:19:53][FINE] Scheduled update for region-file: (-1, -1) (Map: new_world)
+[2026-04-08 18:19:53][FINE] Scheduled update for region-file: (0, 0) (Map: new_world)
+[2026-04-08 18:19:58][FINE] Scheduled update for region-file: (-1, -1) (Map: new_world)
+[2026-04-08 18:20:03][FINE] Scheduled update for region-file: (0, 0) (Map: new_world)
+[2026-04-08 18:20:13][FINE] Scheduled update for region-file: (0, 0) (Map: new_world)
+[2026-04-08 18:20:15][FINE] Scheduled update for region-file: (-1, -1) (Map: new_world)
+[2026-04-08 18:20:23][FINE] Scheduled update for region-file: (0, 0) (Map: new_world)
+[2026-04-08 18:20:26][FINE] Scheduled update for region-file: (-1, -1) (Map: new_world)
+[2026-04-08 18:20:33][FINE] Scheduled update for region-file: (0, 0) (Map: new_world)
+[2026-04-08 18:20:40][FINE] Scheduled update for region-file: (-1, -1) (Map: new_world)
+[2026-04-08 18:20:43][FINE] Scheduled update for region-file: (0, 0) (Map: new_world)
+[2026-04-08 18:20:50][FINE] Scheduled update for region-file: (-1, -1) (Map: new_world)
+[2026-04-08 18:20:55][FINE] Scheduled update for region-file: (-1, -1) (Map: new_world)
+[2026-04-08 18:20:55][FINE] Scheduled update for region-file: (0, 0) (Map: new_world)
+[2026-04-08 18:21:05][FINE] Scheduled update for region-file: (0, 0) (Map: new_world)
+[2026-04-08 18:21:12][FINE] Scheduled update for region-file: (-1, -1) (Map: new_world)
+[2026-04-08 18:21:15][FINE] Scheduled update for region-file: (0, 0) (Map: new_world)
+[2026-04-08 18:21:23][FINE] Scheduled update for region-file: (-1, -1) (Map: new_world)
+[2026-04-08 18:21:26][FINE] Scheduled update for region-file: (0, 0) (Map: new_world)
+[2026-04-08 18:21:33][FINE] Scheduled update for region-file: (0, 0) (Map: new_world)
+[2026-04-08 18:21:37][FINE] Scheduled update for region-file: (-1, -1) (Map: new_world)
+[2026-04-08 18:21:46][FINE] Scheduled update for region-file: (0, 0) (Map: new_world)
+[2026-04-08 18:21:47][FINE] Scheduled update for region-file: (-1, -1) (Map: new_world)

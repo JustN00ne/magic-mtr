@@ -263,20 +263,6 @@ public abstract class SidingDynamicPlatformRerouteMixin {
             return null;
         }
 
-        // Ensure siding-to-platform path properly ends at the chosen platform
-        final long chosenPlatformId = selectedFirstStop.getId();
-        boolean endsAtChosenPlatform = false;
-        for (final PathData pd : dynamicSidingToMainRoute) {
-            if (pd != null && pd.getSavedRailBaseId() == chosenPlatformId && pd.getDwellTime() > 0) {
-                endsAtChosenPlatform = true;
-                break;
-            }
-        }
-        if (!endsAtChosenPlatform) {
-            // Path doesn't properly reach the chosen platform
-            return null;
-        }
-
         final PathData lastPathToMainRoute = dynamicSidingToMainRoute.get(dynamicSidingToMainRoute.size() - 1);
         final PathData firstMainRoutePath = dynamicMainRoute.get(0);
         if (jme$isInvalidOppositeTransition(lastPathToMainRoute, firstMainRoutePath)) {
@@ -508,6 +494,10 @@ public abstract class SidingDynamicPlatformRerouteMixin {
         // if multiple candidates tie (score == primaryScore), the tie-breaker can make an alternative
         // the top choice for this departure.
         if (!primaryBlocked && !orderedByPreference.isEmpty() && orderedByPreference.get(0) == primaryPlatformId) {
+            // Register the primary platform as being used, so instant-deployed trains don't overlap
+            synchronized (CONCURRENCY_LOCK) {
+                DEPLOYING_RESERVATIONS.put(primaryPlatformId, System.currentTimeMillis());
+            }
             return null;
         }
 
