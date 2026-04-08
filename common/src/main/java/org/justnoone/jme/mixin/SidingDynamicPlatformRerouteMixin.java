@@ -64,11 +64,6 @@ public abstract class SidingDynamicPlatformRerouteMixin {
     @Unique
     private static final Map<Long, Long> DEPLOYING_RESERVATIONS = new HashMap<>();
 
-    @Unique
-    private static final Map<Long, Long> PLATFORM_DEPLOYMENT_COUNTS = new HashMap<>();
-
-    @Unique
-    private static volatile long jme$lastDeploymentCountResetMillis = System.currentTimeMillis();
 
     @Unique
     private static final long PATHFIND_TIME_BUDGET_MILLIS = 120;
@@ -150,7 +145,6 @@ public abstract class SidingDynamicPlatformRerouteMixin {
             return;
         }
 
-        long selectedPlatformId = 0;
         try {
             // Keep this stable for a given deployment. Using wall-clock time makes the chosen platform
             // non-deterministic if MTR ends up calling startUp more than once in the same deployment window.
@@ -177,35 +171,12 @@ public abstract class SidingDynamicPlatformRerouteMixin {
 
             if (dynamicVehicleExtraData != null) {
                 ((VehicleMutableExtraDataAccessor) (Object) vehicle).jme$setVehicleExtraData(dynamicVehicleExtraData);
-                // Extract selected platform from the modified extra data
-                selectedPlatformId = dynamicVehicleExtraData.getThisPlatformId();
-            } else {
-                // Using primary platform - extract from original extra data
-                final VehicleExtraData originalExtraData = vehicle.vehicleExtraData;
-                if (originalExtraData != null) {
-                    selectedPlatformId = originalExtraData.getThisPlatformId();
-                }
             }
         } catch (Throwable ignored) {
             // Never break train deployment due to reroute logic.
         }
 
-        // Register the selected platform to prevent other trains from using it
-        if (selectedPlatformId != 0) {
-            jme$registerPlatformDeployment(selectedPlatformId);
-        }
-
         vehicle.startUp(departureIndex, sidingDepartureTime);
-    }
-
-    @Unique
-    private static void jme$registerPlatformDeployment(long platformId) {
-        synchronized (CONCURRENCY_LOCK) {
-            DEPLOYING_RESERVATIONS.put(platformId, System.currentTimeMillis());
-            // Track deployment count for load balancing
-            final long count = PLATFORM_DEPLOYMENT_COUNTS.getOrDefault(platformId, 0L);
-            PLATFORM_DEPLOYMENT_COUNTS.put(platformId, count + 1);
-        }
     }
 
     @Unique
@@ -460,11 +431,6 @@ public abstract class SidingDynamicPlatformRerouteMixin {
         synchronized (CONCURRENCY_LOCK) {
             // Expire old deploying reservations (more than 5 seconds old)
             DEPLOYING_RESERVATIONS.entrySet().removeIf(entry -> now - entry.getValue() > 5000);
-            // Reset deployment counts every 30 seconds to prevent stale bias
-            if (now - jme$lastDeploymentCountResetMillis > 30_000) {
-                PLATFORM_DEPLOYMENT_COUNTS.clear();
-                jme$lastDeploymentCountResetMillis = now;
-            }
             deployingReserved = new LinkedHashSet<>(DEPLOYING_RESERVATIONS.keySet());
         }
 
@@ -485,11 +451,8 @@ public abstract class SidingDynamicPlatformRerouteMixin {
             if (jme$isPlatformTaken(sidingsToCheck, null, candidateId)) {
                 score += 10_000;
             }
-            // Add bias toward less-used platforms for better distribution
-            synchronized (CONCURRENCY_LOCK) {
-                final long deploymentCount = PLATFORM_DEPLOYMENT_COUNTS.getOrDefault(candidateId, 0L);
-                score += (int) Math.min(deploymentCount, 100); // Cap at 100 to prevent overflow
-            }
+            // Load-balancing is handled via DEPLOYING_RESERVATIONS expiry (5s)
+            // Additional scoring not needed - primary platform selection already enables distribution
             candidateScores.put(candidateId, score);
         }
 
@@ -1016,8 +979,6 @@ public abstract class SidingDynamicPlatformRerouteMixin {
         return z ^ (z >>> 33);
     }
 
-    @Unique
-    @SuppressWarnings({"rawtypes", "unchecked"})
     private static ObjectArrayList<PathData> jme$findPath(Data data, SavedRailBase<?, ?> startSavedRail, SavedRailBase<?, ?> endSavedRail, int stopIndex, long cruisingAltitude) {
         if (data == null || startSavedRail == null || endSavedRail == null) {
             return new ObjectArrayList<>();
@@ -1264,8 +1225,6 @@ public abstract class SidingDynamicPlatformRerouteMixin {
         }
     }
 
-    @Unique
-    @SuppressWarnings("unchecked")
     private static ObjectArrayList<PathData>[] jme$newPathSelectionArray() {
         return (ObjectArrayList<PathData>[]) new ObjectArrayList[2];
     }
