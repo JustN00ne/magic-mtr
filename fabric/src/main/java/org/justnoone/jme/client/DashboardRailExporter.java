@@ -5,6 +5,7 @@ import org.justnoone.jme.rail.MagicRailSpeedColor;
 import org.justnoone.jme.mixin.WidgetMapAccessor;
 import org.mtr.core.data.Position;
 import org.mtr.core.data.Rail;
+import org.mtr.mod.data.RailType;
 import org.mtr.mod.client.MinecraftClientData;
 import org.mtr.mod.screen.WidgetMap;
 
@@ -85,7 +86,7 @@ public final class DashboardRailExporter {
                 continue;
             }
 
-            final String stroke = toSvgColor(getRailSpeedArgb(rail));
+            final String stroke = toSvgColor(getRailOverlayArgb(rail));
             svg.append("<path d=\"").append(d).append("\" stroke=\"").append(stroke).append("\" stroke-opacity=\"0.95\" stroke-width=\"").append(roundSvgNumber(lineWidth)).append("\"/>");
         }
 
@@ -122,7 +123,7 @@ public final class DashboardRailExporter {
                 maxZ = Math.max(maxZ, point[1]);
             }
 
-            polylines.add(new RailPolyline(getRailSpeedArgb(rail), polyline));
+            polylines.add(new RailPolyline(getRailOverlayArgb(rail), polyline));
         }
 
         if (!Double.isFinite(minX) || !Double.isFinite(minZ) || !Double.isFinite(maxX) || !Double.isFinite(maxZ)) {
@@ -195,7 +196,7 @@ public final class DashboardRailExporter {
             return;
         }
 
-        g2d.setColor(new Color(getRailSpeedArgb(rail), true));
+        g2d.setColor(new Color(getRailOverlayArgb(rail), true));
         g2d.draw(path);
     }
 
@@ -305,6 +306,22 @@ public final class DashboardRailExporter {
         final long resolvedSpeed = Math.max(speedForward, speedReverse);
         final int clampedSpeed = (int) Math.max(1L, Math.min(400L, resolvedSpeed <= 0 ? 1 : resolvedSpeed));
         return MagicRailSpeedColor.colorForSpeed(clampedSpeed);
+    }
+
+    private static int getRailOverlayArgb(Rail rail) {
+        if (rail == null) {
+            return 0xFF3F8BFF;
+        }
+        if (rail.isPlatform()) {
+            return RailType.PLATFORM.color;
+        }
+        if (rail.isSiding()) {
+            return RailType.SIDING.color;
+        }
+        if (rail.canTurnBack()) {
+            return RailType.TURN_BACK.color;
+        }
+        return getRailSpeedArgb(rail);
     }
 
     private static String toSvgColor(int argb) {

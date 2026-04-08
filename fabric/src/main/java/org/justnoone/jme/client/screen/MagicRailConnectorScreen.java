@@ -98,6 +98,8 @@ public class MagicRailConnectorScreen extends ScreenExtension {
             }
         };
         speedSlider.setValueMapped(toSliderValue(speedKmh));
+        // SliderWidgetExtension doesn't always call updateMessage2() after programmatic value updates.
+        speedSlider.setMessage2(Text.cast(TextHelper.literal(JmeConfig.formatSpeedLabel(speedKmh))));
         addChild(new ClickableWidget(speedSlider));
 
         styleButton = new ButtonWidgetExtension(rightX, panelY + 62, rightWidth, 20, getStyleButtonLabel(), button -> openStyleScreen());
@@ -648,6 +650,8 @@ public class MagicRailConnectorScreen extends ScreenExtension {
             }
         };
         slider.setValueMapped(toTiltSliderValue(getter.get()));
+        // Ensure the label shows immediately without requiring a click/drag.
+        slider.setMessage2(Text.cast(TextHelper.literal(getter.get() + " degrees")));
         return slider;
     }
 

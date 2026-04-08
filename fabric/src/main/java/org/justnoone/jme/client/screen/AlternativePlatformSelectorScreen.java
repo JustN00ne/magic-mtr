@@ -21,7 +21,8 @@ public class AlternativePlatformSelectorScreen extends DashboardListSelectorScre
     private final long routeId;
     private final long primaryPlatformId;
     private final LongArrayList candidatePlatformIds;
-    private final LongOpenHashSet originalSelection;
+    private final LongOpenHashSet originalExplicitSelection;
+    private final boolean originalWildcardEnabled;
 
     private AlternativePlatformSelectorScreen(
             ScreenExtension parent,
@@ -29,13 +30,16 @@ public class AlternativePlatformSelectorScreen extends DashboardListSelectorScre
             long primaryPlatformId,
             ObjectImmutableList<DashboardListItem> allData,
             LongArrayList selectedIds,
-            LongArrayList candidatePlatformIds
+            LongArrayList candidatePlatformIds,
+            LongOpenHashSet originalExplicitSelection,
+            boolean originalWildcardEnabled
     ) {
         super(allData, selectedIds, false, false, parent);
         this.routeId = routeId;
         this.primaryPlatformId = primaryPlatformId;
         this.candidatePlatformIds = candidatePlatformIds;
-        this.originalSelection = new LongOpenHashSet(selectedIds);
+        this.originalExplicitSelection = originalExplicitSelection == null ? new LongOpenHashSet() : originalExplicitSelection;
+        this.originalWildcardEnabled = originalWildcardEnabled;
     }
 
     public static AlternativePlatformSelectorScreen create(ScreenExtension parent, Route route, Platform primaryPlatform) {
@@ -44,10 +48,17 @@ public class AlternativePlatformSelectorScreen extends DashboardListSelectorScre
         final LongArrayList candidateIds = new LongArrayList();
 
         if (!AlternativePlatformRegistry.isEnabled()) {
-            return new AlternativePlatformSelectorScreen(parent, route.getId(), primaryPlatform.getId(), new ObjectImmutableList<>(listItems), selectedIds, candidateIds);
+            return new AlternativePlatformSelectorScreen(parent, route.getId(), primaryPlatform.getId(), new ObjectImmutableList<>(listItems), selectedIds, candidateIds, new LongOpenHashSet(), false);
         }
 
-        final LongOpenHashSet selectedSet = new LongOpenHashSet(AlternativePlatformRegistry.getAlternatives(route.getId(), primaryPlatform.getId()));
+        final LongOpenHashSet configuredSet = new LongOpenHashSet(AlternativePlatformRegistry.getAlternatives(route.getId(), primaryPlatform.getId()));
+        final boolean wildcardEnabled = configuredSet.contains(-1L);
+        final LongOpenHashSet explicitSet = new LongOpenHashSet();
+        configuredSet.forEach(id -> {
+            if (id != 0 && id != -1L) {
+                explicitSet.add(id);
+            }
+        });
 
         if (primaryPlatform.area != null) {
             primaryPlatform.area.savedRails.forEach(savedRail -> {
@@ -63,13 +74,13 @@ public class AlternativePlatformSelectorScreen extends DashboardListSelectorScre
                 final long platformId = platform.getId();
                 candidateIds.add(platformId);
                 listItems.add(new DashboardListItem(platformId, jme$getPlatformLabel(platform), jme$getPlatformColor(platform)));
-                if (selectedSet.contains(platformId)) {
+                if (wildcardEnabled || explicitSet.contains(platformId)) {
                     selectedIds.add(platformId);
                 }
             });
         }
 
-        return new AlternativePlatformSelectorScreen(parent, route.getId(), primaryPlatform.getId(), new ObjectImmutableList<>(listItems), selectedIds, candidateIds);
+        return new AlternativePlatformSelectorScreen(parent, route.getId(), primaryPlatform.getId(), new ObjectImmutableList<>(listItems), selectedIds, candidateIds, explicitSet, wildcardEnabled);
     }
 
     @Override
@@ -85,11 +96,40 @@ public class AlternativePlatformSelectorScreen extends DashboardListSelectorScre
             newSelection.add(iterator.nextLong());
         }
 
+        boolean allCandidatesSelected = !candidatePlatformIds.isEmpty();
+        final LongIterator allCandidateIter = candidatePlatformIds.iterator();
+        while (allCandidateIter.hasNext()) {
+            if (!newSelection.contains(allCandidateIter.nextLong())) {
+                allCandidatesSelected = false;
+                break;
+            }
+        }
+
+        // If the wildcard (-1) is enabled and the user kept everything selected, keep the config unchanged.
+        if (originalWildcardEnabled && allCandidatesSelected) {
+            super.onClose2();
+            return;
+        }
+
+        // If the wildcard was enabled but the user deselected something, turn it off first. We'll then
+        // materialize the remaining selection as explicit alternatives.
+        if (originalWildcardEnabled) {
+            final boolean changed = AlternativePlatformRegistry.setAlternative(routeId, primaryPlatformId, -1L, false);
+            if (changed) {
+                final PacketByteBuf wildcardPacket = PacketByteBufs.create();
+                wildcardPacket.writeLong(routeId);
+                wildcardPacket.writeLong(primaryPlatformId);
+                wildcardPacket.writeLong(-1L);
+                wildcardPacket.writeBoolean(false);
+                MagicNetworkingCompat.sendToServer(MagicRailConstants.SET_ALTERNATIVE_PLATFORM_PACKET_ID, wildcardPacket);
+            }
+        }
+
         final LongIterator candidateIterator = candidatePlatformIds.iterator();
         while (candidateIterator.hasNext()) {
             final long candidateId = candidateIterator.nextLong();
             final boolean enabled = newSelection.contains(candidateId);
-            if (originalSelection.contains(candidateId) == enabled) {
+            if (originalExplicitSelection.contains(candidateId) == enabled) {
                 continue;
             }
 

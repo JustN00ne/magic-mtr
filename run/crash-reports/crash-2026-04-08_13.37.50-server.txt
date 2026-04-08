@@ -1,0 +1,193 @@
+---- Minecraft Crash Report ----
+// I feel sad now :(
+
+Time: 2026-04-08 13:37:50
+Description: Ticking block entity
+
+java.lang.IllegalAccessError: class org.justnoone.jme.block.BlockTrainDetector tried to access private method 'void org.justnoone.jme.block.BlockTrainDetector$VehicleSnapshot.<init>(long, long, double, double, double, java.util.List, int, double)' (org.justnoone.jme.block.BlockTrainDetector and org.justnoone.jme.block.BlockTrainDetector$VehicleSnapshot are in unnamed module of loader 'knot' @56ef9176)
+	at knot//org.justnoone.jme.block.BlockTrainDetector.buildCache(BlockTrainDetector.java:166)
+	at knot//org.justnoone.jme.block.BlockTrainDetector.getOrBuildCache(BlockTrainDetector.java:123)
+	at knot//org.justnoone.jme.block.BlockTrainDetector.tickServer(BlockTrainDetector.java:80)
+	at knot//org.justnoone.jme.block.BlockTrainDetector$BlockEntity.blockEntityTick(BlockTrainDetector.java:692)
+	at knot//org.mtr.mapping.mapper.BlockWithEntity.lambda$getTicker$0(BlockWithEntity.java:27)
+	at knot//net.minecraft.world.chunk.WorldChunk$DirectBlockEntityTickInvoker.tick(WorldChunk.java:662)
+	at knot//net.minecraft.world.chunk.WorldChunk$WrappedBlockEntityTickInvoker.tick(WorldChunk.java:716)
+	at knot//net.minecraft.world.World.tickBlockEntities(World.java:470)
+	at knot//net.minecraft.server.world.ServerWorld.tick(ServerWorld.java:390)
+	at knot//net.minecraft.server.MinecraftServer.tickWorlds(MinecraftServer.java:897)
+	at knot//net.minecraft.server.MinecraftServer.tick(MinecraftServer.java:824)
+	at knot//net.minecraft.server.integrated.IntegratedServer.tick(IntegratedServer.java:105)
+	at knot//net.minecraft.server.MinecraftServer.runServer(MinecraftServer.java:671)
+	at knot//net.minecraft.server.MinecraftServer.method_29739(MinecraftServer.java:265)
+	at java.base/java.lang.Thread.run(Thread.java:1583)
+
+
+A detailed walkthrough of the error, its code path and all known details is as follows:
+---------------------------------------------------------------------------------------
+
+-- Head --
+Thread: Server thread
+Stacktrace:
+	at knot//org.justnoone.jme.block.BlockTrainDetector.buildCache(BlockTrainDetector.java:166)
+	at knot//org.justnoone.jme.block.BlockTrainDetector.getOrBuildCache(BlockTrainDetector.java:123)
+	at knot//org.justnoone.jme.block.BlockTrainDetector.tickServer(BlockTrainDetector.java:80)
+	at knot//org.justnoone.jme.block.BlockTrainDetector$BlockEntity.blockEntityTick(BlockTrainDetector.java:692)
+	at knot//org.mtr.mapping.mapper.BlockWithEntity.lambda$getTicker$0(BlockWithEntity.java:27)
+	at knot//net.minecraft.world.chunk.WorldChunk$DirectBlockEntityTickInvoker.tick(WorldChunk.java:662)
+	at knot//net.minecraft.world.chunk.WorldChunk$WrappedBlockEntityTickInvoker.tick(WorldChunk.java:716)
+	at knot//net.minecraft.world.World.tickBlockEntities(World.java:470)
+	at knot//net.minecraft.server.world.ServerWorld.tick(ServerWorld.java:390)
+
+-- Block entity being ticked --
+Details:
+	Name: jme:train_detector // org.justnoone.jme.block.BlockTrainDetector.BlockEntity
+	Block: Block{jme:train_detector}[powered=0]
+	Block location: World: (-57,-43,-39), Section: (at 7,5,9 in -4,-3,-3; chunk contains blocks -64,-64,-48 to -49,319,-33), Region: (-1,-1; contains chunks -32,-32 to -1,-1, blocks -512,-64,-512 to -1,319,-1)
+	Block: Block{jme:train_detector}[powered=0]
+	Block location: World: (-57,-43,-39), Section: (at 7,5,9 in -4,-3,-3; chunk contains blocks -64,-64,-48 to -49,319,-33), Region: (-1,-1; contains chunks -32,-32 to -1,-1, blocks -512,-64,-512 to -1,319,-1)
+Stacktrace:
+	at knot//net.minecraft.world.chunk.WorldChunk$DirectBlockEntityTickInvoker.tick(WorldChunk.java:662)
+	at knot//net.minecraft.world.chunk.WorldChunk$WrappedBlockEntityTickInvoker.tick(WorldChunk.java:716)
+	at knot//net.minecraft.world.World.tickBlockEntities(World.java:470)
+	at knot//net.minecraft.server.world.ServerWorld.tick(ServerWorld.java:390)
+	at knot//net.minecraft.server.MinecraftServer.tickWorlds(MinecraftServer.java:897)
+	at knot//net.minecraft.server.MinecraftServer.tick(MinecraftServer.java:824)
+	at knot//net.minecraft.server.integrated.IntegratedServer.tick(IntegratedServer.java:105)
+	at knot//net.minecraft.server.MinecraftServer.runServer(MinecraftServer.java:671)
+	at knot//net.minecraft.server.MinecraftServer.method_29739(MinecraftServer.java:265)
+	at java.base/java.lang.Thread.run(Thread.java:1583)
+
+-- Affected level --
+Details:
+	All players: 1 total; [ServerPlayerEntity['Player887'/26, l='ServerLevel[New World]', x=-56.15, y=-40.24, z=-36.69]]
+	Chunk stats: 2740
+	Level dimension: minecraft:overworld
+	Level spawn location: World: (0,-42,0), Section: (at 0,6,0 in 0,-3,0; chunk contains blocks 0,-64,0 to 15,319,15), Region: (0,0; contains chunks 0,0 to 31,31, blocks 0,-64,0 to 511,319,511)
+	Level time: 526018 game time, 6000 day time
+	Level name: New World
+	Level game mode: Game mode: creative (ID 1). Hardcore: false. Cheats: true
+	Level weather: Rain time: 1 (now: false), thunder time: 1 (now: false)
+	Known server brands: fabric
+	Removed feature flags: 
+	Level was modded: true
+	Level storage version: 0x04ABD - Anvil
+Stacktrace:
+	at knot//net.minecraft.server.MinecraftServer.tickWorlds(MinecraftServer.java:897)
+	at knot//net.minecraft.server.MinecraftServer.tick(MinecraftServer.java:824)
+	at knot//net.minecraft.server.integrated.IntegratedServer.tick(IntegratedServer.java:105)
+	at knot//net.minecraft.server.MinecraftServer.runServer(MinecraftServer.java:671)
+	at knot//net.minecraft.server.MinecraftServer.method_29739(MinecraftServer.java:265)
+	at java.base/java.lang.Thread.run(Thread.java:1583)
+
+-- System Details --
+Details:
+	Minecraft Version: 1.20.1
+	Minecraft Version ID: 1.20.1
+	Operating System: Linux (amd64) version 6.17.0-20-generic
+	Java Version: 21.0.10, Eclipse Adoptium
+	Java VM Version: OpenJDK 64-Bit Server VM (mixed mode, sharing), Eclipse Adoptium
+	Memory: 498038184 bytes (474 MiB) / 2256535552 bytes (2152 MiB) up to 6148849664 bytes (5864 MiB)
+	CPUs: 16
+	Processor Vendor: AuthenticAMD
+	Processor Name: AMD Ryzen 7 4800H with Radeon Graphics
+	Identifier: AuthenticAMD Family 23 Model 96 Stepping 1
+	Microarchitecture: unknown
+	Frequency (GHz): 4.30
+	Number of physical packages: 1
+	Number of physical CPUs: 8
+	Number of logical CPUs: 16
+	Graphics card #0 name: GA107M [GeForce RTX 3050 Mobile]
+	Graphics card #0 vendor: NVIDIA Corporation (0x10de)
+	Graphics card #0 VRAM (MB): 4128.00
+	Graphics card #0 deviceId: 0x25a2
+	Graphics card #0 versionInfo: unknown
+	Graphics card #1 name: Renoir [Radeon RX Vega 6 (Ryzen 4000/5000 Mobile Series)]
+	Graphics card #1 vendor: Advanced Micro Devices, Inc. [AMD/ATI] (0x1002)
+	Graphics card #1 VRAM (MB): 258.00
+	Graphics card #1 deviceId: 0x1636
+	Graphics card #1 versionInfo: unknown
+	Virtual memory max (MB): 41781.76
+	Virtual memory used (MB): 21743.97
+	Swap memory total (MB): 30060.88
+	Swap memory used (MB): 3272.01
+	JVM Flags: 0 total; 
+	Fabric Mods: 
+		bluemap: BlueMap 5.3
+		com_twelvemonkeys_common_common-image: common-image 3.12.0
+		com_twelvemonkeys_common_common-io: common-io 3.12.0
+		com_twelvemonkeys_common_common-lang: common-lang 3.12.0
+		com_twelvemonkeys_imageio_imageio-core: imageio-core 3.12.0
+		com_twelvemonkeys_imageio_imageio-metadata: imageio-metadata 3.12.0
+		com_twelvemonkeys_imageio_imageio-webp: imageio-webp 3.12.0
+		fabric-api: Fabric API 0.92.7+1.20.1
+		fabric-api-base: Fabric API Base 0.4.32+1802ada577
+		fabric-api-lookup-api-v1: Fabric API Lookup API (v1) 1.6.37+1802ada577
+		fabric-biome-api-v1: Fabric Biome API (v1) 13.0.15+93aa238b77
+		fabric-block-api-v1: Fabric Block API (v1) 1.0.12+1802ada577
+		fabric-block-view-api-v2: Fabric BlockView API (v2) 1.0.3+924f046a77
+		fabric-blockrenderlayer-v1: Fabric BlockRenderLayer Registration (v1) 1.1.42+1802ada577
+		fabric-client-tags-api-v1: Fabric Client Tags 1.1.3+1802ada577
+		fabric-command-api-v1: Fabric Command API (v1) 1.2.35+f71b366f77
+		fabric-command-api-v2: Fabric Command API (v2) 2.2.14+1802ada577
+		fabric-commands-v0: Fabric Commands (v0) 0.2.52+df3654b377
+		fabric-containers-v0: Fabric Containers (v0) 0.1.67+df3654b377
+		fabric-content-registries-v0: Fabric Content Registries (v0) 4.0.13+1802ada577
+		fabric-convention-tags-v1: Fabric Convention Tags 1.5.6+1802ada577
+		fabric-crash-report-info-v1: Fabric Crash Report Info (v1) 0.2.20+1802ada577
+		fabric-data-attachment-api-v1: Fabric Data Attachment API (v1) 1.0.2+de0fd6d177
+		fabric-data-generation-api-v1: Fabric Data Generation API (v1) 12.3.7+1802ada577
+		fabric-dimensions-v1: Fabric Dimensions API (v1) 2.1.55+1802ada577
+		fabric-entity-events-v1: Fabric Entity Events (v1) 1.6.1+1c78457f77
+		fabric-events-interaction-v0: Fabric Events Interaction (v0) 0.6.5+13a40c6677
+		fabric-events-lifecycle-v0: Fabric Events Lifecycle (v0) 0.2.64+df3654b377
+		fabric-game-rule-api-v1: Fabric Game Rule API (v1) 1.0.41+1802ada577
+		fabric-gametest-api-v1: Fabric Game Test API (v1) 1.2.15+1802ada577
+		fabric-item-api-v1: Fabric Item API (v1) 2.1.29+1802ada577
+		fabric-item-group-api-v1: Fabric Item Group API (v1) 4.0.14+1802ada577
+		fabric-key-binding-api-v1: Fabric Key Binding API (v1) 1.0.38+1802ada577
+		fabric-keybindings-v0: Fabric Key Bindings (v0) 0.2.36+df3654b377
+		fabric-lifecycle-events-v1: Fabric Lifecycle Events (v1) 2.2.23+1802ada577
+		fabric-loot-api-v2: Fabric Loot API (v2) 1.2.3+1802ada577
+		fabric-loot-tables-v1: Fabric Loot Tables (v1) 1.1.47+9e7660c677
+		fabric-message-api-v1: Fabric Message API (v1) 5.1.10+1802ada577
+		fabric-mining-level-api-v1: Fabric Mining Level API (v1) 2.1.52+1802ada577
+		fabric-model-loading-api-v1: Fabric Model Loading API (v1) 1.0.4+1802ada577
+		fabric-models-v0: Fabric Models (v0) 0.4.3+9386d8a777
+		fabric-networking-api-v1: Fabric Networking API (v1) 1.3.14+a158aa0477
+		fabric-networking-v0: Fabric Networking (v0) 0.3.54+df3654b377
+		fabric-object-builder-api-v1: Fabric Object Builder API (v1) 11.1.5+e35120df77
+		fabric-particles-v1: Fabric Particles (v1) 1.1.3+1802ada577
+		fabric-recipe-api-v1: Fabric Recipe API (v1) 1.0.24+1802ada577
+		fabric-registry-sync-v0: Fabric Registry Sync (v0) 2.3.6+1802ada577
+		fabric-renderer-api-v1: Fabric Renderer API (v1) 3.2.2+1802ada577
+		fabric-renderer-indigo: Fabric Renderer - Indigo 1.5.3+85287f9f77
+		fabric-renderer-registries-v1: Fabric Renderer Registries (v1) 3.2.47+df3654b377
+		fabric-rendering-data-attachment-v1: Fabric Rendering Data Attachment (v1) 0.3.39+92a0d36777
+		fabric-rendering-fluids-v1: Fabric Rendering Fluids (v1) 3.0.29+1802ada577
+		fabric-rendering-v0: Fabric Rendering (v0) 1.1.50+df3654b377
+		fabric-rendering-v1: Fabric Rendering (v1) 3.0.9+1802ada577
+		fabric-resource-conditions-api-v1: Fabric Resource Conditions API (v1) 2.3.9+1802ada577
+		fabric-resource-loader-v0: Fabric Resource Loader (v0) 0.11.12+fb82e9d777
+		fabric-screen-api-v1: Fabric Screen API (v1) 2.0.9+1802ada577
+		fabric-screen-handler-api-v1: Fabric Screen Handler API (v1) 1.3.33+1802ada577
+		fabric-sound-api-v1: Fabric Sound API (v1) 1.0.14+1802ada577
+		fabric-transfer-api-v1: Fabric Transfer API (v1) 3.3.6+8dd72ea377
+		fabric-transitive-access-wideners-v1: Fabric Transitive Access Wideners (v1) 4.3.2+1802ada577
+		fabricloader: Fabric Loader 0.19.0
+		java: OpenJDK 64-Bit Server VM 21
+		jme: MAGIC 1.0.4
+		minecraft: Minecraft 1.20.1
+		mixinextras: MixinExtras 0.5.3
+		modmenu: Mod Menu 7.2.2
+		mtr: Minecraft Transit Railway 4.0.3
+		org_quiltmc_parsers_gson: gson 0.2.1
+		org_quiltmc_parsers_json: json 0.2.1
+		yet_another_config_lib_v3: YetAnotherConfigLib 3.6.6+1.20.1-fabric
+	Server Running: true
+	Player Count: 1 / 8; [ServerPlayerEntity['Player887'/26, l='ServerLevel[New World]', x=-56.15, y=-40.24, z=-36.69]]
+	Data Packs: vanilla, fabric
+	Enabled Feature Flags: minecraft:vanilla
+	World Generation: Stable
+	Type: Integrated Server (map_client.txt)
+	Is Modded: Definitely; Client brand changed to 'fabric'; Server brand changed to 'fabric'
+	Launched Version: Fabric

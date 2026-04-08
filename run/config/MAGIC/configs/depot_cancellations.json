@@ -1,0 +1,7 @@
+{
+  "7496437710645289385": {
+    "enabled": true,
+    "threshold_minutes": 61,
+    "action": "despawn"
+  }
+}

@@ -85,8 +85,14 @@ public abstract class ArrivalsRequestAlternativePlatformMixin {
                 }
 
                 long primaryPlatformId = AlternativePlatformRegistry.getPrimaryForAlternative(routeId, selectedPlatformId);
-                if (primaryPlatformId == 0 && !AlternativePlatformRegistry.getAlternatives(routeId, selectedPlatformId).isEmpty()) {
-                    primaryPlatformId = selectedPlatformId;
+                if (primaryPlatformId == 0) {
+                    // Selected platform might itself be a primary.
+                    if (!AlternativePlatformRegistry.getAlternatives(routeId, selectedPlatformId).isEmpty()) {
+                        primaryPlatformId = selectedPlatformId;
+                    } else {
+                        // Wildcard (-1) doesn't have an explicit reverse mapping; resolve it from candidate lists.
+                        primaryPlatformId = jme$resolvePrimaryPlatformId(route, selectedPlatform);
+                    }
                 }
                 if (primaryPlatformId == 0) {
                     jme$addUnique(patchedArrivals, seenKeys, arrivalResponse);
@@ -176,12 +182,67 @@ public abstract class ArrivalsRequestAlternativePlatformMixin {
                 return;
             }
 
-            platform.routes.forEach(route -> AlternativePlatformRegistry.getAlternatives(route.getId(), primaryPlatformId).forEach(alternativePlatformId -> {
-                if (alternativePlatformId != 0 && !platformIds.contains(alternativePlatformId)) {
-                    platformIds.add(alternativePlatformId);
+            platform.routes.forEach(route -> {
+                final java.util.List<Long> alternatives = AlternativePlatformRegistry.getAlternatives(route.getId(), primaryPlatformId);
+                if (alternatives.isEmpty()) {
+                    return;
                 }
-            }));
+
+                // Wildcard support: "-1" means "all platforms in this station".
+                if (alternatives.contains(-1L) && platform.area != null) {
+                    platform.area.savedRails.forEach(savedRail -> {
+                        if (!(savedRail instanceof Platform)) {
+                            return;
+                        }
+                        final long candidateId = ((Platform) savedRail).getId();
+                        if (candidateId != 0 && candidateId != primaryPlatformId && !platformIds.contains(candidateId)) {
+                            platformIds.add(candidateId);
+                        }
+                    });
+                }
+
+                alternatives.forEach(alternativePlatformId -> {
+                    if (alternativePlatformId == 0 || alternativePlatformId == -1L) {
+                        return;
+                    }
+                    if (!platformIds.contains(alternativePlatformId)) {
+                        platformIds.add(alternativePlatformId);
+                    }
+                });
+            });
         });
+    }
+
+    @Unique
+    private static long jme$resolvePrimaryPlatformId(Route route, Platform selectedPlatform) {
+        if (route == null || selectedPlatform == null) {
+            return 0;
+        }
+
+        final long selectedPlatformId = selectedPlatform.getId();
+        if (selectedPlatformId == 0) {
+            return 0;
+        }
+
+        for (int i = 0; i < route.getRoutePlatforms().size(); i++) {
+            final Platform primaryPlatform = route.getRoutePlatforms().get(i).platform;
+            if (primaryPlatform == null) {
+                continue;
+            }
+
+            final java.util.List<Long> candidateIds = AlternativePlatformRegistry.getCandidatePlatformIds(route, primaryPlatform);
+            if (candidateIds.size() <= 1) {
+                continue;
+            }
+
+            for (int j = 0; j < candidateIds.size(); j++) {
+                if (candidateIds.get(j) == selectedPlatformId) {
+                    return primaryPlatform.getId();
+                }
+            }
+        }
+
+        return 0;
     }
 
     @Unique

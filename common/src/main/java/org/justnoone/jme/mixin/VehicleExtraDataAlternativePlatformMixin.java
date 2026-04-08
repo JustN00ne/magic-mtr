@@ -11,6 +11,7 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import java.lang.reflect.Field;
+import java.util.List;
 
 /**
  * When a vehicle is diverted to an alternative platform, the physical path contains the
@@ -61,8 +62,10 @@ public abstract class VehicleExtraDataAlternativePlatformMixin {
             return;
         }
 
-        // Only override when the actual platform is an explicitly configured alternative.
-        if (!AlternativePlatformRegistry.getAlternatives(routeId, scheduledPrimaryPlatformId).contains(actualPlatformId)) {
+        // Only override when the actual platform is a configured alternative.
+        // Also support the "-1" wildcard (all platforms in this station).
+        final List<Long> alternatives = AlternativePlatformRegistry.getAlternatives(routeId, scheduledPrimaryPlatformId);
+        if (!(alternatives.contains(-1L) || alternatives.contains(actualPlatformId))) {
             return;
         }
 

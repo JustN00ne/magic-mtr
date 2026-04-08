@@ -11,10 +11,14 @@ public final class PathCache {
 
     private static final Object LOCK = new Object();
     private static final LinkedHashMap<Key, Entry> CACHE = new LinkedHashMap<>(64, 0.75F, true);
+    private static final LinkedHashMap<Key, Long> FAILURE_CACHE = new LinkedHashMap<>(64, 0.75F, true);
     // Alternative-platform reroutes can involve many platform pairs (think 100+ platforms).
     // Keep this reasonably large so we don't thrash the cache during bursts of deployments.
     private static final int MAX_ENTRIES = 2048;
+    private static final int MAX_FAILURE_ENTRIES = 4096;
     private static final long TTL_MILLIS = 5 * 60 * 1000;
+    // Don't keep failures too long: rail graphs can change, and some "failures" are just timeouts.
+    private static final long FAILURE_TTL_MILLIS = 15 * 1000;
 
     private PathCache() {
     }
@@ -34,6 +38,37 @@ public final class PathCache {
         }
     }
 
+    public static boolean isFailureCached(long startId, long endId, int stopIndex, long cruisingAltitude, long nowMillis) {
+        final Key key = new Key(startId, endId, stopIndex, cruisingAltitude);
+        synchronized (LOCK) {
+            final Long cachedAtMillis = FAILURE_CACHE.get(key);
+            if (cachedAtMillis == null) {
+                return false;
+            }
+            if (nowMillis - cachedAtMillis > FAILURE_TTL_MILLIS) {
+                FAILURE_CACHE.remove(key);
+                return false;
+            }
+            return true;
+        }
+    }
+
+    public static void putFailure(long startId, long endId, int stopIndex, long cruisingAltitude, long nowMillis) {
+        final Key key = new Key(startId, endId, stopIndex, cruisingAltitude);
+        synchronized (LOCK) {
+            pruneLocked(nowMillis);
+            FAILURE_CACHE.put(key, nowMillis);
+            while (FAILURE_CACHE.size() > MAX_FAILURE_ENTRIES) {
+                final Iterator<Map.Entry<Key, Long>> iterator = FAILURE_CACHE.entrySet().iterator();
+                if (!iterator.hasNext()) {
+                    break;
+                }
+                iterator.next();
+                iterator.remove();
+            }
+        }
+    }
+
     public static void putCopy(long startId, long endId, int stopIndex, long cruisingAltitude, ObjectArrayList<PathData> path, long nowMillis) {
         if (path == null || path.isEmpty()) {
             return;
@@ -43,6 +78,7 @@ public final class PathCache {
         synchronized (LOCK) {
             pruneLocked(nowMillis);
             CACHE.put(key, new Entry(new ObjectArrayList<>(path), nowMillis));
+            FAILURE_CACHE.remove(key);
             while (CACHE.size() > MAX_ENTRIES) {
                 final Iterator<Map.Entry<Key, Entry>> iterator = CACHE.entrySet().iterator();
                 if (!iterator.hasNext()) {
@@ -56,6 +92,7 @@ public final class PathCache {
 
     private static void pruneLocked(long nowMillis) {
         CACHE.entrySet().removeIf(entry -> nowMillis - entry.getValue().cachedAtMillis > TTL_MILLIS);
+        FAILURE_CACHE.entrySet().removeIf(entry -> nowMillis - entry.getValue() > FAILURE_TTL_MILLIS);
     }
 
     private static final class Key {

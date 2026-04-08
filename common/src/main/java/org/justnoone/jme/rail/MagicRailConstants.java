@@ -6,7 +6,7 @@ import org.mtr.mapping.registry.Registry;
 
 public final class MagicRailConstants {
 
-    public static final Identifier UNIVERSAL_CONNECTOR_ID = new Identifier("mtr", "rail_connector_300");
+    public static final Identifier UNIVERSAL_CONNECTOR_ID = new Identifier("jme", "magic_rail_connector");
     public static final Identifier SET_SPEED_PACKET_ID = new Identifier("jme", "set_magic_rail_speed");
     public static final Identifier SET_RAIL_TILT_PACKET_ID = new Identifier("jme", "set_magic_rail_tilt");
     public static final Identifier SET_ALTERNATIVE_PLATFORM_PACKET_ID = new Identifier("jme", "set_alternative_platform");
@@ -44,10 +44,22 @@ public final class MagicRailConstants {
         if (stack == null || stack.isEmpty()) {
             return false;
         }
+
         // Since we can't easily get the ID in common without direct access,
-        // and we can't get direct access due to mapping issues, we check the translation key as a fallback.
+        // and we can't get direct access due to mapping issues, we check the translation key.
         final String translationKey = stack.getItem().getTranslationKey();
-        return translationKey.contains("rail_connector_300");
+        if (translationKey.contains("magic_rail_connector")) {
+            return true;
+        }
+
+        // Backward compatibility: legacy MAGIC used MTR's rail_connector_300 as the universal connector.
+        // Keep treating it as universal only if it carries MAGIC NBT.
+        if (translationKey.contains("rail_connector_300")) {
+            final CompoundTag nbt = stack.getTag();
+            return nbt != null && (nbt.contains("jme_speed", 3) || nbt.contains("jme_style", 8) || nbt.contains("jme_shape", 8) || nbt.contains("jme_tilt_start", 3) || nbt.contains("jme_tilt_middle", 3) || nbt.contains("jme_tilt_end", 3));
+        }
+
+        return false;
     }
 
     public static Item getUniversalConnectorItem() {

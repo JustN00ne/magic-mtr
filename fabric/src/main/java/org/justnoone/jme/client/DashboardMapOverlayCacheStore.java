@@ -6,6 +6,11 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.network.ServerInfo;
+import net.minecraft.client.world.ClientWorld;
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.util.WorldSavePath;
 import org.justnoone.jme.config.MagicConfigPaths;
 import org.mtr.core.data.Position;
 import org.mtr.core.data.Rail;
@@ -21,11 +26,14 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.security.MessageDigest;
+import java.util.HashSet;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -39,8 +47,14 @@ public final class DashboardMapOverlayCacheStore {
     private static final Gson GSON = new GsonBuilder().create();
     private static final long SAVE_DEBOUNCE_MILLIS = 15000;
     private static final double VEHICLE_UPDATE_EPS_SQUARED = 0.25D * 0.25D;
+    private static final long VEHICLE_STALE_MILLIS = 5000;
+    private static final long CONTEXT_REFRESH_MILLIS = 2000;
 
     private static final Map<String, DimensionCache> CACHE_BY_DIMENSION = new LinkedHashMap<>();
+    private static volatile String contextKey = "";
+    private static volatile long lastContextRefreshMillis;
+    private static volatile MinecraftServer lastIntegratedServer;
+    private static volatile String lastServerAddress = "";
 
     private static final ExecutorService SAVE_EXECUTOR = Executors.newSingleThreadExecutor(runnable -> {
         final Thread thread = new Thread(runnable, "MAGIC-DashboardMap-Cache");
@@ -51,15 +65,76 @@ public final class DashboardMapOverlayCacheStore {
     private DashboardMapOverlayCacheStore() {
     }
 
+    private static void ensureContextUpToDate() {
+        final long now = System.currentTimeMillis();
+        final MinecraftClient client;
+        try {
+            client = MinecraftClient.getInstance();
+        } catch (Exception ignored) {
+            return;
+        }
+
+        final MinecraftServer integratedServer = client == null ? null : client.getServer();
+        final ServerInfo serverInfo = client == null ? null : client.getCurrentServerEntry();
+        final String serverAddress = serverInfo != null && serverInfo.address != null ? serverInfo.address.trim().toLowerCase() : "";
+
+        final boolean contextChanged = integratedServer != lastIntegratedServer || !Objects.equals(serverAddress, lastServerAddress);
+        if (!contextChanged && now - lastContextRefreshMillis < CONTEXT_REFRESH_MILLIS) {
+            return;
+        }
+
+        lastContextRefreshMillis = now;
+        lastIntegratedServer = integratedServer;
+        lastServerAddress = serverAddress;
+
+        final String computed = computeContextKey();
+        final String normalized = computed == null ? "" : computed.trim();
+        if (Objects.equals(contextKey, normalized)) {
+            return;
+        }
+        contextKey = normalized;
+        CACHE_BY_DIMENSION.clear();
+    }
+
+    private static String computeContextKey() {
+        try {
+            final MinecraftClient client = MinecraftClient.getInstance();
+            if (client == null) {
+                return "";
+            }
+
+            final MinecraftServer integratedServer = client.getServer();
+            if (integratedServer != null) {
+                final Path root = resolveWorldRoot(integratedServer);
+                if (root != null) {
+                    return sha1Hex("integrated:" + root.toAbsolutePath().normalize());
+                }
+            }
+
+            final ServerInfo serverInfo = client.getCurrentServerEntry();
+            if (serverInfo != null && serverInfo.address != null && !serverInfo.address.isEmpty()) {
+                return sha1Hex("server:" + serverInfo.address.trim().toLowerCase());
+            }
+        } catch (Exception ignored) {
+        }
+
+        return "";
+    }
+
     public static synchronized void mergeLiveRails(String dimension, Iterable<Rail> rails) {
         if (dimension == null) {
             dimension = "";
         }
+        ensureContextUpToDate();
+        dimension = normalizeDimensionId(dimension);
 
         final DimensionCache cache = ensureLoaded(dimension);
         if (rails == null) {
             return;
         }
+
+        final long now = System.currentTimeMillis();
+        final HashSet<String> seenIds = new HashSet<>();
 
         boolean changed = false;
         for (final Rail rail : rails) {
@@ -71,6 +146,8 @@ public final class DashboardMapOverlayCacheStore {
             if (id == null || id.isEmpty()) {
                 continue;
             }
+            seenIds.add(id);
+            cache.railLastSeenMillisById.put(id, now);
 
             final RailSnapshot existing = cache.railsById.get(id);
 
@@ -96,11 +173,17 @@ public final class DashboardMapOverlayCacheStore {
                 final long speedForward = rail.getSpeedLimitKilometersPerHour(false);
                 final long speedReverse = rail.getSpeedLimitKilometersPerHour(true);
                 final int speedKmh = (int) Math.max(1L, Math.min(1000L, Math.max(speedForward, speedReverse)));
+                final boolean isPlatform = rail.isPlatform();
+                final boolean isSiding = rail.isSiding();
+                final boolean canTurnBack = rail.canTurnBack();
 
                 if (existing.speedKmh == speedKmh
                         && existing.allowForward == allowForward
                         && existing.allowReverse == allowReverse
-                        && existing.hasSignals == hasSignals) {
+                        && existing.hasSignals == hasSignals
+                        && existing.isPlatform == isPlatform
+                        && existing.isSiding == isSiding
+                        && existing.canTurnBack == canTurnBack) {
                     continue;
                 }
             }
@@ -121,6 +204,13 @@ public final class DashboardMapOverlayCacheStore {
             changed = true;
         }
 
+        if (now - cache.lastRailPruneMillis >= 2000) {
+            cache.lastRailPruneMillis = now;
+            if (pruneMissingRailsInLoadedChunks(dimension, cache, seenIds, now)) {
+                changed = true;
+            }
+        }
+
         if (changed) {
             cache.dirtyForSave = true;
             maybeScheduleSave(dimension, cache);
@@ -131,6 +221,8 @@ public final class DashboardMapOverlayCacheStore {
         if (dimension == null) {
             dimension = "";
         }
+        ensureContextUpToDate();
+        dimension = normalizeDimensionId(dimension);
 
         final DimensionCache cache = ensureLoaded(dimension);
         if (vehicles == null) {
@@ -139,6 +231,7 @@ public final class DashboardMapOverlayCacheStore {
 
         boolean changed = false;
         final long now = System.currentTimeMillis();
+        final HashSet<Long> seenIds = new HashSet<>();
         for (final VehicleExtension vehicle : vehicles) {
             if (vehicle == null) {
                 continue;
@@ -153,6 +246,7 @@ public final class DashboardMapOverlayCacheStore {
             if (id == 0) {
                 continue;
             }
+            seenIds.add(id);
 
             final Vector headPosition;
             try {
@@ -195,6 +289,13 @@ public final class DashboardMapOverlayCacheStore {
             changed = true;
         }
 
+        if (now - cache.lastVehiclePruneMillis >= 1000) {
+            cache.lastVehiclePruneMillis = now;
+            if (pruneStaleVehicles(cache, seenIds, now)) {
+                changed = true;
+            }
+        }
+
         if (changed) {
             cache.dirtyForSave = true;
             maybeScheduleSave(dimension, cache);
@@ -205,6 +306,8 @@ public final class DashboardMapOverlayCacheStore {
         if (dimension == null) {
             dimension = "";
         }
+        ensureContextUpToDate();
+        dimension = normalizeDimensionId(dimension);
         return ensureLoaded(dimension).railsList;
     }
 
@@ -212,6 +315,8 @@ public final class DashboardMapOverlayCacheStore {
         if (dimension == null) {
             dimension = "";
         }
+        ensureContextUpToDate();
+        dimension = normalizeDimensionId(dimension);
         return ensureLoaded(dimension).vehiclesList;
     }
 
@@ -243,7 +348,8 @@ public final class DashboardMapOverlayCacheStore {
             vehiclesSnapshot.add(vehicleSnapshot.copy());
         }
 
-        SAVE_EXECUTOR.execute(() -> saveToDisk(dimension, railsSnapshot, vehiclesSnapshot));
+        final String contextKeySnapshot = contextKey;
+        SAVE_EXECUTOR.execute(() -> saveToDisk(contextKeySnapshot, dimension, railsSnapshot, vehiclesSnapshot));
     }
 
     private static void loadFromDisk(String dimension, DimensionCache cache) {
@@ -304,8 +410,11 @@ public final class DashboardMapOverlayCacheStore {
                     final boolean allowForward = !railObject.has("allow_fwd") || railObject.get("allow_fwd").getAsBoolean();
                     final boolean allowReverse = !railObject.has("allow_rev") || railObject.get("allow_rev").getAsBoolean();
                     final boolean hasSignals = railObject.has("has_signals") && railObject.get("has_signals").getAsBoolean();
+                    final boolean isPlatform = railObject.has("is_platform") && railObject.get("is_platform").getAsBoolean();
+                    final boolean isSiding = railObject.has("is_siding") && railObject.get("is_siding").getAsBoolean();
+                    final boolean canTurnBack = railObject.has("can_turn_back") && railObject.get("can_turn_back").getAsBoolean();
 
-                    final RailSnapshot snapshot = new RailSnapshot(id, points, Math.max(1, speedKmh), allowForward, allowReverse, hasSignals);
+                    final RailSnapshot snapshot = new RailSnapshot(id, points, Math.max(1, speedKmh), allowForward, allowReverse, hasSignals, isPlatform, isSiding, canTurnBack);
                     cache.railsById.put(id, snapshot);
                     cache.railIndexById.put(id, cache.railsList.size());
                     cache.railsList.add(snapshot);
@@ -314,6 +423,7 @@ public final class DashboardMapOverlayCacheStore {
 
             if (root.has("vehicles") && root.get("vehicles").isJsonArray()) {
                 final JsonArray vehicles = root.getAsJsonArray("vehicles");
+                final long now = System.currentTimeMillis();
                 for (int i = 0; i < vehicles.size(); i++) {
                     final JsonElement vehicleElement = vehicles.get(i);
                     if (vehicleElement == null || !vehicleElement.isJsonObject()) {
@@ -333,6 +443,9 @@ public final class DashboardMapOverlayCacheStore {
                     if (!Double.isFinite(x) || !Double.isFinite(z)) {
                         continue;
                     }
+                    if (updatedAt > 0 && now - updatedAt > VEHICLE_STALE_MILLIS) {
+                        continue;
+                    }
 
                     final VehicleSnapshot snapshot = new VehicleSnapshot(id, routeId, x, z, updatedAt);
                     cache.vehiclesById.put(id, snapshot);
@@ -343,7 +456,7 @@ public final class DashboardMapOverlayCacheStore {
         }
     }
 
-    private static void saveToDisk(String dimension, List<RailSnapshot> rails, List<VehicleSnapshot> vehicles) {
+    private static void saveToDisk(String contextKeySnapshot, String dimension, List<RailSnapshot> rails, List<VehicleSnapshot> vehicles) {
         try {
             final JsonObject root = new JsonObject();
             root.addProperty("savedAt", System.currentTimeMillis());
@@ -360,6 +473,9 @@ public final class DashboardMapOverlayCacheStore {
                 railObject.addProperty("allow_fwd", rail.allowForward);
                 railObject.addProperty("allow_rev", rail.allowReverse);
                 railObject.addProperty("has_signals", rail.hasSignals);
+                railObject.addProperty("is_platform", rail.isPlatform);
+                railObject.addProperty("is_siding", rail.isSiding);
+                railObject.addProperty("can_turn_back", rail.canTurnBack);
 
                 final JsonArray pointsArray = new JsonArray();
                 for (final double[] point : rail.points) {
@@ -391,7 +507,7 @@ public final class DashboardMapOverlayCacheStore {
             }
             root.add("vehicles", vehiclesArray);
 
-            final Path path = getCachePath(dimension);
+            final Path path = getCachePath(contextKeySnapshot, dimension);
             Files.createDirectories(path.getParent());
             final byte[] rawJson = GSON.toJson(root).getBytes(StandardCharsets.UTF_8);
             Files.write(path, writeLzma2Bytes(rawJson));
@@ -400,8 +516,208 @@ public final class DashboardMapOverlayCacheStore {
     }
 
     private static Path getCachePath(String dimension) {
+        return getCachePath(contextKey, dimension);
+    }
+
+    private static Path getCachePath(String contextKeyValue, String dimension) {
         final String safeDimension = dimension == null ? "" : dimension.replaceAll("[^a-zA-Z0-9\\-_.]+", "_");
-        return MagicConfigPaths.resolveMapFile("dashboard_overlay_cache_" + safeDimension + ".lzma2");
+        final String safeContextKey = contextKeyValue == null || contextKeyValue.isEmpty()
+                ? ""
+                : contextKeyValue.replaceAll("[^a-zA-Z0-9\\-_.]+", "_") + "_";
+        return MagicConfigPaths.resolveMapFile("dashboard_overlay_cache_" + safeContextKey + safeDimension + ".lzma2");
+    }
+
+    private static boolean pruneMissingRailsInLoadedChunks(String dimension, DimensionCache cache, HashSet<String> liveIds, long nowMillis) {
+        if (cache == null || cache.railsById.isEmpty()) {
+            return false;
+        }
+
+        final ClientWorld world = getClientWorld();
+        if (world == null) {
+            return false;
+        }
+
+        final HashSet<String> toRemove = new HashSet<>();
+        for (final String railId : cache.railsById.keySet()) {
+            if (railId == null || railId.isEmpty()) {
+                continue;
+            }
+            if (liveIds != null && liveIds.contains(railId)) {
+                continue;
+            }
+
+            if (isRailLikelyLoadedInWorld(world, railId)) {
+                toRemove.add(railId);
+            }
+        }
+
+        if (toRemove.isEmpty()) {
+            return false;
+        }
+
+        for (final String railId : toRemove) {
+            cache.railsById.remove(railId);
+            cache.railLastSeenMillisById.remove(railId);
+        }
+        rebuildRailsList(cache);
+        return true;
+    }
+
+    private static boolean pruneStaleVehicles(DimensionCache cache, HashSet<Long> liveIds, long nowMillis) {
+        if (cache == null || cache.vehiclesById.isEmpty()) {
+            return false;
+        }
+
+        boolean removedAny = false;
+        final HashSet<Long> toRemove = new HashSet<>();
+        for (final Map.Entry<Long, VehicleSnapshot> entry : cache.vehiclesById.entrySet()) {
+            if (entry == null) {
+                continue;
+            }
+            final long id = entry.getKey() == null ? 0 : entry.getKey();
+            if (id == 0) {
+                continue;
+            }
+            if (liveIds != null && liveIds.contains(id)) {
+                continue;
+            }
+
+            final VehicleSnapshot snapshot = entry.getValue();
+            final long updatedAt = snapshot == null ? 0 : snapshot.updatedAtMillis;
+            if (updatedAt > 0 && nowMillis - updatedAt <= VEHICLE_STALE_MILLIS) {
+                continue;
+            }
+
+            toRemove.add(id);
+        }
+
+        for (final Long id : toRemove) {
+            if (id == null || id == 0) {
+                continue;
+            }
+            if (cache.vehiclesById.remove(id) != null) {
+                removedAny = true;
+            }
+        }
+
+        if (removedAny) {
+            rebuildVehiclesList(cache);
+        }
+
+        return removedAny;
+    }
+
+    private static void rebuildRailsList(DimensionCache cache) {
+        if (cache == null) {
+            return;
+        }
+        cache.railsList.clear();
+        cache.railIndexById.clear();
+        int index = 0;
+        for (final RailSnapshot snapshot : cache.railsById.values()) {
+            if (snapshot == null || snapshot.id == null || snapshot.id.isEmpty()) {
+                continue;
+            }
+            cache.railIndexById.put(snapshot.id, index);
+            cache.railsList.add(snapshot);
+            index++;
+        }
+    }
+
+    private static void rebuildVehiclesList(DimensionCache cache) {
+        if (cache == null) {
+            return;
+        }
+        cache.vehiclesList.clear();
+        cache.vehiclesList.addAll(cache.vehiclesById.values());
+    }
+
+    private static ClientWorld getClientWorld() {
+        try {
+            final MinecraftClient client = MinecraftClient.getInstance();
+            return client == null ? null : client.world;
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    private static boolean isRailLikelyLoadedInWorld(ClientWorld world, String railId) {
+        if (world == null || railId == null || railId.isEmpty()) {
+            return false;
+        }
+
+        final Position[] positions = parseRailPositions(railId);
+        final Position from = positions[0];
+        final Position to = positions[1];
+        if (from == null || to == null) {
+            return false;
+        }
+
+        final int chunkX1 = (int) (from.getX() >> 4);
+        final int chunkZ1 = (int) (from.getZ() >> 4);
+        final int chunkX2 = (int) (to.getX() >> 4);
+        final int chunkZ2 = (int) (to.getZ() >> 4);
+
+        return isChunkLoaded(world, chunkX1, chunkZ1) || isChunkLoaded(world, chunkX2, chunkZ2);
+    }
+
+    private static boolean isChunkLoaded(ClientWorld world, int chunkX, int chunkZ) {
+        if (world == null) {
+            return false;
+        }
+
+        try {
+            // Use direct calls so this keeps working after Loom remaps the mod to intermediary.
+            return world.isChunkLoaded(chunkX, chunkZ);
+        } catch (Throwable ignored) {
+            return false;
+        }
+    }
+
+    private static String normalizeDimensionId(String id) {
+        if (id == null) {
+            return "";
+        }
+        final String normalized = id.trim().replace(':', '/');
+        return normalized.startsWith("/") ? normalized.substring(1) : normalized;
+    }
+
+    private static String sha1Hex(String value) {
+        if (value == null || value.isEmpty()) {
+            return "";
+        }
+
+        try {
+            final MessageDigest digest = MessageDigest.getInstance("SHA-1");
+            final byte[] hash = digest.digest(value.getBytes(StandardCharsets.UTF_8));
+            return toHex(hash);
+        } catch (Exception ignored) {
+            return Integer.toHexString(value.hashCode());
+        }
+    }
+
+    private static Path resolveWorldRoot(MinecraftServer server) {
+        if (server == null) {
+            return null;
+        }
+
+        try {
+            // Use direct calls so this keeps working after Loom remaps the mod to intermediary.
+            return server.getSavePath(WorldSavePath.ROOT);
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
+
+    private static String toHex(byte[] bytes) {
+        if (bytes == null || bytes.length == 0) {
+            return "";
+        }
+        final StringBuilder sb = new StringBuilder(bytes.length * 2);
+        for (final byte b : bytes) {
+            sb.append(String.format("%02x", b));
+        }
+        return sb.toString();
     }
 
     private static String readLzma2Text(byte[] compressedBytes) {
@@ -446,14 +762,20 @@ public final class DashboardMapOverlayCacheStore {
         public final boolean allowForward;
         public final boolean allowReverse;
         public final boolean hasSignals;
+        public final boolean isPlatform;
+        public final boolean isSiding;
+        public final boolean canTurnBack;
 
-        private RailSnapshot(String id, List<double[]> points, int speedKmh, boolean allowForward, boolean allowReverse, boolean hasSignals) {
+        private RailSnapshot(String id, List<double[]> points, int speedKmh, boolean allowForward, boolean allowReverse, boolean hasSignals, boolean isPlatform, boolean isSiding, boolean canTurnBack) {
             this.id = id;
             this.points = points;
             this.speedKmh = speedKmh;
             this.allowForward = allowForward;
             this.allowReverse = allowReverse;
             this.hasSignals = hasSignals;
+            this.isPlatform = isPlatform;
+            this.isSiding = isSiding;
+            this.canTurnBack = canTurnBack;
         }
 
         public static RailSnapshot fromRail(Rail rail) {
@@ -486,10 +808,13 @@ public final class DashboardMapOverlayCacheStore {
             final long speedForward = rail.getSpeedLimitKilometersPerHour(false);
             final long speedReverse = rail.getSpeedLimitKilometersPerHour(true);
             final int speedKmh = (int) Math.max(1L, Math.min(1000L, Math.max(speedForward, speedReverse)));
+            final boolean isPlatform = rail.isPlatform();
+            final boolean isSiding = rail.isSiding();
+            final boolean canTurnBack = rail.canTurnBack();
 
             final List<double[]> points = buildRailPolyline(rail);
             if (points.size() < 2) {
-                return new RailSnapshot(id, buildFallbackPoints(from, to), speedKmh, allowForward, allowReverse, hasSignals);
+                return new RailSnapshot(id, buildFallbackPoints(from, to), speedKmh, allowForward, allowReverse, hasSignals, isPlatform, isSiding, canTurnBack);
             }
 
             // Orient points so they start near the first node in the rail id.
@@ -501,7 +826,7 @@ public final class DashboardMapOverlayCacheStore {
                 Collections.reverse(points);
             }
 
-            return new RailSnapshot(id, points, speedKmh, allowForward, allowReverse, hasSignals);
+            return new RailSnapshot(id, points, speedKmh, allowForward, allowReverse, hasSignals, isPlatform, isSiding, canTurnBack);
         }
 
         private static List<double[]> buildFallbackPoints(Position from, Position to) {
@@ -536,8 +861,11 @@ public final class DashboardMapOverlayCacheStore {
         private boolean loaded;
         private boolean dirtyForSave;
         private long lastSaveStartMillis;
+        private long lastRailPruneMillis;
+        private long lastVehiclePruneMillis;
 
         private final LinkedHashMap<String, RailSnapshot> railsById = new LinkedHashMap<>();
+        private final LinkedHashMap<String, Long> railLastSeenMillisById = new LinkedHashMap<>();
         private final LinkedHashMap<String, Integer> railIndexById = new LinkedHashMap<>();
         private final ArrayList<RailSnapshot> railsList = new ArrayList<>();
 

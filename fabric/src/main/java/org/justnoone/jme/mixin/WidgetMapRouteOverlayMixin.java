@@ -22,6 +22,7 @@ import org.mtr.mapping.holder.ClientWorld;
 import org.mtr.mapping.holder.MinecraftClient;
 import org.mtr.mapping.holder.World;
 import org.mtr.mod.client.MinecraftClientData;
+import org.mtr.mod.data.RailType;
 import org.mtr.mod.data.VehicleExtension;
 import org.mtr.mod.screen.WidgetMap;
 import org.mtr.mod.Init;
@@ -31,6 +32,7 @@ import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import org.spongepowered.asm.mixin.injection.callback.LocalCapture;
 
 import java.awt.Color;
 import java.util.AbstractMap;
@@ -67,8 +69,16 @@ public abstract class WidgetMapRouteOverlayMixin {
     @Unique
     private static int jme$mergedGraphHash = Integer.MIN_VALUE;
 
-    @Inject(method = "render", at = @At("TAIL"), remap = false)
-    private void jme$renderRouteOverlay(GraphicsHolder graphicsHolder, int mouseX, int mouseY, float delta, CallbackInfo ci) {
+    @Inject(
+            method = "render",
+            at = @At(value = "INVOKE", target = "Lorg/mtr/mapping/mapper/GuiDrawing;beginDrawingRectangle()V", ordinal = 1, shift = At.Shift.AFTER),
+            locals = LocalCapture.CAPTURE_FAILSOFT,
+            remap = false
+    )
+    private void jme$renderRouteOverlay(GraphicsHolder graphicsHolder, int mouseX, int mouseY, float delta, CallbackInfo ci, GuiDrawing guiDrawing, org.mtr.libraries.it.unimi.dsi.fastutil.doubles.DoubleDoubleImmutablePair mouseWorldPos, org.mtr.libraries.it.unimi.dsi.fastutil.ints.IntIntImmutablePair topLeft, org.mtr.libraries.it.unimi.dsi.fastutil.ints.IntIntImmutablePair bottomRight) {
+        if (guiDrawing == null) {
+            return;
+        }
         final Route editingRoute = showStations ? DashboardRouteRenderState.getEditingRoute() : null;
         final List<Platform> routePlatforms = new ArrayList<>();
         if (editingRoute != null) {
@@ -100,12 +110,16 @@ public abstract class WidgetMapRouteOverlayMixin {
             currentRailsHash = 0;
         }
 
-        final GuiDrawing guiDrawing = new GuiDrawing(graphicsHolder);
-        guiDrawing.beginDrawingRectangle();
-
+        // We're already inside WidgetMap's rectangle draw pass here.
+        // Draw the rail overlay first so MTR's platform/siding selection squares remain on top.
         if (editingRoute != null) {
             // Grey out the dashboard map while a route is being edited.
             guiDrawing.drawRectangle(jme$getX2(), jme$getY2(), jme$getX2() + mapWidth, jme$getY2() + mapHeight, 0x66545454);
+        }
+
+        // Draw vehicles first so the rail overlay sits on top (the "tiny dot" shouldn't break the rails).
+        if (scale >= 0.075D) {
+            jme$drawVisibleVehicles(guiDrawing, editingRoute, mapWidth, mapHeight);
         }
 
         if (scale >= 0.1D) {
@@ -131,19 +145,24 @@ public abstract class WidgetMapRouteOverlayMixin {
                 final double markerRadius = i == selectedIndex ? 3 : 2;
                 jme$drawPoint(guiDrawing, platform.getMidPosition(), markerRadius, mainLineColor, mapWidth, mapHeight);
 
-                final List<Long> alternatives = AlternativePlatformRegistry.getAlternatives(editingRoute.getId(), platform.getId());
-                for (final long alternativeId : alternatives) {
-                    Platform alternativePlatform = railData.platformIdMap.get(alternativeId);
+                final List<Long> candidateIds = AlternativePlatformRegistry.getCandidatePlatformIds(editingRoute, platform);
+                final long primaryPlatformId = platform.getId();
+                for (final long candidateId : candidateIds) {
+                    if (candidateId == primaryPlatformId || candidateId == 0) {
+                        continue;
+                    }
+
+                    Platform alternativePlatform = railData.platformIdMap.get(candidateId);
                     if (alternativePlatform == null) {
                         final MinecraftClientData dashboardData = MinecraftClientData.getDashboardInstance();
                         if (dashboardData != null) {
-                            alternativePlatform = dashboardData.platformIdMap.get(alternativeId);
+                            alternativePlatform = dashboardData.platformIdMap.get(candidateId);
                         }
                     }
                     if (alternativePlatform == null) {
                         final MinecraftClientData liveData = MinecraftClientData.getInstance();
                         if (liveData != null) {
-                            alternativePlatform = liveData.platformIdMap.get(alternativeId);
+                            alternativePlatform = liveData.platformIdMap.get(candidateId);
                         }
                     }
                     if (alternativePlatform == null) {
@@ -154,12 +173,6 @@ public abstract class WidgetMapRouteOverlayMixin {
                 }
             }
         }
-
-        if (scale >= 0.075D) {
-            jme$drawVisibleVehicles(guiDrawing, editingRoute, mapWidth, mapHeight);
-        }
-
-        guiDrawing.finishDrawingRectangle();
     }
 
     @Unique
@@ -227,6 +240,8 @@ public abstract class WidgetMapRouteOverlayMixin {
         }
 
         // Mirror the core path-finder logic (one-way tracks + angle continuity).
+        // Use A* (Dijkstra + admissible heuristic) for much better performance on large graphs.
+        final double maxHeuristicSpeed = 400D / 3600D; // 400 km/h in meters per millisecond.
         final PositionAngleKey startKey = new PositionAngleKey(start, null);
         final Map<PositionAngleKey, Double> distances = new HashMap<>();
         final Map<PositionAngleKey, PositionAngleKey> previousNode = new HashMap<>();
@@ -234,15 +249,15 @@ public abstract class WidgetMapRouteOverlayMixin {
         final PriorityQueue<Map.Entry<PositionAngleKey, Double>> queue = new PriorityQueue<>(Comparator.comparingDouble(Map.Entry::getValue));
 
         distances.put(startKey, 0D);
-        queue.add(new AbstractMap.SimpleImmutableEntry<>(startKey, 0D));
+        queue.add(new AbstractMap.SimpleImmutableEntry<>(startKey, jme$estimateCostMillis(start, end, maxHeuristicSpeed)));
 
         PositionAngleKey bestEnd = null;
         while (!queue.isEmpty()) {
             final Map.Entry<PositionAngleKey, Double> current = queue.poll();
             final PositionAngleKey currentKey = current.getKey();
-            final double currentDistance = current.getValue();
             final double recordedDistance = distances.getOrDefault(currentKey, Double.MAX_VALUE);
-            if (currentDistance > recordedDistance) {
+            final double expectedPriority = recordedDistance + jme$estimateCostMillis(currentKey.position, end, maxHeuristicSpeed);
+            if (current.getValue() > expectedPriority + 1.0E-9) {
                 continue;
             }
 
@@ -273,12 +288,12 @@ public abstract class WidgetMapRouteOverlayMixin {
 
                 final Angle nextAngle = rail.getStartAngle(neighbor).getOpposite();
                 final PositionAngleKey neighborKey = new PositionAngleKey(neighbor, nextAngle);
-                final double nextDistance = currentDistance + rail.railMath.getLength() / speedLimit;
+                final double nextDistance = recordedDistance + rail.railMath.getLength() / speedLimit;
                 if (nextDistance < distances.getOrDefault(neighborKey, Double.MAX_VALUE)) {
                     distances.put(neighborKey, nextDistance);
                     previousNode.put(neighborKey, currentKey);
                     previousRail.put(neighborKey, rail);
-                    queue.add(new AbstractMap.SimpleImmutableEntry<>(neighborKey, nextDistance));
+                    queue.add(new AbstractMap.SimpleImmutableEntry<>(neighborKey, nextDistance + jme$estimateCostMillis(neighbor, end, maxHeuristicSpeed)));
                 }
             });
         }
@@ -300,6 +315,19 @@ public abstract class WidgetMapRouteOverlayMixin {
         }
         Collections.reverse(path);
         return new AbstractMap.SimpleImmutableEntry<>(path, distances.get(bestEnd));
+    }
+
+    @Unique
+    private static double jme$estimateCostMillis(Position from, Position to, double maxSpeedMetersPerMillisecond) {
+        if (from == null || to == null || maxSpeedMetersPerMillisecond <= 0) {
+            return 0D;
+        }
+
+        final double dx = (double) (to.getX() - from.getX());
+        final double dy = (double) (to.getY() - from.getY());
+        final double dz = (double) (to.getZ() - from.getZ());
+        final double distanceMeters = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        return distanceMeters / maxSpeedMetersPerMillisecond;
     }
 
     @Unique
@@ -409,9 +437,28 @@ public abstract class WidgetMapRouteOverlayMixin {
                 continue;
             }
 
-            final int railColor = speedMode ? jme$getRailSpeedColor(rail.speedKmh, alpha) : color;
+            final int railColor = jme$getRailOverlayColor(rail, color, alpha, speedMode);
             jme$drawRailPolyline(guiDrawing, rail.points, railColor, thickness, mapWidth, mapHeight);
         }
+    }
+
+    @Unique
+    private static int jme$getRailOverlayColor(DashboardMapOverlayCacheStore.RailSnapshot rail, int fallbackColor, int alpha, boolean speedMode) {
+        if (rail == null) {
+            return jme$withAlpha(0x3F8BFF, alpha);
+        }
+
+        if (rail.isPlatform) {
+            return jme$withAlpha(RailType.PLATFORM.color, alpha);
+        }
+        if (rail.isSiding) {
+            return jme$withAlpha(RailType.SIDING.color, alpha);
+        }
+        if (rail.canTurnBack) {
+            return jme$withAlpha(RailType.TURN_BACK.color, alpha);
+        }
+
+        return speedMode ? jme$getRailSpeedColor(rail.speedKmh, alpha) : jme$withAlpha(fallbackColor, alpha);
     }
 
     @Unique
@@ -763,22 +810,42 @@ public abstract class WidgetMapRouteOverlayMixin {
 
     @Unique
     private static int jme$getCombinedRailsHash(MinecraftClientData preferredData) {
+        // IMPORTANT: avoid calling hashCode() on large rail collections every render tick.
+        // MTR tends to replace these collections on sync, so identity + sizes are a good, cheap invalidation key.
         int hash = 1;
-        if (preferredData != null) {
-            hash = 31 * hash + preferredData.rails.hashCode();
-            hash = 31 * hash + preferredData.railIdMap.hashCode();
-        }
-        final MinecraftClientData dashboardData = MinecraftClientData.getDashboardInstance();
-        if (dashboardData != null) {
-            hash = 31 * hash + dashboardData.rails.hashCode();
-            hash = 31 * hash + dashboardData.railIdMap.hashCode();
-        }
-        final MinecraftClientData liveData = MinecraftClientData.getInstance();
-        if (liveData != null) {
-            hash = 31 * hash + liveData.rails.hashCode();
-            hash = 31 * hash + liveData.railIdMap.hashCode();
-        }
+        hash = 31 * hash + jme$getRailDataSignature(preferredData);
+        hash = 31 * hash + jme$getRailDataSignature(MinecraftClientData.getDashboardInstance());
+        hash = 31 * hash + jme$getRailDataSignature(MinecraftClientData.getInstance());
         return hash;
+    }
+
+    @Unique
+    private static int jme$getRailDataSignature(MinecraftClientData data) {
+        if (data == null) {
+            return 0;
+        }
+
+        int sig = 1;
+
+        try {
+            sig = 31 * sig + System.identityHashCode(data.rails);
+            sig = 31 * sig + (data.rails == null ? 0 : data.rails.size());
+        } catch (Exception ignored) {
+        }
+
+        try {
+            sig = 31 * sig + System.identityHashCode(data.railIdMap);
+            sig = 31 * sig + (data.railIdMap == null ? 0 : data.railIdMap.size());
+        } catch (Exception ignored) {
+        }
+
+        try {
+            sig = 31 * sig + System.identityHashCode(data.positionsToRail);
+            sig = 31 * sig + (data.positionsToRail == null ? 0 : data.positionsToRail.size());
+        } catch (Exception ignored) {
+        }
+
+        return sig;
     }
 
     @Unique

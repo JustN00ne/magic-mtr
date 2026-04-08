@@ -50,10 +50,19 @@ public abstract class DepotAlternativePlatformMixin {
                     continue;
                 }
 
-                AlternativePlatformRegistry.getAlternatives(route.getId(), primaryPlatform.getId()).forEach(alternativeId -> {
-                    final Platform alternativePlatform = platformLookup.get(alternativeId);
-                    jme$addRouteReference(alternativePlatform, route);
-                });
+                final java.util.List<Long> candidateIds = AlternativePlatformRegistry.getCandidatePlatformIds(route, primaryPlatform);
+                if (candidateIds.size() <= 1) {
+                    continue;
+                }
+
+                final long primaryPlatformId = primaryPlatform.getId();
+                for (final long candidateId : candidateIds) {
+                    if (candidateId == primaryPlatformId || candidateId == 0) {
+                        continue;
+                    }
+                    final Platform candidatePlatform = platformLookup.get(candidateId);
+                    jme$addRouteReference(candidatePlatform, route);
+                }
             }
         }
     }

@@ -10,7 +10,9 @@ import org.mtr.mod.client.MinecraftClientData;
 import org.mtr.mod.client.VehicleRidingMovement;
 import org.mtr.mod.data.VehicleExtension;
 
+import java.util.Arrays;
 import java.lang.reflect.Field;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 public final class MagicRailTiltClient {
@@ -18,15 +20,26 @@ public final class MagicRailTiltClient {
     // Needs to cover typical vertical offset between the camera/vehicle pivot and the rail path.
     // Keep reasonably small to avoid snapping to adjacent tracks in stations.
     private static final double MAX_LOOKUP_DISTANCE_SQUARED = 16.0;
-    private static final double CURVE_SAMPLE_SPACING = 0.75;
+    private static final double CURVE_SAMPLE_SPACING = 1.25;
     private static final int MIN_CURVE_SAMPLES = 8;
-    private static final int MAX_CURVE_SAMPLES = 96;
+    private static final int MAX_CURVE_SAMPLES = 64;
     private static final long CAMERA_SMOOTHING_KEY = 0x43414D455241544CL;
     private static final double SMOOTHING_ALPHA = 0.25;
     private static final long SMOOTHING_PRUNE_INTERVAL_MILLIS = 2000;
     private static final long SMOOTHING_ENTRY_TIMEOUT_MILLIS = 5000;
+    private static final long RAIL_SAMPLE_CACHE_PRUNE_INTERVAL_MILLIS = 5000;
+    private static final long RAIL_SAMPLE_CACHE_ENTRY_TIMEOUT_MILLIS = 15000;
+    private static final int MAX_RAIL_SAMPLE_CACHE_ENTRIES = 512;
+    private static final int RECENT_RAIL_CANDIDATE_COUNT = 6;
+    private static final long FULL_SCAN_VALIDATE_INTERVAL_MILLIS = 1000;
+    private static final long FORCE_FULL_SCAN_INTERVAL_MILLIS = 10000;
+    private static final double CONFIDENT_DISTANCE_SQUARED = 6.25;
     private static final ConcurrentHashMap<Long, SmoothedTiltEntry> SMOOTHED_TILT = new ConcurrentHashMap<>();
+    private static final ConcurrentHashMap<String, RailSamples> RAIL_SAMPLES_BY_ID = new ConcurrentHashMap<>();
+    private static final ThreadLocal<RecentRails> RECENT_RAILS = ThreadLocal.withInitial(RecentRails::new);
     private static volatile long lastPruneMillis;
+    private static volatile long lastFullScanMillis;
+    private static volatile long lastRailSamplePruneMillis;
     private static volatile Field jme$previousVehicleYawField;
     private static volatile boolean jme$previousVehicleYawFieldSearched;
 
@@ -139,7 +152,11 @@ public final class MagicRailTiltClient {
 
     public static void clearSmoothingCache() {
         SMOOTHED_TILT.clear();
+        RAIL_SAMPLES_BY_ID.clear();
         lastPruneMillis = 0;
+        lastFullScanMillis = 0;
+        lastRailSamplePruneMillis = 0;
+        RECENT_RAILS.remove();
     }
 
     private static TiltLookup findNearestTiltLookup(double x, double y, double z) {
@@ -147,8 +164,26 @@ public final class MagicRailTiltClient {
         RailProjection nearestProjection = null;
         Rail nearestRail = null;
         long nearestRailKey = 0;
+        MagicRailTiltRegistry.TiltSettings nearestSettings = null;
 
-        for (Rail rail : clientData.railIdMap.values()) {
+        // Fast-path: most calls occur near the same few rails (camera + a handful of rendered vehicles).
+        // Try recent candidates first to avoid scanning the entire rail graph each frame.
+        final RecentRails recentRails = RECENT_RAILS.get();
+        final String[] recentRailIds = recentRails.railIds;
+        for (int i = 0; i < recentRailIds.length; i++) {
+            final String railId = recentRailIds[i];
+            if (railId == null || railId.isEmpty()) {
+                continue;
+            }
+            final MagicRailTiltRegistry.TiltSettings settings = MagicRailTiltRegistry.getTilt(railId);
+            if (settings == null) {
+                continue;
+            }
+            final Rail rail = clientData.railIdMap.get(railId);
+            if (rail == null) {
+                continue;
+            }
+
             final RailProjection projection = projectToRailSegment(rail, x, y, z);
             if (projection == null || projection.distanceSquared > MAX_LOOKUP_DISTANCE_SQUARED) {
                 continue;
@@ -158,6 +193,51 @@ public final class MagicRailTiltClient {
                 nearestProjection = projection;
                 nearestRail = rail;
                 nearestRailKey = hashRailId(MagicRailTiltRegistry.normalizeRailId(rail.getHexId()));
+                nearestSettings = settings;
+            }
+        }
+
+        final long now = System.currentTimeMillis();
+        if (nearestProjection != null && nearestRail != null) {
+            // If we recently did a full scan, the recent-rails list is likely fresh for the current area.
+            // Otherwise, validate periodically to avoid getting "stuck" on a nearby-but-not-nearest cached rail.
+            final long sinceFullScan = now - lastFullScanMillis;
+            if (sinceFullScan < FULL_SCAN_VALIDATE_INTERVAL_MILLIS
+                    || (nearestProjection.distanceSquared <= CONFIDENT_DISTANCE_SQUARED && sinceFullScan < FORCE_FULL_SCAN_INTERVAL_MILLIS)) {
+                recentRails.record(nearestRail.getHexId());
+                final double tiltDegrees = nearestSettings == null ? 0 : MagicRailTiltRegistry.interpolateDegrees(nearestSettings, nearestProjection.progress);
+                return new TiltLookup(tiltDegrees, nearestRailKey, nearestRail, nearestProjection.progress);
+            }
+        }
+
+        lastFullScanMillis = now;
+        // Full scan is expensive; only consider rails that actually have tilt configured.
+        for (final Map.Entry<String, MagicRailTiltRegistry.TiltSettings> tiltEntry : MagicRailTiltRegistry.getAll().entrySet()) {
+            if (tiltEntry == null) {
+                continue;
+            }
+
+            final String railId = tiltEntry.getKey();
+            final MagicRailTiltRegistry.TiltSettings settings = tiltEntry.getValue();
+            if (railId == null || railId.isEmpty() || settings == null) {
+                continue;
+            }
+
+            final Rail rail = clientData.railIdMap.get(railId);
+            if (rail == null) {
+                continue;
+            }
+
+            final RailProjection projection = projectToRailSegment(rail, x, y, z);
+            if (projection == null || projection.distanceSquared > MAX_LOOKUP_DISTANCE_SQUARED) {
+                continue;
+            }
+
+            if (nearestProjection == null || projection.distanceSquared < nearestProjection.distanceSquared) {
+                nearestProjection = projection;
+                nearestRail = rail;
+                nearestRailKey = hashRailId(MagicRailTiltRegistry.normalizeRailId(rail.getHexId()));
+                nearestSettings = settings;
             }
         }
 
@@ -165,7 +245,7 @@ public final class MagicRailTiltClient {
             return null;
         }
 
-        final MagicRailTiltRegistry.TiltSettings nearestSettings = MagicRailTiltRegistry.getTilt(nearestRail.getHexId());
+        recentRails.record(nearestRail.getHexId());
         final double tiltDegrees = nearestSettings == null ? 0 : MagicRailTiltRegistry.interpolateDegrees(nearestSettings, nearestProjection.progress);
         return new TiltLookup(tiltDegrees, nearestRailKey, nearestRail, nearestProjection.progress);
     }
@@ -247,45 +327,40 @@ public final class MagicRailTiltClient {
     }
 
     private static RailProjection projectToRailSegment(Rail rail, double x, double y, double z) {
-        final double railLength = rail.railMath.getLength();
-        if (railLength < 1.0E-4) {
+        final RailSamples samples = getRailSamples(rail);
+        if (samples == null) {
             return null;
         }
 
-        final int samples = Math.max(MIN_CURVE_SAMPLES, Math.min(MAX_CURVE_SAMPLES, (int) Math.ceil(railLength / CURVE_SAMPLE_SPACING)));
-        final Vector firstPoint = rail.railMath.getPosition(0, false);
-        if (firstPoint == null) {
+        final double[] pointsX = samples.pointsX;
+        final double[] pointsY = samples.pointsY;
+        final double[] pointsZ = samples.pointsZ;
+        final int segments = samples.segments;
+
+        if (segments <= 0 || pointsX.length < 2 || pointsX.length != pointsY.length || pointsX.length != pointsZ.length) {
             return null;
         }
 
-        double previousX = firstPoint.x();
-        double previousY = firstPoint.y();
-        double previousZ = firstPoint.z();
         double bestProgress = 0;
         double bestDistanceSquared = Double.MAX_VALUE;
 
-        for (int i = 1; i <= samples; i++) {
-            final double segmentStartProgress = (i - 1D) / samples;
-            final double segmentEndProgress = i / (double) samples;
-            final Vector currentPoint = rail.railMath.getPosition(railLength * segmentEndProgress, false);
-            if (currentPoint == null) {
-                continue;
-            }
-
+        for (int i = 0; i < segments; i++) {
+            final double startX = pointsX[i];
+            final double startY = pointsY[i];
+            final double startZ = pointsZ[i];
+            final double endX = pointsX[i + 1];
+            final double endY = pointsY[i + 1];
+            final double endZ = pointsZ[i + 1];
             final SegmentProjection segmentProjection = projectOnSegment(
                     x, y, z,
-                    previousX, previousY, previousZ,
-                    currentPoint.x(), currentPoint.y(), currentPoint.z()
+                    startX, startY, startZ,
+                    endX, endY, endZ
             );
 
             if (segmentProjection.distanceSquared < bestDistanceSquared) {
                 bestDistanceSquared = segmentProjection.distanceSquared;
-                bestProgress = segmentStartProgress + (segmentEndProgress - segmentStartProgress) * segmentProjection.segmentProgress;
+                bestProgress = (i + segmentProjection.segmentProgress) / (double) segments;
             }
-
-            previousX = currentPoint.x();
-            previousY = currentPoint.y();
-            previousZ = currentPoint.z();
         }
 
         if (bestDistanceSquared == Double.MAX_VALUE) {
@@ -293,6 +368,143 @@ public final class MagicRailTiltClient {
         }
 
         return new RailProjection(bestProgress, bestDistanceSquared);
+    }
+
+    private static RailSamples getRailSamples(Rail rail) {
+        if (rail == null || rail.railMath == null) {
+            return null;
+        }
+
+        final String railId = rail.getHexId();
+        if (railId == null || railId.isEmpty()) {
+            return null;
+        }
+
+        final long signature = computeRailSignature(rail);
+        final long now = System.currentTimeMillis();
+
+        final RailSamples existing = RAIL_SAMPLES_BY_ID.get(railId);
+        if (existing != null && existing.signature == signature) {
+            existing.lastUsedMillis = now;
+            maybePruneRailSamples(now);
+            return existing;
+        }
+
+        final RailSamples rebuilt = buildRailSamples(rail, signature, now);
+        if (rebuilt != null) {
+            RAIL_SAMPLES_BY_ID.put(railId, rebuilt);
+            maybePruneRailSamples(now);
+            return rebuilt;
+        }
+
+        // If rebuild fails, keep using the previous samples if any (better than falling back to "no tilt").
+        if (existing != null) {
+            existing.lastUsedMillis = now;
+            maybePruneRailSamples(now);
+            return existing;
+        }
+
+        maybePruneRailSamples(now);
+        return null;
+    }
+
+    private static RailSamples buildRailSamples(Rail rail, long signature, long nowMillis) {
+        if (rail == null || rail.railMath == null) {
+            return null;
+        }
+
+        final double railLength;
+        try {
+            railLength = rail.railMath.getLength();
+        } catch (Throwable ignored) {
+            return null;
+        }
+
+        if (!(railLength > 1.0E-4)) {
+            return null;
+        }
+
+        final int segments = Math.max(MIN_CURVE_SAMPLES, Math.min(MAX_CURVE_SAMPLES, (int) Math.ceil(railLength / CURVE_SAMPLE_SPACING)));
+        final int pointCount = segments + 1;
+        final double[] pointsX = new double[pointCount];
+        final double[] pointsY = new double[pointCount];
+        final double[] pointsZ = new double[pointCount];
+
+        for (int i = 0; i <= segments; i++) {
+            final double progress = i / (double) segments;
+            final Vector point;
+            try {
+                point = rail.railMath.getPosition(railLength * progress, false);
+            } catch (Throwable ignored) {
+                return null;
+            }
+            if (point == null) {
+                return null;
+            }
+            pointsX[i] = point.x();
+            pointsY[i] = point.y();
+            pointsZ[i] = point.z();
+        }
+
+        return new RailSamples(signature, nowMillis, segments, pointsX, pointsY, pointsZ);
+    }
+
+    private static long computeRailSignature(Rail rail) {
+        if (rail == null || rail.railMath == null) {
+            return 0;
+        }
+
+        try {
+            long hash = 1469598103934665603L;
+
+            final double length = rail.railMath.getLength();
+            hash = (hash ^ Double.doubleToLongBits(length)) * 1099511628211L;
+
+            final Rail.Shape shape = rail.railMath.getShape();
+            hash = (hash ^ (shape == null ? 0 : shape.ordinal())) * 1099511628211L;
+
+            hash = (hash ^ Double.doubleToLongBits(rail.railMath.getVerticalRadius())) * 1099511628211L;
+            hash = (hash ^ Double.doubleToLongBits(rail.railMath.getMaxVerticalRadius())) * 1099511628211L;
+
+            hash = (hash ^ rail.railMath.minX) * 1099511628211L;
+            hash = (hash ^ rail.railMath.minY) * 1099511628211L;
+            hash = (hash ^ rail.railMath.minZ) * 1099511628211L;
+            hash = (hash ^ rail.railMath.maxX) * 1099511628211L;
+            hash = (hash ^ rail.railMath.maxY) * 1099511628211L;
+            hash = (hash ^ rail.railMath.maxZ) * 1099511628211L;
+
+            return hash;
+        } catch (Throwable ignored) {
+            return 0;
+        }
+    }
+
+    private static void maybePruneRailSamples(long nowMillis) {
+        if (nowMillis - lastRailSamplePruneMillis < RAIL_SAMPLE_CACHE_PRUNE_INTERVAL_MILLIS) {
+            return;
+        }
+        lastRailSamplePruneMillis = nowMillis;
+
+        // Remove entries that haven't been used recently. This bounds memory usage.
+        RAIL_SAMPLES_BY_ID.entrySet().removeIf(entry -> {
+            final RailSamples samples = entry.getValue();
+            return samples == null || nowMillis - samples.lastUsedMillis > RAIL_SAMPLE_CACHE_ENTRY_TIMEOUT_MILLIS;
+        });
+
+        final int oversize = RAIL_SAMPLES_BY_ID.size() - MAX_RAIL_SAMPLE_CACHE_ENTRIES;
+        if (oversize <= 0) {
+            return;
+        }
+
+        int removed = 0;
+        for (final String key : RAIL_SAMPLES_BY_ID.keySet()) {
+            if (removed >= oversize) {
+                break;
+            }
+            if (RAIL_SAMPLES_BY_ID.remove(key) != null) {
+                removed++;
+            }
+        }
     }
 
     private static SegmentProjection projectOnSegment(
@@ -377,6 +589,7 @@ public final class MagicRailTiltClient {
         }
         lastPruneMillis = now;
         SMOOTHED_TILT.entrySet().removeIf(entry -> now - entry.getValue().updatedMillis > SMOOTHING_ENTRY_TIMEOUT_MILLIS);
+        maybePruneRailSamples(now);
     }
 
     private static final class RailProjection {
@@ -420,6 +633,50 @@ public final class MagicRailTiltClient {
         private SmoothedTiltEntry(double value, long updatedMillis) {
             this.value = value;
             this.updatedMillis = updatedMillis;
+        }
+    }
+
+    private static final class RailSamples {
+        private final long signature;
+        private volatile long lastUsedMillis;
+        private final int segments;
+        private final double[] pointsX;
+        private final double[] pointsY;
+        private final double[] pointsZ;
+
+        private RailSamples(long signature, long lastUsedMillis, int segments, double[] pointsX, double[] pointsY, double[] pointsZ) {
+            this.signature = signature;
+            this.lastUsedMillis = lastUsedMillis;
+            this.segments = segments;
+            this.pointsX = pointsX;
+            this.pointsY = pointsY;
+            this.pointsZ = pointsZ;
+        }
+    }
+
+    private static final class RecentRails {
+        private final String[] railIds = new String[RECENT_RAIL_CANDIDATE_COUNT];
+        private int cursor;
+
+        private void record(String railId) {
+            if (railId == null || railId.isEmpty()) {
+                return;
+            }
+
+            for (int i = 0; i < railIds.length; i++) {
+                if (railId.equals(railIds[i])) {
+                    return;
+                }
+            }
+
+            railIds[cursor] = railId;
+            cursor = (cursor + 1) % railIds.length;
+        }
+
+        @SuppressWarnings("unused")
+        private void clear() {
+            Arrays.fill(railIds, null);
+            cursor = 0;
         }
     }
 }

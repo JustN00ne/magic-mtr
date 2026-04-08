@@ -1,5 +1,8 @@
 package org.justnoone.jme.systemmap;
 
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.world.ServerWorld;
+import net.minecraft.util.WorldSavePath;
 import org.justnoone.jme.config.JmeConfig;
 import org.justnoone.jme.config.MagicConfigPaths;
 import org.mtr.libraries.com.google.gson.Gson;
@@ -18,8 +21,12 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.security.MessageDigest;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -32,6 +39,8 @@ public final class SystemMapOverlayCacheStore {
 
     private static final Gson GSON = new GsonBuilder().create();
     private static final long SAVE_DEBOUNCE_MILLIS = 15000;
+    private static final long VEHICLE_STALE_MILLIS = 5000;
+    private static final long RAIL_PRUNE_GRACE_MILLIS = 0;
 
     private static final Map<String, DimensionCache> CACHE_BY_DIMENSION = new LinkedHashMap<>();
 
@@ -41,13 +50,44 @@ public final class SystemMapOverlayCacheStore {
         return thread;
     });
 
+    /**
+     * Used to prevent cache leakage between different world saves (eg singleplayer world A -> world B without restarting).
+     * This string is incorporated into on-disk cache filenames, and when it changes we clear the in-memory cache.
+     */
+    private static volatile String worldKey = "";
+    private static volatile MinecraftServer serverInstance;
+
     private SystemMapOverlayCacheStore() {
+    }
+
+    public static String getWorldKey() {
+        return worldKey;
+    }
+
+    public static synchronized void onServerStarted(MinecraftServer server) {
+        serverInstance = server;
+        setWorldKey(computeWorldKey(server));
+    }
+
+    public static synchronized void onServerStopping() {
+        serverInstance = null;
+        setWorldKey("");
+    }
+
+    private static void setWorldKey(String newWorldKey) {
+        final String normalized = newWorldKey == null ? "" : newWorldKey.trim();
+        if (Objects.equals(worldKey, normalized)) {
+            return;
+        }
+        worldKey = normalized;
+        CACHE_BY_DIMENSION.clear();
     }
 
     public static synchronized void mergeLiveRails(String dimension, JsonArray rails, long snapshotTimeMillis) {
         if (dimension == null) {
             dimension = "";
         }
+        dimension = normalizeDimensionId(dimension);
 
         final DimensionCache cache = ensureLoaded(dimension);
         final long normalizedSnapshotTime = snapshotTimeMillis <= 0 ? 0 : snapshotTimeMillis;
@@ -56,25 +96,36 @@ public final class SystemMapOverlayCacheStore {
         }
         cache.lastMergedRailsSnapshotTimeMillis = normalizedSnapshotTime;
 
-        if (rails == null || rails.size() == 0) {
-            return;
-        }
+        final long now = System.currentTimeMillis();
+        final long seenAtMillis = normalizedSnapshotTime == 0 ? now : normalizedSnapshotTime;
+        final int expectedSize = rails == null ? 0 : rails.size();
+        final HashSet<String> seenIds = new HashSet<>(Math.max(16, expectedSize * 2));
 
         boolean changed = false;
-        for (int i = 0; i < rails.size(); i++) {
-            final JsonElement element = rails.get(i);
-            if (element == null || !element.isJsonObject()) {
-                continue;
+        if (rails != null && rails.size() > 0) {
+            for (int i = 0; i < rails.size(); i++) {
+                final JsonElement element = rails.get(i);
+                if (element == null || !element.isJsonObject()) {
+                    continue;
+                }
+                final JsonObject railJson = element.getAsJsonObject();
+                final String id = getId(railJson);
+                if (id.isEmpty()) {
+                    continue;
+                }
+                seenIds.add(id);
+                cache.railLastSeenMillisById.put(id, seenAtMillis);
+                final JsonObject previous = cache.railsById.put(id, railJson);
+                if (previous != railJson) {
+                    changed = true;
+                }
             }
-            final JsonObject railJson = element.getAsJsonObject();
-            final String id = getId(railJson);
-            if (id.isEmpty()) {
-                continue;
-            }
-            final JsonObject previous = cache.railsById.put(id, railJson);
-            if (previous != railJson) {
-                changed = true;
-            }
+        }
+
+        // Prune rails that disappeared from the live snapshot *and* are in currently-loaded chunks.
+        // This avoids "ghost rails" after removal while still keeping rails cached for far-away unloaded areas.
+        if (pruneMissingRailsInLoadedChunks(dimension, cache, seenIds, seenAtMillis)) {
+            changed = true;
         }
 
         if (changed) {
@@ -88,6 +139,7 @@ public final class SystemMapOverlayCacheStore {
         if (dimension == null) {
             dimension = "";
         }
+        dimension = normalizeDimensionId(dimension);
 
         final DimensionCache cache = ensureLoaded(dimension);
         final long normalizedSnapshotTime = snapshotTimeMillis <= 0 ? 0 : snapshotTimeMillis;
@@ -96,25 +148,34 @@ public final class SystemMapOverlayCacheStore {
         }
         cache.lastMergedVehiclesSnapshotTimeMillis = normalizedSnapshotTime;
 
-        if (vehicles == null || vehicles.size() == 0) {
-            return;
-        }
+        final long now = System.currentTimeMillis();
+        final long seenAtMillis = normalizedSnapshotTime == 0 ? now : normalizedSnapshotTime;
+        final int expectedSize = vehicles == null ? 0 : vehicles.size();
+        final HashSet<String> seenIds = new HashSet<>(Math.max(16, expectedSize * 2));
 
         boolean changed = false;
-        for (int i = 0; i < vehicles.size(); i++) {
-            final JsonElement element = vehicles.get(i);
-            if (element == null || !element.isJsonObject()) {
-                continue;
+        if (vehicles != null && vehicles.size() > 0) {
+            for (int i = 0; i < vehicles.size(); i++) {
+                final JsonElement element = vehicles.get(i);
+                if (element == null || !element.isJsonObject()) {
+                    continue;
+                }
+                final JsonObject vehicleJson = element.getAsJsonObject();
+                final String id = getId(vehicleJson);
+                if (id.isEmpty()) {
+                    continue;
+                }
+                seenIds.add(id);
+                cache.vehicleLastSeenMillisById.put(id, seenAtMillis);
+                final JsonObject previous = cache.vehiclesById.put(id, vehicleJson);
+                if (previous != vehicleJson) {
+                    changed = true;
+                }
             }
-            final JsonObject vehicleJson = element.getAsJsonObject();
-            final String id = getId(vehicleJson);
-            if (id.isEmpty()) {
-                continue;
-            }
-            final JsonObject previous = cache.vehiclesById.put(id, vehicleJson);
-            if (previous != vehicleJson) {
-                changed = true;
-            }
+        }
+
+        if (pruneStaleVehicles(cache, seenIds, now)) {
+            changed = true;
         }
 
         if (changed) {
@@ -128,6 +189,7 @@ public final class SystemMapOverlayCacheStore {
         if (dimension == null) {
             dimension = "";
         }
+        dimension = normalizeDimensionId(dimension);
         final DimensionCache cache = ensureLoaded(dimension);
         if (cache.railsArrayDirty || cache.railsArrayCache == null) {
             cache.railsArrayCache = new JsonArray();
@@ -141,6 +203,7 @@ public final class SystemMapOverlayCacheStore {
         if (dimension == null) {
             dimension = "";
         }
+        dimension = normalizeDimensionId(dimension);
         final DimensionCache cache = ensureLoaded(dimension);
         if (cache.vehiclesArrayDirty || cache.vehiclesArrayCache == null) {
             cache.vehiclesArrayCache = new JsonArray();
@@ -191,10 +254,11 @@ public final class SystemMapOverlayCacheStore {
         }
         cache.lastSaveStartMillis = now;
 
+        final String worldKeySnapshot = worldKey;
         final LinkedHashMap<String, JsonObject> railsSnapshot = new LinkedHashMap<>(cache.railsById);
         final LinkedHashMap<String, JsonObject> vehiclesSnapshot = new LinkedHashMap<>(cache.vehiclesById);
 
-        SAVE_EXECUTOR.execute(() -> saveToDisk(dimension, railsSnapshot, vehiclesSnapshot));
+        SAVE_EXECUTOR.execute(() -> saveToDisk(worldKeySnapshot, dimension, railsSnapshot, vehiclesSnapshot));
     }
 
     private static void loadFromDisk(String dimension, DimensionCache cache) {
@@ -253,10 +317,13 @@ public final class SystemMapOverlayCacheStore {
         }
     }
 
-    private static void saveToDisk(String dimension, LinkedHashMap<String, JsonObject> railsById, LinkedHashMap<String, JsonObject> vehiclesById) {
+    private static void saveToDisk(String worldKeySnapshot, String dimension, LinkedHashMap<String, JsonObject> railsById, LinkedHashMap<String, JsonObject> vehiclesById) {
         try {
             final JsonObject root = new JsonObject();
             root.addProperty("savedAt", System.currentTimeMillis());
+            if (worldKeySnapshot != null && !worldKeySnapshot.isEmpty()) {
+                root.addProperty("worldKey", worldKeySnapshot);
+            }
 
             final JsonArray rails = new JsonArray();
             railsById.values().forEach(rails::add);
@@ -266,7 +333,7 @@ public final class SystemMapOverlayCacheStore {
             vehiclesById.values().forEach(vehicles::add);
             root.add("vehicles", vehicles);
 
-            final Path path = getCachePath(dimension);
+            final Path path = getCachePath(worldKeySnapshot, dimension);
             Files.createDirectories(path.getParent());
             final byte[] rawJson = GSON.toJson(root).getBytes(StandardCharsets.UTF_8);
             Files.write(path, writeLzma2Bytes(rawJson));
@@ -275,8 +342,208 @@ public final class SystemMapOverlayCacheStore {
     }
 
     private static Path getCachePath(String dimension) {
+        return getCachePath(worldKey, dimension);
+    }
+
+    private static Path getCachePath(String worldKeyValue, String dimension) {
         final String safeDimension = dimension == null ? "" : dimension.replaceAll("[^a-zA-Z0-9\\-_.]+", "_");
-        return MagicConfigPaths.resolveMapFile("system_map_overlay_cache_" + safeDimension + ".lzma2");
+        final String safeWorldKey = worldKeyValue == null || worldKeyValue.isEmpty()
+                ? ""
+                : worldKeyValue.replaceAll("[^a-zA-Z0-9\\-_.]+", "_") + "_";
+        return MagicConfigPaths.resolveMapFile("system_map_overlay_cache_" + safeWorldKey + safeDimension + ".lzma2");
+    }
+
+    private static boolean pruneStaleVehicles(DimensionCache cache, HashSet<String> liveIds, long nowMillis) {
+        if (cache == null || cache.vehiclesById.isEmpty()) {
+            return false;
+        }
+
+        final boolean[] removed = {false};
+        cache.vehiclesById.entrySet().removeIf(entry -> {
+            if (entry == null) {
+                return false;
+            }
+            final String id = entry.getKey();
+            if (id == null || id.isEmpty() || (liveIds != null && liveIds.contains(id))) {
+                return false;
+            }
+
+            final Long lastSeen = cache.vehicleLastSeenMillisById.get(id);
+            final long age = lastSeen == null ? Long.MAX_VALUE : nowMillis - lastSeen;
+            if (age <= VEHICLE_STALE_MILLIS) {
+                return false;
+            }
+
+            cache.vehicleLastSeenMillisById.remove(id);
+            removed[0] = true;
+            return true;
+        });
+
+        return removed[0];
+    }
+
+    private static boolean pruneMissingRailsInLoadedChunks(String dimension, DimensionCache cache, HashSet<String> liveIds, long snapshotTimeMillis) {
+        if (cache == null || cache.railsById.isEmpty()) {
+            return false;
+        }
+
+        final boolean[] removed = {false};
+        cache.railsById.entrySet().removeIf(entry -> {
+            if (entry == null) {
+                return false;
+            }
+            final String id = entry.getKey();
+            if (id == null || id.isEmpty() || (liveIds != null && liveIds.contains(id))) {
+                return false;
+            }
+
+            final Long lastSeen = cache.railLastSeenMillisById.get(id);
+            if (lastSeen != null && snapshotTimeMillis - lastSeen < RAIL_PRUNE_GRACE_MILLIS) {
+                return false;
+            }
+
+            if (!isRailLikelyLoadedInWorld(dimension, id)) {
+                return false;
+            }
+
+            cache.railLastSeenMillisById.remove(id);
+            removed[0] = true;
+            return true;
+        });
+
+        return removed[0];
+    }
+
+    private static boolean isRailLikelyLoadedInWorld(String dimension, String railId) {
+        final MinecraftServer server = serverInstance;
+        if (server == null || dimension == null || dimension.isEmpty() || railId == null || railId.isEmpty()) {
+            return false;
+        }
+
+        final ServerWorld world = resolveWorld(server, dimension);
+        if (world == null) {
+            return false;
+        }
+
+        final long[] xz = parseRailXz(railId);
+        if (xz == null) {
+            return false;
+        }
+
+        final int chunkX1 = (int) (xz[0] >> 4);
+        final int chunkZ1 = (int) (xz[1] >> 4);
+        final int chunkX2 = (int) (xz[2] >> 4);
+        final int chunkZ2 = (int) (xz[3] >> 4);
+
+        return isChunkLoaded(world, chunkX1, chunkZ1) || isChunkLoaded(world, chunkX2, chunkZ2);
+    }
+
+    private static ServerWorld resolveWorld(MinecraftServer server, String dimension) {
+        if (server == null || dimension == null || dimension.isEmpty()) {
+            return null;
+        }
+
+        final String normalizedTarget = normalizeDimensionId(dimension);
+        try {
+            for (final ServerWorld world : server.getWorlds()) {
+                if (world == null) {
+                    continue;
+                }
+                final String worldId = String.valueOf(world.getRegistryKey().getValue());
+                if (normalizeDimensionId(worldId).equals(normalizedTarget)) {
+                    return world;
+                }
+            }
+        } catch (Exception ignored) {
+        }
+
+        return null;
+    }
+
+    private static String normalizeDimensionId(String id) {
+        if (id == null) {
+            return "";
+        }
+
+        final String normalized = id.trim().replace(':', '/');
+        return normalized.startsWith("/") ? normalized.substring(1) : normalized;
+    }
+
+    private static long[] parseRailXz(String railId) {
+        final String[] split = railId.split("-");
+        if (split.length != 6) {
+            return null;
+        }
+
+        try {
+            final long x1 = Long.parseUnsignedLong(split[0], 16);
+            final long z1 = Long.parseUnsignedLong(split[2], 16);
+            final long x2 = Long.parseUnsignedLong(split[3], 16);
+            final long z2 = Long.parseUnsignedLong(split[5], 16);
+            return new long[]{x1, z1, x2, z2};
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    private static boolean isChunkLoaded(ServerWorld world, int chunkX, int chunkZ) {
+        if (world == null) {
+            return false;
+        }
+
+        try {
+            // Use direct calls so this keeps working after Loom remaps the mod to intermediary.
+            return world.getChunkManager().isChunkLoaded(chunkX, chunkZ);
+        } catch (Throwable ignored) {
+            return false;
+        }
+    }
+
+    private static String computeWorldKey(MinecraftServer server) {
+        final Path root = resolveWorldRoot(server);
+        if (root == null) {
+            return "";
+        }
+
+        final String absolute = root.toAbsolutePath().normalize().toString();
+        try {
+            final MessageDigest digest = MessageDigest.getInstance("SHA-1");
+            final byte[] hash = digest.digest(absolute.getBytes(StandardCharsets.UTF_8));
+            return toHex(hash);
+        } catch (Exception ignored) {
+            return Integer.toHexString(absolute.hashCode());
+        }
+    }
+
+    private static Path resolveWorldRoot(MinecraftServer server) {
+        if (server == null) {
+            return null;
+        }
+
+        try {
+            // Use direct calls so this keeps working after Loom remaps the mod to intermediary.
+            return server.getSavePath(WorldSavePath.ROOT);
+        } catch (Throwable ignored) {
+        }
+
+        // Fallback: use working directory, still enough to prevent most cross-world mixing in practice.
+        try {
+            // Must remain Java 8 compatible (builds target multiple MC versions).
+            return Paths.get(".").toAbsolutePath().normalize();
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
+
+    private static String toHex(byte[] bytes) {
+        if (bytes == null || bytes.length == 0) {
+            return "";
+        }
+        final StringBuilder sb = new StringBuilder(bytes.length * 2);
+        for (final byte b : bytes) {
+            sb.append(String.format("%02x", b));
+        }
+        return sb.toString();
     }
 
     private static String readLzma2Text(byte[] compressedBytes) {
@@ -318,6 +585,8 @@ public final class SystemMapOverlayCacheStore {
         private boolean loaded;
         private final LinkedHashMap<String, JsonObject> railsById = new LinkedHashMap<>();
         private final LinkedHashMap<String, JsonObject> vehiclesById = new LinkedHashMap<>();
+        private final LinkedHashMap<String, Long> railLastSeenMillisById = new LinkedHashMap<>();
+        private final LinkedHashMap<String, Long> vehicleLastSeenMillisById = new LinkedHashMap<>();
         private JsonArray railsArrayCache;
         private JsonArray vehiclesArrayCache;
         private boolean railsArrayDirty = true;

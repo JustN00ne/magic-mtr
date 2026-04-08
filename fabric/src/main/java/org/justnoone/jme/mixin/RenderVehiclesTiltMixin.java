@@ -84,7 +84,10 @@ public class RenderVehiclesTiltMixin {
     }
 
     @ModifyArgs(
-            method = "render(JLorg/mtr/mapping/holder/Vector3d;)V",
+            // In current MTR versions (eg 4.0.3+1.20.1) the gangway/barrier connections are rendered
+            // inside a synthetic lambda method, not directly in RenderVehicles#render.
+            // Keep the original target for backwards compatibility.
+            method = {"lambda$render$12", "render(JLorg/mtr/mapping/holder/Vector3d;)V"},
             at = @At(
                     value = "INVOKE",
                     target = "Lorg/mtr/mod/render/RenderVehicles;renderConnection(ZZZLorg/mtr/mod/render/RenderVehicles$PreviousConnectionPositions;Lorg/mtr/mapping/holder/Identifier;Lorg/mtr/mapping/holder/Identifier;Lorg/mtr/mapping/holder/Identifier;Lorg/mtr/mapping/holder/Identifier;Lorg/mtr/mapping/holder/Identifier;Lorg/mtr/mapping/holder/Identifier;Lorg/mtr/mod/render/PositionAndRotation;ZDDDDDDZ)V",
@@ -98,7 +101,8 @@ public class RenderVehiclesTiltMixin {
     }
 
     @ModifyArgs(
-            method = "render(JLorg/mtr/mapping/holder/Vector3d;)V",
+            // See note above.
+            method = {"lambda$render$12", "render(JLorg/mtr/mapping/holder/Vector3d;)V"},
             at = @At(
                     value = "INVOKE",
                     target = "Lorg/mtr/mod/render/RenderVehicles;renderConnection(ZZZLorg/mtr/mod/render/RenderVehicles$PreviousConnectionPositions;Lorg/mtr/mapping/holder/Identifier;Lorg/mtr/mapping/holder/Identifier;Lorg/mtr/mapping/holder/Identifier;Lorg/mtr/mapping/holder/Identifier;Lorg/mtr/mapping/holder/Identifier;Lorg/mtr/mapping/holder/Identifier;Lorg/mtr/mod/render/PositionAndRotation;ZDDDDDDZ)V",

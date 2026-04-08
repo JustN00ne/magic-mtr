@@ -1,0 +1,1 @@
+package org.mtr.core.generated;@javax.annotation.Nullable public final class WebserverResources{public static String get(String resource){switch(resource.startsWith("/")?resource.substring(1):resource){default:return null;}}}

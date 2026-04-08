@@ -1,7 +1,8 @@
 {
   "itemGroup.jme.jme_tab": "MAGIC",
   "item.jme.magic_icon": "MAGIC Icon (Internal)",
-  "item.mtr.rail_connector_300": "MAGIC Universal Rail Connector",
+  "item.jme.magic_rail_connector": "MAGIC Universal Rail Connector",
+  "item.jme.magic_rail_connector_one_way": "MAGIC One-way Rail Connector",
 
   "block.jme.platform_german": "German Platform",
   "block.jme.platform_german_slab": "German Platform Slab",
@@ -9,8 +10,6 @@
   "block.jme.platform_polish_slab": "Polish Platform Slab",
   "block.jme.platform_czech": "Czech Platform",
   "block.jme.platform_czech_slab": "Czech Platform Slab",
-  "block.jme.platform_russian": "Russian Platform",
-  "block.jme.platform_russian_slab": "Russian Platform Slab",
   "block.jme.platform_portuguese": "Portuguese Platform",
   "block.jme.platform_portuguese_slab": "Portuguese Platform Slab",
   "block.jme.platform_blue_american": "Blue American Platform",

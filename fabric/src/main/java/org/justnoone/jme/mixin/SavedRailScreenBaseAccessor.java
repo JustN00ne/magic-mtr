@@ -10,4 +10,7 @@ public interface SavedRailScreenBaseAccessor {
 
     @Accessor("savedRailBase")
     SavedRailBase<?, ?> jme$getSavedRailBase();
+
+    @Accessor("showScheduleControls")
+    boolean jme$getShowScheduleControls();
 }

@@ -10,7 +10,28 @@ plugins {
 
 def mcVer = (project.findProperty("minecraft_version") ?: "1.20.1").toString()
 def mcMinor = Integer.parseInt(mcVer.split("\\.")[1])
+def mcPatch = {
+    def parts = mcVer.split("\\.")
+    if (parts.length >= 3) {
+        try {
+            return Integer.parseInt(parts[2])
+        } catch (Exception ignored) {
+            return 0
+        }
+    }
+    return 0
+}.call()
+
+// YetAnotherConfigLib support:
+// - No supported versions for <= 1.18.x
+// - YACL 2.2.0 backport exists for 1.19.2
+// - YACL v3 exists for 1.19.4+
+def useYacl2 = (mcMinor == 19 && mcPatch == 2)
+def useYacl3 = (mcMinor > 19) || (mcMinor == 19 && mcPatch >= 4)
+def useAnyYacl = useYacl2 || useYacl3
+
 def targetJava = mcMinor <= 16 ? 8 : (mcMinor == 17 ? 16 : 17)
+def mixinCompatibilityLevel = "JAVA_${targetJava}"
 def dependencyCompatMcVer = ["1.19": "1.19.2", "1.21.1": "1.20.4"].get(mcVer, mcVer)
 
 def jsonSlurper = new JsonSlurper()
@@ -37,6 +58,10 @@ def resolvedLoaderVersion = {
     versions[0].loader.version.toString()
 }.call()
 
+// The Fabric Loader version used for local/dev runs can be the latest, but the mod metadata should
+// declare only the minimum required version (otherwise older loader installs will refuse to start).
+def minLoaderVersion = (project.findProperty("min_loader_version") ?: "0.14.0").toString()
+
 def resolvedYarnVersion = {
     if (mcVer == "1.20.1") {
         return "1.20.1+build.10"
@@ -51,6 +76,9 @@ def resolvedYarnVersion = {
 def resolvedFabricApiVersion = firstModrinthVersion("fabric-api", "fabric", mcVer)
 def resolvedModMenuVersion = firstModrinthVersion("modmenu", "fabric", mcVer)
 def resolvedMtrVersion = firstModrinthVersion("minecraft-transit-railway", "fabric", dependencyCompatMcVer)
+def resolvedBlueMapVersion = firstModrinthVersion("bluemap", "fabric", mcVer)
+def resolvedClothConfigVersion = firstModrinthVersion("cloth-config", "fabric", mcVer)
+def resolvedYaclVersion = useAnyYacl ? firstModrinthVersion("yacl", "fabric", mcVer) : null
 
 version = project.mod_version
 group = project.maven_group
@@ -76,7 +104,14 @@ loom {
 sourceSets {
     main {
         java {
-            setSrcDirs(["common/src/main/java", "fabric/src/main/java"])
+            def srcDirs = ["common/src/main/java", "fabric/src/main/java"]
+            if (useYacl2) {
+                srcDirs.add("fabric/src/yacl2/java")
+            }
+            if (useYacl3) {
+                srcDirs.add("fabric/src/yacl3/java")
+            }
+            setSrcDirs(srcDirs)
         }
         resources {
             setSrcDirs(["fabric/src/main/resources", "common/src/main/resources"])
@@ -92,24 +127,121 @@ dependencies {
     modImplementation "net.fabricmc.fabric-api:fabric-api:${resolvedFabricApiVersion}"
     modImplementation "maven.modrinth:minecraft-transit-railway:${resolvedMtrVersion}"
     modImplementation "com.terraformersmc:modmenu:${resolvedModMenuVersion}"
+    modImplementation "maven.modrinth:cloth-config:${resolvedClothConfigVersion}"
+    if (useAnyYacl) {
+        modImplementation "maven.modrinth:yacl:${resolvedYaclVersion}"
+    }
+    modCompileOnly "maven.modrinth:bluemap:${resolvedBlueMapVersion}"
 
     compileOnly "com.google.code.findbugs:jsr305:3.0.2"
     implementation "org.tukaani:xz:1.9"
     include "org.tukaani:xz:1.9"
 }
 
+// Cloth Config bundles basic-math as a nested (jar-in-jar) dependency.
+// Loom does not expose those nested jars on the compile classpath, so add them explicitly.
+configurations {
+    clothConfigNestedJars
+}
+
+dependencies {
+    clothConfigNestedJars "maven.modrinth:cloth-config:${resolvedClothConfigVersion}"
+}
+
+def clothNestedDirProvider = layout.buildDirectory.dir("cloth-config-nested-jars")
+
+tasks.register("extractClothConfigNestedJars", Copy) {
+    from({
+        configurations.clothConfigNestedJars.collect { jarFile ->
+            zipTree(jarFile).matching {
+                include "META-INF/jars/*.jar"
+            }
+        }
+    })
+    into(clothNestedDirProvider)
+}
+
+tasks.withType(JavaCompile).configureEach {
+    dependsOn("extractClothConfigNestedJars")
+    classpath += fileTree(dir: clothNestedDirProvider, include: "**/*.jar")
+}
+
+tasks.matching { it.name in ["runClient", "runServer"] }.configureEach { t ->
+    if (t instanceof JavaExec) {
+        dependsOn("extractClothConfigNestedJars")
+        classpath += fileTree(dir: clothNestedDirProvider, include: "**/*.jar")
+    }
+}
+
+if (useYacl3) {
+    // YACL v3 bundles some libraries using Fabric's "jars" (jar-in-jar) mechanism.
+    // In some dev/runtime setups those nested jars are not injected onto the classpath, causing
+    // NoClassDefFoundError (e.g., org.quiltmc.parsers.json.gson.GsonWriter) very early in game init.
+    // Work around it by extracting YACL's nested jars for dev runs and adding them to the run classpath.
+    configurations {
+        yaclNestedJars
+    }
+
+    dependencies {
+        yaclNestedJars "maven.modrinth:yacl:${resolvedYaclVersion}"
+    }
+
+    def yaclNestedDirProvider = layout.buildDirectory.dir("yacl-nested-jars")
+
+    tasks.register("extractYaclNestedJars", Copy) {
+        from({
+            configurations.yaclNestedJars.collect { jarFile ->
+                zipTree(jarFile).matching {
+                    include "META-INF/jars/*.jar"
+                    // We already depend on a newer standalone mixinextras mod; don't add YACL's embedded one.
+                    exclude "META-INF/jars/mixinextras-fabric-*.jar"
+                }
+            }
+        })
+        into(yaclNestedDirProvider)
+    }
+
+    tasks.matching { it.name in ["runClient", "runServer"] }.configureEach { t ->
+        if (t instanceof JavaExec) {
+            dependsOn("extractYaclNestedJars")
+            // Add extracted nested jars to the runtime classpath (as libraries, not mods).
+            classpath += fileTree(dir: yaclNestedDirProvider, include: "**/*.jar")
+        }
+    }
+}
+
 processResources {
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
     inputs.property "version", project.version
     inputs.property "minecraft_version", mcVer
-    inputs.property "loader_version", resolvedLoaderVersion
+    inputs.property "min_loader_version", minLoaderVersion
+    inputs.property "java_version", targetJava
+    inputs.property "mixin_compatibility_level", mixinCompatibilityLevel
 
-    filesMatching("fabric.mod.json") {
+    filesMatching(["fabric.mod.json", "*.mixins.json"]) {
         expand(
                 "version": project.version,
                 "minecraft_version": mcVer,
-                "loader_version": resolvedLoaderVersion
+                "min_loader_version": minLoaderVersion,
+                "java_version": targetJava,
+                "mixin_compatibility_level": mixinCompatibilityLevel
         )
+    }
+
+    // Custom connector textures are authored at repo root (requested),
+    // but must be packaged under the normal Minecraft assets path.
+    def magicConnectorTexture = rootProject.file("rail_connector_magic.png")
+    if (magicConnectorTexture.exists()) {
+        from(magicConnectorTexture) {
+            into("assets/jme/textures/item")
+        }
+    }
+
+    def magicConnectorOneWayTexture = rootProject.file("rail_connector_magic_one_way.png")
+    if (magicConnectorOneWayTexture.exists()) {
+        from(magicConnectorOneWayTexture) {
+            into("assets/jme/textures/item")
+        }
     }
 }
 
@@ -128,7 +260,25 @@ tasks.named("sourcesJar").configure {
 }
 
 jar {
+    // Never ship classes under MTR's package namespace. Those can shadow/override the real MTR mod.
+    exclude("org/mtr/**")
     from("LICENSE.txt") {
         rename { "${it}_${project.archives_base_name}" }
+    }
+}
+
+// IntelliJ can generate and run a synthetic Gradle task like ":net.fabricmc.devlaunchinjector.Main.main()"
+// via an init script (see /tmp/net_fabricmc_devlaunchinjector_Main_main__*.gradle).
+// That init script currently splits JVM args on spaces, causing "Could not find or load main class MOD"
+// when the project path contains spaces.
+//
+// Don't create a task with that name here (it would conflict with the init script). Instead, if the IDE
+// creates it, turn it into an alias for Loom's runClient which handles spaces correctly.
+//
+// Important: avoid `tasks.whenTaskAdded { ... }` because it can force eager task creation and break Loom setup.
+tasks.matching { it.name == "net.fabricmc.devlaunchinjector.Main.main()" }.configureEach {
+    if (it instanceof JavaExec) {
+        dependsOn("runClient")
+        enabled = false
     }
 }

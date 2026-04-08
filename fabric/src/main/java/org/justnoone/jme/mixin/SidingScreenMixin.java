@@ -119,16 +119,23 @@ public abstract class SidingScreenMixin {
         return true;
     }
 
-    @Redirect(
-            method = "render",
-            at = @At(
-                    value = "INVOKE",
-                    target = "Lorg/mtr/mapping/mapper/CheckboxWidgetExtension;isChecked2()Z",
-                    ordinal = 0
-            )
-    )
-    private boolean jme$alwaysShowMaxSpeedLabel(CheckboxWidgetExtension checkbox) {
-        return true;
+    @Inject(method = "render", at = @At("TAIL"))
+    private void jme$renderMaxSpeedLabelWhenManualDisabled(org.mtr.mapping.mapper.GraphicsHolder graphicsHolder, int mouseX, int mouseY, float delta, CallbackInfo ci) {
+        final SavedRailScreenBase<?, ?> base = (SavedRailScreenBase<?, ?>) (Object) this;
+        if (!((SavedRailScreenBaseAccessor) base).jme$getShowScheduleControls() || buttonIsManual.isChecked2()) {
+            return;
+        }
+
+        // MTR draws this label only when manual is enabled; we keep the label visible for the
+        // always-visible max speed slider, but keep "Manual To Automatic Time" hidden unless manual is enabled.
+        graphicsHolder.drawText(
+                TextHelper.translatable("gui.mtr.max_manual_speed"),
+                20,
+                114,
+                0xFFFFFFFF,
+                false,
+                org.mtr.mapping.mapper.GraphicsHolder.getDefaultLight()
+        );
     }
 
     @ModifyArg(

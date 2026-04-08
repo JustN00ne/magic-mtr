@@ -24,6 +24,10 @@ import java.lang.reflect.Method;
 @Mixin(value = EditDepotScreen.class, remap = false)
 public abstract class EditDepotScreenCancellationMixin implements IGui {
 
+    // Hidden for the main release UI.
+    @Unique
+    private static final boolean JME_ENABLE_CANCELLATIONS_BUTTON = false;
+
     @Shadow
     @Final
     private ButtonWidgetExtension buttonClearTrains;
@@ -35,6 +39,14 @@ public abstract class EditDepotScreenCancellationMixin implements IGui {
 
     @Inject(method = "init2", at = @At("TAIL"), remap = false)
     private void jme$initCancellationButton(CallbackInfo ci) {
+        if (!JME_ENABLE_CANCELLATIONS_BUTTON) {
+            if (jme$cancellationButton != null) {
+                jme$cancellationButton.visible = false;
+                jme$cancellationButton.active = false;
+            }
+            return;
+        }
+
         if (jme$cancellationButton == null) {
             jme$cancellationButton = new ButtonWidgetExtension(0, 0, 0, SQUARE_SIZE, TextHelper.literal("Cancellations"), button -> jme$openCancellationSettings());
         }
@@ -55,6 +67,14 @@ public abstract class EditDepotScreenCancellationMixin implements IGui {
 
     @Inject(method = "tick2", at = @At("TAIL"), remap = false)
     private void jme$updateCancellationButtonState(CallbackInfo ci) {
+        if (!JME_ENABLE_CANCELLATIONS_BUTTON) {
+            if (jme$cancellationButton != null) {
+                jme$cancellationButton.visible = false;
+                jme$cancellationButton.active = false;
+            }
+            return;
+        }
+
         if (jme$cancellationButton != null) {
             jme$cancellationButton.visible = true;
             jme$cancellationButton.active = true;

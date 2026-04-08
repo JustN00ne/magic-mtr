@@ -247,7 +247,9 @@ public abstract class VehicleAlternativePlatformRerouteMixin {
         final long currentTargetPlatformId = stop1SavedRailBaseId;
 
         // Build a deterministic-but-varied candidate order to avoid always trying the same platform first.
-        final long selectionSeed = jme$mix64(vehicleId ^ depot.getId() ^ now ^ currentTargetPlatformId ^ ((long) stop1StopIndex << 32));
+        // Keep the ordering stable for this vehicle + stop; using wall-clock time here makes reroute attempts
+        // non-deterministic and can cause flip-flopping across repeated attempts.
+        final long selectionSeed = jme$mix64(vehicleId ^ depot.getId() ^ route.getId() ^ ((long) stop1StopIndex << 32));
         final LinkedHashSet<Long> uniqueCandidateIds = new LinkedHashSet<>(candidateIds);
         final List<Long> orderedCandidates = new ArrayList<>(uniqueCandidateIds);
         orderedCandidates.sort(Comparator
@@ -504,6 +506,9 @@ public abstract class VehicleAlternativePlatformRerouteMixin {
         if (cached != null) {
             return cached;
         }
+        if (PathCache.isFailureCached(startId, endId, stopIndex, cruisingAltitude, now)) {
+            return new ObjectArrayList<>();
+        }
 
         final ObjectArrayList<PathData> path = SavedRailPathFinder.findPath(
                 data,
@@ -517,6 +522,8 @@ public abstract class VehicleAlternativePlatformRerouteMixin {
 
         if (path.size() >= 2) {
             PathCache.putCopy(startId, endId, stopIndex, cruisingAltitude, path, now);
+        } else {
+            PathCache.putFailure(startId, endId, stopIndex, cruisingAltitude, now);
         }
 
         return path;

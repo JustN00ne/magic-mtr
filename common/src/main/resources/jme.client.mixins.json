@@ -2,11 +2,12 @@
   "required": true,
   "minVersion": "0.8",
   "package": "org.justnoone.jme.mixin",
-  "compatibilityLevel": "JAVA_17",
+  "compatibilityLevel": "${mixin_compatibility_level}",
   "client": [
     "BlockNodeBrushProfileMixin",
     "ClientPacketHelperTrainDetectorMixin",
     "ColorSelectorScreenLayoutMixin",
+    "ConfigScreenMagicSettingsButtonMixin",
     "DashboardScreenAccessor",
     "DashboardScreenAlternativePlatformMixin",
     "DashboardScreenMagicMenuMixin",
@@ -26,6 +27,7 @@
     "SavedRailScreenBaseAccessor",
     "SidingScreenMixin",
     "SavedRailBasePositionAccessor",
+    "TranslationHolderVehicleSpeedMixin",
     "WidgetMapAccessor",
     "WidgetMapRouteOverlayMixin"
   ],
