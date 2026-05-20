@@ -6,6 +6,8 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.network.ClientPlayerEntity;
 import org.justnoone.jme.config.MagicConfigPaths;
 import org.justnoone.jme.mixin.WidgetMapAccessor;
 import org.mtr.mod.screen.WorldMap;
@@ -102,6 +104,23 @@ public final class DashboardMapAreaStore {
 
         currentIndex = (currentIndex + 1) % mapAreas.size();
         applyToMap(widgetMap, mapAreas.get(currentIndex));
+        return true;
+    }
+
+    public static synchronized boolean centerOnPlayer(WidgetMap widgetMap) {
+        if (widgetMap == null) {
+            return false;
+        }
+
+        final MinecraftClient client = MinecraftClient.getInstance();
+        final ClientPlayerEntity player = client == null ? null : client.player;
+        if (player == null) {
+            return false;
+        }
+
+        final WidgetMapAccessor accessor = (WidgetMapAccessor) (Object) widgetMap;
+        accessor.jme$setCenterX(player.getX());
+        accessor.jme$setCenterY(player.getZ());
         return true;
     }
 

@@ -11,6 +11,7 @@ import org.justnoone.jme.rail.BrushRailProfile;
 import org.justnoone.jme.rail.DepotCancellationRegistry;
 import org.justnoone.jme.rail.MagicRailConstants;
 import org.justnoone.jme.rail.MagicRailTiltRegistry;
+import org.justnoone.jme.rail.PlatformStopPositionRegistry;
 import org.mtr.core.data.Rail;
 import org.mtr.mapping.holder.ItemStack;
 import org.mtr.mod.Items;
@@ -119,6 +120,12 @@ public final class MagicRailNetworking {
             final String routeId = buf.readString();
             final String routeType = buf.readString();
             MagicNetworkingCompat.executeOnServer(server, () -> RouteTypeOverrideConfig.setRouteType(routeId, routeType));
+        });
+
+        MagicNetworkingCompat.registerServerReceiver(MagicRailConstants.SET_PLATFORM_STOP_POSITION_PACKET_ID, (server, player, buf) -> {
+            final long platformId = buf.readLong();
+            final PlatformStopPositionRegistry.StopPosition stopPosition = PlatformStopPositionRegistry.StopPosition.fromString(buf.readString());
+            MagicNetworkingCompat.executeOnServer(server, () -> PlatformStopPositionRegistry.set(platformId, stopPosition));
         });
     }
 

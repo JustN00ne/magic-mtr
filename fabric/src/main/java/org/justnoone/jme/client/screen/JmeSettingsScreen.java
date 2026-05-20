@@ -46,10 +46,12 @@ public class JmeSettingsScreen extends ScreenExtension {
     private final List<TabHitbox> tabHitboxes = new ArrayList<>();
 
     private boolean useMph;
+    private boolean inWorldSpeedTextEnabled;
     private boolean cameraTiltEnabled;
     private double cameraTiltStrength;
     private JmeConfig.DashboardRouteListMode routeListMode;
     private boolean dashboardMapAutoSaveEnabled;
+    private boolean alternativePlatformsEnabled;
     private JmeConfig.DashboardRailOverlayMode dashboardRailOverlayMode;
     private int dashboardRailCullMaxPerCell;
     private boolean systemMapOverlayCacheEnabled;
@@ -59,11 +61,13 @@ public class JmeSettingsScreen extends ScreenExtension {
     private JmeConfig.TrackColorStop[] trackColorCustomGradientStops;
 
     private ButtonWidgetExtension speedUnitButton;
+    private ButtonWidgetExtension inWorldSpeedTextButton;
     private ButtonWidgetExtension cameraTiltButton;
     private SliderWidgetExtension cameraTiltStrengthSlider;
 
     private ButtonWidgetExtension routeListModeButton;
     private ButtonWidgetExtension mapAutoSaveButton;
+    private ButtonWidgetExtension alternativePlatformsButton;
     private ButtonWidgetExtension dashboardRailOverlayButton;
     private SliderWidgetExtension dashboardRailCullMaxSlider;
 
@@ -96,10 +100,12 @@ public class JmeSettingsScreen extends ScreenExtension {
     public JmeSettingsScreen(Screen parent) {
         this.parent = parent;
         this.useMph = JmeConfig.useMph();
+        this.inWorldSpeedTextEnabled = JmeConfig.inWorldSpeedTextEnabled();
         this.cameraTiltEnabled = JmeConfig.cameraTiltEnabled();
         this.cameraTiltStrength = JmeConfig.cameraTiltStrength();
         this.routeListMode = JmeConfig.dashboardRouteListMode();
         this.dashboardMapAutoSaveEnabled = JmeConfig.dashboardMapAutoSaveEnabled();
+        this.alternativePlatformsEnabled = JmeConfig.alternativePlatformsEnabled();
         this.dashboardRailOverlayMode = JmeConfig.dashboardRailOverlayMode();
         this.dashboardRailCullMaxPerCell = JmeConfig.dashboardRailOverlayCullMaxPerCell();
         this.systemMapOverlayCacheEnabled = JmeConfig.systemMapOverlayCacheEnabled();
@@ -179,6 +185,14 @@ public class JmeSettingsScreen extends ScreenExtension {
         state.addEntry(speedUnitButton, rowY, ROW_HEIGHT);
         rowY += ROW_HEIGHT + ROW_GAP;
 
+        inWorldSpeedTextButton = new ButtonWidgetExtension(0, 0, 0, ROW_HEIGHT, getInWorldSpeedTextLabel(), button -> {
+            inWorldSpeedTextEnabled = !inWorldSpeedTextEnabled;
+            button.setMessage(Text.cast(getInWorldSpeedTextLabel()));
+        });
+        addChild(new ClickableWidget(inWorldSpeedTextButton));
+        state.addEntry(inWorldSpeedTextButton, rowY, ROW_HEIGHT);
+        rowY += ROW_HEIGHT + ROW_GAP;
+
         cameraTiltButton = new ButtonWidgetExtension(0, 0, 0, ROW_HEIGHT, getCameraTiltLabel(), button -> {
             cameraTiltEnabled = !cameraTiltEnabled;
             button.setMessage(Text.cast(getCameraTiltLabel()));
@@ -230,6 +244,14 @@ public class JmeSettingsScreen extends ScreenExtension {
         });
         addChild(new ClickableWidget(mapAutoSaveButton));
         state.addEntry(mapAutoSaveButton, rowY, ROW_HEIGHT);
+        rowY += ROW_HEIGHT + ROW_GAP;
+
+        alternativePlatformsButton = new ButtonWidgetExtension(0, 0, 0, ROW_HEIGHT, getAlternativePlatformsLabel(), button -> {
+            alternativePlatformsEnabled = !alternativePlatformsEnabled;
+            button.setMessage(Text.cast(getAlternativePlatformsLabel()));
+        });
+        addChild(new ClickableWidget(alternativePlatformsButton));
+        state.addEntry(alternativePlatformsButton, rowY, ROW_HEIGHT);
         rowY += ROW_HEIGHT + ROW_GAP;
 
         dashboardRailOverlayButton = new ButtonWidgetExtension(0, 0, 0, ROW_HEIGHT, getDashboardRailOverlayLabel(), button -> {
@@ -369,10 +391,12 @@ public class JmeSettingsScreen extends ScreenExtension {
                 || Math.abs(cameraTiltStrength - JmeConfig.cameraTiltStrength()) > 1.0e-6;
 
         JmeConfig.setUseMph(useMph);
+        JmeConfig.setInWorldSpeedTextEnabled(inWorldSpeedTextEnabled);
         JmeConfig.setCameraTiltEnabled(cameraTiltEnabled);
         JmeConfig.setCameraTiltStrength(cameraTiltStrength);
         JmeConfig.setDashboardRouteListMode(routeListMode);
         JmeConfig.setDashboardMapAutoSaveEnabled(dashboardMapAutoSaveEnabled);
+        JmeConfig.setAlternativePlatformsEnabled(alternativePlatformsEnabled);
         JmeConfig.setDashboardRailOverlayMode(dashboardRailOverlayMode);
         JmeConfig.setDashboardRailOverlayCullMaxPerCell(dashboardRailCullMaxPerCell);
         JmeConfig.setSystemMapOverlayCacheEnabled(systemMapOverlayCacheEnabled);
@@ -567,6 +591,10 @@ public class JmeSettingsScreen extends ScreenExtension {
         return TextHelper.literal("Speed Unit: " + (useMph ? "MPH" : "KM/H"));
     }
 
+    private org.mtr.mapping.holder.MutableText getInWorldSpeedTextLabel() {
+        return TextHelper.literal("In-world Speed Text: " + (inWorldSpeedTextEnabled ? "ON" : "OFF"));
+    }
+
     private org.mtr.mapping.holder.MutableText getCameraTiltLabel() {
         return TextHelper.literal("Camera Tilt: " + (cameraTiltEnabled ? "ON" : "OFF"));
     }
@@ -577,6 +605,10 @@ public class JmeSettingsScreen extends ScreenExtension {
 
     private org.mtr.mapping.holder.MutableText getMapAutoSaveLabel() {
         return TextHelper.literal("Map Auto Save Areas: " + (dashboardMapAutoSaveEnabled ? "ON" : "OFF"));
+    }
+
+    private org.mtr.mapping.holder.MutableText getAlternativePlatformsLabel() {
+        return TextHelper.literal("Alternative Platforms: " + (alternativePlatformsEnabled ? "ON" : "OFF"));
     }
 
     private org.mtr.mapping.holder.MutableText getDashboardRailOverlayLabel() {

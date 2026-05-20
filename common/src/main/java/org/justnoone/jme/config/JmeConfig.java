@@ -33,6 +33,19 @@ public final class JmeConfig {
         data.useMph = useMph;
     }
 
+    /**
+     * In-world rail speed labels (client-side).
+     * <p>
+     * Rendering lots of floating text can be expensive on large rail networks, so this is disabled by default.
+     */
+    public static boolean inWorldSpeedTextEnabled() {
+        return data.inWorldSpeedTextEnabled;
+    }
+
+    public static void setInWorldSpeedTextEnabled(boolean enabled) {
+        data.inWorldSpeedTextEnabled = enabled;
+    }
+
     public static boolean cameraTiltEnabled() {
         return data.cameraTiltEnabled;
     }
@@ -79,6 +92,19 @@ public final class JmeConfig {
 
     public static void setDashboardRailOverlayCullMaxPerCell(int maxPerCell) {
         data.dashboardRailOverlayCullMaxPerCell = clampCullMaxPerCell(maxPerCell);
+    }
+
+    /**
+     * Alternative platforms (dynamic platform rerouting).
+     * <p>
+     * This can be CPU-heavy on large networks; disable to reduce server lag.
+     */
+    public static boolean alternativePlatformsEnabled() {
+        return data.alternativePlatformsEnabled;
+    }
+
+    public static void setAlternativePlatformsEnabled(boolean enabled) {
+        data.alternativePlatformsEnabled = enabled;
     }
 
     /**
@@ -446,12 +472,14 @@ public final class JmeConfig {
     public static void save() {
         final JsonObject root = new JsonObject();
         root.addProperty("use_mph", data.useMph);
+        root.addProperty("in_world_speed_text_enabled", data.inWorldSpeedTextEnabled);
         root.addProperty("camera_tilt_enabled", data.cameraTiltEnabled);
         root.addProperty("camera_tilt_strength", data.cameraTiltStrength);
         root.addProperty("dashboard_route_list_mode", data.dashboardRouteListMode.name());
         root.addProperty("dashboard_map_auto_save_enabled", data.dashboardMapAutoSaveEnabled);
         root.addProperty("dashboard_rail_overlay_mode", data.dashboardRailOverlayMode.name());
         root.addProperty("dashboard_rail_overlay_cull_max_per_cell", data.dashboardRailOverlayCullMaxPerCell);
+        root.addProperty("alternative_platforms_enabled", data.alternativePlatformsEnabled);
         root.addProperty("system_map_overlay_cache_enabled", data.systemMapOverlayCacheEnabled);
         root.addProperty("system_map_overlay_cache_persist_enabled", data.systemMapOverlayCachePersistEnabled);
         root.addProperty("system_map_language_display", data.systemMapLanguageDisplay.name());
@@ -532,6 +560,9 @@ public final class JmeConfig {
             if (root.has("use_mph")) {
                 loaded.useMph = root.get("use_mph").getAsBoolean();
             }
+            if (root.has("in_world_speed_text_enabled")) {
+                loaded.inWorldSpeedTextEnabled = root.get("in_world_speed_text_enabled").getAsBoolean();
+            }
             if (root.has("camera_tilt_enabled")) {
                 loaded.cameraTiltEnabled = root.get("camera_tilt_enabled").getAsBoolean();
             }
@@ -549,6 +580,9 @@ public final class JmeConfig {
             }
             if (root.has("dashboard_rail_overlay_cull_max_per_cell")) {
                 loaded.dashboardRailOverlayCullMaxPerCell = clampCullMaxPerCell(root.get("dashboard_rail_overlay_cull_max_per_cell").getAsInt());
+            }
+            if (root.has("alternative_platforms_enabled")) {
+                loaded.alternativePlatformsEnabled = root.get("alternative_platforms_enabled").getAsBoolean();
             }
             if (root.has("system_map_overlay_cache_enabled")) {
                 loaded.systemMapOverlayCacheEnabled = root.get("system_map_overlay_cache_enabled").getAsBoolean();
@@ -943,12 +977,17 @@ public final class JmeConfig {
 
     private static final class Data {
         private boolean useMph;
+        private boolean inWorldSpeedTextEnabled = false;
         private boolean cameraTiltEnabled = true;
         private double cameraTiltStrength = 1D;
         private DashboardRouteListMode dashboardRouteListMode = DashboardRouteListMode.FOLDERS;
         private boolean dashboardMapAutoSaveEnabled = true;
-        private DashboardRailOverlayMode dashboardRailOverlayMode = DashboardRailOverlayMode.ALL;
+        // Drawing every rail segment on the dashboard map can be very expensive on large networks.
+        // Default to a culled overlay to keep FPS reasonable.
+        private DashboardRailOverlayMode dashboardRailOverlayMode = DashboardRailOverlayMode.CULL;
         private int dashboardRailOverlayCullMaxPerCell = 8;
+        // Dynamic platform rerouting is powerful but can be CPU-heavy. Default off for performance.
+        private boolean alternativePlatformsEnabled = false;
         private boolean systemMapOverlayCacheEnabled = false;
         private boolean systemMapOverlayCachePersistEnabled = false;
         private SystemMapLanguageDisplay systemMapLanguageDisplay = SystemMapLanguageDisplay.NORMAL;

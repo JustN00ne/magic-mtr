@@ -22,6 +22,7 @@ public abstract class DashboardScreenMapAreasMixin {
 
         final DashboardScreenAccessor accessor = (DashboardScreenAccessor) this;
         DashboardMapAreaStore.restoreLatest(accessor.jme$getWidgetMap());
+        DashboardMapAreaStore.centerOnPlayer(accessor.jme$getWidgetMap());
         jme$autoSaveTickCounter = 0;
     }
 

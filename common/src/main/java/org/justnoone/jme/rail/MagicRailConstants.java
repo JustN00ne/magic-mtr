@@ -15,6 +15,7 @@ public final class MagicRailConstants {
     public static final Identifier SET_ROUTE_TYPE_OVERRIDE_PACKET_ID = new Identifier("jme", "set_route_type_override");
     public static final Identifier SET_BRUSH_PROFILE_PACKET_ID = new Identifier("jme", "set_brush_profile");
     public static final Identifier APPLY_BRUSH_PROFILE_PACKET_ID = new Identifier("jme", "apply_brush_profile");
+    public static final Identifier SET_PLATFORM_STOP_POSITION_PACKET_ID = new Identifier("jme", "set_platform_stop_position");
 
     public static final int DEFAULT_SPEED_KMH = 80;
     public static final int MIN_SPEED_KMH = 1;

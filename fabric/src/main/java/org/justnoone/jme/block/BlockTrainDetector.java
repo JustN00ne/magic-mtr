@@ -11,7 +11,6 @@ import org.mtr.core.simulation.Simulator;
 import org.mtr.core.tool.Utilities;
 import org.mtr.core.tool.Vector;
 import org.mtr.libraries.it.unimi.dsi.fastutil.longs.LongArrayList;
-import org.mtr.libraries.it.unimi.dsi.fastutil.objects.Object2IntAVLTreeMap;
 import org.mtr.libraries.it.unimi.dsi.fastutil.objects.Object2ObjectOpenHashMap;
 import org.mtr.mapping.holder.BlockPos;
 import org.mtr.mapping.holder.BlockState;
@@ -23,7 +22,6 @@ import org.mtr.mod.block.BlockTrainPoweredSensorBase;
 import org.mtr.mod.block.BlockTrainSensorBase;
 
 import java.lang.reflect.Field;
-import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
@@ -98,8 +96,8 @@ public class BlockTrainDetector extends BlockTrainPoweredSensorBase {
                 return;
             }
             final int nodeRange = blockEntity.getNodeRange();
-            final Object2IntAVLTreeMap<Position> reachableNodeDepths = collectReachableNodeDepths(simulator, detectorNode, nodeRange);
-            shouldPower = !reachableNodeDepths.isEmpty() && hasMatchingTrainInNodes(reachableNodeDepths, cache.occupancyByNode, blockEntity);
+            final Set<Position> reachableNodes = blockEntity.getReachableNodes(simulator, detectorNode, nodeRange);
+            shouldPower = reachableNodes != null && !reachableNodes.isEmpty() && hasMatchingTrainInNodes(reachableNodes, cache.occupancyByNode, blockEntity);
         }
 
         if (shouldPower) {
@@ -194,12 +192,12 @@ public class BlockTrainDetector extends BlockTrainPoweredSensorBase {
         occupancyByNode.computeIfAbsent(node, ignored -> new NodeOccupancy()).add(routeId, speed);
     }
 
-    private static boolean hasMatchingTrainInNodes(Object2IntAVLTreeMap<Position> reachableNodeDepths, Object2ObjectOpenHashMap<Position, NodeOccupancy> occupancyByNode, BlockEntity blockEntity) {
-        if (reachableNodeDepths == null || reachableNodeDepths.isEmpty() || occupancyByNode == null || occupancyByNode.isEmpty() || blockEntity == null) {
+    private static boolean hasMatchingTrainInNodes(Set<Position> reachableNodes, Object2ObjectOpenHashMap<Position, NodeOccupancy> occupancyByNode, BlockEntity blockEntity) {
+        if (reachableNodes == null || reachableNodes.isEmpty() || occupancyByNode == null || occupancyByNode.isEmpty() || blockEntity == null) {
             return false;
         }
 
-        for (final Position node : reachableNodeDepths.keySet()) {
+        for (final Position node : reachableNodes) {
             final NodeOccupancy occupancy = occupancyByNode.get(node);
             if (occupancy != null && occupancy.matches(blockEntity)) {
                 return true;
@@ -323,60 +321,26 @@ public class BlockTrainDetector extends BlockTrainPoweredSensorBase {
         return Double.NaN;
     }
 
-    private static Object2IntAVLTreeMap<Position> collectReachableNodeDepths(Simulator simulator, Position startNode, int maxDepth) {
-        final Object2IntAVLTreeMap<Position> depths = new Object2IntAVLTreeMap<>();
-        if (simulator == null || startNode == null || maxDepth < 0) {
-            return depths;
-        }
-
-        final ArrayDeque<Object[]> queue = new ArrayDeque<>();
-        depths.put(startNode, 0);
-        queue.add(new Object[]{startNode, 0});
-
-        while (!queue.isEmpty()) {
-            final Object[] entry = queue.poll();
-            final Position currentNode = (Position) entry[0];
-            final int depth = (int) entry[1];
-            if (depth >= maxDepth) {
-                continue;
-            }
-
-            final java.util.Map<Position, ?> connections = simulator.positionsToRail.get(currentNode);
-            if (connections == null || connections.isEmpty()) {
-                continue;
-            }
-
-            for (final Position nextNode : connections.keySet()) {
-                if (depths.containsKey(nextNode)) {
-                    continue;
-                }
-                depths.put(nextNode, depth + 1);
-                queue.add(new Object[]{nextNode, depth + 1});
-            }
-        }
-
-        return depths;
-    }
-
-    private static Set<Position> collectReachableNodesWithin(Simulator simulator, Position source1, Position source2, int maxDepth, Object2IntAVLTreeMap<Position> constraintNodes) {
+    private static Set<Position> collectReachableNodes(Simulator simulator, Position startNode, int maxDepth) {
         final Set<Position> visited = new HashSet<>();
-        final ArrayDeque<Object[]> queue = new ArrayDeque<>();
-        if (simulator == null || maxDepth < 0 || constraintNodes == null || constraintNodes.isEmpty()) {
+        if (simulator == null || startNode == null || maxDepth < 0) {
             return visited;
         }
 
-        if (source1 != null && constraintNodes.containsKey(source1)) {
-            visited.add(source1);
-            queue.add(new Object[]{source1, 0});
-        }
-        if (source2 != null && constraintNodes.containsKey(source2) && visited.add(source2)) {
-            queue.add(new Object[]{source2, 0});
-        }
+        // Avoid per-node allocations (Object[] pairs) in hot paths: keep two parallel queues instead.
+        final ArrayList<Position> queueNodes = new ArrayList<>();
+        int[] queueDepths = new int[64];
+        int queueHead = 0;
 
-        while (!queue.isEmpty()) {
-            final Object[] entry = queue.poll();
-            final Position currentNode = (Position) entry[0];
-            final int depth = (int) entry[1];
+        visited.add(startNode);
+        queueNodes.add(startNode);
+        queueDepths[0] = 0;
+
+        while (queueHead < queueNodes.size()) {
+            final Position currentNode = queueNodes.get(queueHead);
+            final int depth = queueDepths[queueHead];
+            queueHead++;
+
             if (depth >= maxDepth) {
                 continue;
             }
@@ -387,12 +351,16 @@ public class BlockTrainDetector extends BlockTrainPoweredSensorBase {
             }
 
             for (final Position nextNode : connections.keySet()) {
-                if (!constraintNodes.containsKey(nextNode)) {
+                if (!visited.add(nextNode)) {
                     continue;
                 }
-                if (visited.add(nextNode)) {
-                    queue.add(new Object[]{nextNode, depth + 1});
+
+                queueNodes.add(nextNode);
+                final int nextIndex = queueNodes.size() - 1;
+                if (nextIndex >= queueDepths.length) {
+                    queueDepths = java.util.Arrays.copyOf(queueDepths, queueDepths.length * 2);
                 }
+                queueDepths[nextIndex] = depth + 1;
             }
         }
 
@@ -657,6 +625,10 @@ public class BlockTrainDetector extends BlockTrainPoweredSensorBase {
         private int detectorRailRefreshCounter;
         private final Set<Long> occupiedVehicleIds = new HashSet<>();
         private final Map<Long, Long> tailClearedAtMillisByVehicle = new HashMap<>();
+        private int reachableNodesRefreshCounter;
+        private Position cachedReachableStartNode;
+        private int cachedReachableMaxDepth = -1;
+        private Set<Position> cachedReachableNodes;
 
         public BlockEntity(BlockPos pos, BlockState state) {
             super(ModBlocks.TRAIN_DETECTOR_BLOCK_ENTITY.get(), pos, state);
@@ -716,6 +688,26 @@ public class BlockTrainDetector extends BlockTrainPoweredSensorBase {
             detectorRailRefreshCounter = 0;
             cachedDetectorRailLocation = findClosestRailLocation(simulator, detectorPos, 64);
             return cachedDetectorRailLocation;
+        }
+
+        private Set<Position> getReachableNodes(Simulator simulator, Position startNode, int maxDepth) {
+            reachableNodesRefreshCounter++;
+            if (cachedReachableNodes != null
+                    && cachedReachableStartNode != null
+                    && maxDepth == cachedReachableMaxDepth
+                    && cachedReachableStartNode.equals(startNode)
+                    && reachableNodesRefreshCounter < 200
+                    && simulator != null
+                    && startNode != null
+                    && simulator.positionsToRail.containsKey(startNode)) {
+                return cachedReachableNodes;
+            }
+
+            reachableNodesRefreshCounter = 0;
+            cachedReachableStartNode = startNode;
+            cachedReachableMaxDepth = maxDepth;
+            cachedReachableNodes = collectReachableNodes(simulator, startNode, maxDepth);
+            return cachedReachableNodes;
         }
 
         private void updateTailClearedTimes(long nowMillis, DetectorRailLocation detectorRailLocation, java.util.List<VehicleSnapshot> snapshots, long keepMillis) {

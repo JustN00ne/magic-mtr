@@ -29,6 +29,9 @@ import java.util.List;
 public final class DashboardRailExporter {
 
     private static final DateTimeFormatter TS_FORMAT = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss");
+    private static final int BACKGROUND_ARGB = 0xFF101014;
+    private static final double FULL_EXPORT_PADDING_BLOCKS = 8D;
+    private static final int FULL_EXPORT_MAX_PIXELS = 8192;
 
     private DashboardRailExporter() {
     }
@@ -44,6 +47,8 @@ public final class DashboardRailExporter {
         try {
             g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
             g2d.setRenderingHint(RenderingHints.KEY_STROKE_CONTROL, RenderingHints.VALUE_STROKE_PURE);
+            g2d.setColor(new Color(BACKGROUND_ARGB, true));
+            g2d.fillRect(0, 0, viewport.width, viewport.height);
 
             final double thickness = Math.max(1.35D, Math.min(4.5D, 1.45D + viewport.scale * 0.035D));
             g2d.setStroke(new BasicStroke((float) thickness, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
@@ -72,6 +77,7 @@ public final class DashboardRailExporter {
 
         final StringBuilder svg = new StringBuilder(256 * 1024);
         svg.append("<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"").append(viewport.width).append("\" height=\"").append(viewport.height).append("\" viewBox=\"0 0 ").append(viewport.width).append(" ").append(viewport.height).append("\">");
+        svg.append("<rect x=\"0\" y=\"0\" width=\"100%\" height=\"100%\" fill=\"").append(toSvgColor(BACKGROUND_ARGB)).append("\"/>");
         svg.append("<g fill=\"none\" stroke-linecap=\"round\" stroke-linejoin=\"round\">");
 
         final LinkedHashMap<String, Rail> railsById = collectRailsById();
@@ -98,7 +104,97 @@ public final class DashboardRailExporter {
         return output;
     }
 
+    public static Path exportRailsPngFull() throws IOException {
+        final FullExportData exportData = collectFullExportData();
+        if (exportData == null || exportData.polylines.isEmpty()) {
+            return null;
+        }
+
+        final double worldWidth = Math.max(1D, exportData.maxX - exportData.minX);
+        final double worldHeight = Math.max(1D, exportData.maxZ - exportData.minZ);
+        final double scale = Math.max(0.2D, Math.min(8D, Math.min(FULL_EXPORT_MAX_PIXELS / worldWidth, FULL_EXPORT_MAX_PIXELS / worldHeight)));
+        final int width = Math.max(1, (int) Math.ceil(worldWidth * scale));
+        final int height = Math.max(1, (int) Math.ceil(worldHeight * scale));
+
+        final BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
+        final Graphics2D g2d = image.createGraphics();
+        try {
+            g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            g2d.setRenderingHint(RenderingHints.KEY_STROKE_CONTROL, RenderingHints.VALUE_STROKE_PURE);
+            g2d.setColor(new Color(BACKGROUND_ARGB, true));
+            g2d.fillRect(0, 0, width, height);
+            g2d.setStroke(new BasicStroke((float) Math.max(1.2D, Math.min(5D, scale * 0.55D)), BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+
+            for (final RailPolyline railPolyline : exportData.polylines) {
+                final Path2D.Double path = new Path2D.Double();
+                boolean started = false;
+                for (final double[] point : railPolyline.points) {
+                    final double x = (point[0] - exportData.minX) * scale;
+                    final double y = (point[1] - exportData.minZ) * scale;
+                    if (!started) {
+                        path.moveTo(x, y);
+                        started = true;
+                    } else {
+                        path.lineTo(x, y);
+                    }
+                }
+                if (started) {
+                    g2d.setColor(new Color(railPolyline.argb, true));
+                    g2d.draw(path);
+                }
+            }
+        } finally {
+            g2d.dispose();
+        }
+
+        final String timestamp = LocalDateTime.now().format(TS_FORMAT);
+        final Path output = MagicConfigPaths.resolveExportFile(String.format("rails-%s-full.png", timestamp));
+        ImageIO.write(image, "png", output.toFile());
+        return output;
+    }
+
     public static Path exportRailsSvgFull() throws IOException {
+        final FullExportData exportData = collectFullExportData();
+        if (exportData == null || exportData.polylines.isEmpty()) {
+            return null;
+        }
+
+        final double width = Math.max(1D, exportData.maxX - exportData.minX);
+        final double height = Math.max(1D, exportData.maxZ - exportData.minZ);
+
+        final StringBuilder svg = new StringBuilder(512 * 1024);
+        svg.append("<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"")
+                .append(roundSvgNumber(exportData.minX)).append(" ")
+                .append(roundSvgNumber(exportData.minZ)).append(" ")
+                .append(roundSvgNumber(width)).append(" ")
+                .append(roundSvgNumber(height)).append("\">");
+        svg.append("<rect x=\"").append(roundSvgNumber(exportData.minX))
+                .append("\" y=\"").append(roundSvgNumber(exportData.minZ))
+                .append("\" width=\"").append(roundSvgNumber(width))
+                .append("\" height=\"").append(roundSvgNumber(height))
+                .append("\" fill=\"").append(toSvgColor(BACKGROUND_ARGB)).append("\"/>");
+        svg.append("<g fill=\"none\" stroke-linecap=\"round\" stroke-linejoin=\"round\">");
+
+        final double lineWidth = 0.45D;
+        for (final RailPolyline railPolyline : exportData.polylines) {
+            final String d = buildWorldPathD(railPolyline.points);
+            if (d.isEmpty()) {
+                continue;
+            }
+            svg.append("<path d=\"").append(d)
+                    .append("\" stroke=\"").append(toSvgColor(railPolyline.argb))
+                    .append("\" stroke-opacity=\"0.9\" stroke-width=\"").append(roundSvgNumber(lineWidth)).append("\"/>");
+        }
+
+        svg.append("</g></svg>");
+
+        final String timestamp = LocalDateTime.now().format(TS_FORMAT);
+        final Path output = MagicConfigPaths.resolveExportFile(String.format("rails-%s-full.svg", timestamp));
+        Files.write(output, svg.toString().getBytes(StandardCharsets.UTF_8));
+        return output;
+    }
+
+    private static FullExportData collectFullExportData() {
         final LinkedHashMap<String, Rail> railsById = collectRailsById();
         if (railsById.isEmpty()) {
             return null;
@@ -130,40 +226,13 @@ public final class DashboardRailExporter {
             return null;
         }
 
-        final double padding = 1.5D;
-        minX -= padding;
-        minZ -= padding;
-        maxX += padding;
-        maxZ += padding;
-
-        final double width = Math.max(1D, maxX - minX);
-        final double height = Math.max(1D, maxZ - minZ);
-
-        final StringBuilder svg = new StringBuilder(512 * 1024);
-        svg.append("<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"")
-                .append(roundSvgNumber(minX)).append(" ")
-                .append(roundSvgNumber(minZ)).append(" ")
-                .append(roundSvgNumber(width)).append(" ")
-                .append(roundSvgNumber(height)).append("\">");
-        svg.append("<g fill=\"none\" stroke-linecap=\"round\" stroke-linejoin=\"round\">");
-
-        final double lineWidth = 0.45D;
-        for (final RailPolyline railPolyline : polylines) {
-            final String d = buildWorldPathD(railPolyline.points);
-            if (d.isEmpty()) {
-                continue;
-            }
-            svg.append("<path d=\"").append(d)
-                    .append("\" stroke=\"").append(toSvgColor(railPolyline.argb))
-                    .append("\" stroke-opacity=\"0.9\" stroke-width=\"").append(roundSvgNumber(lineWidth)).append("\"/>");
-        }
-
-        svg.append("</g></svg>");
-
-        final String timestamp = LocalDateTime.now().format(TS_FORMAT);
-        final Path output = MagicConfigPaths.resolveExportFile(String.format("rails-%s-full.svg", timestamp));
-        Files.write(output, svg.toString().getBytes(StandardCharsets.UTF_8));
-        return output;
+        return new FullExportData(
+                minX - FULL_EXPORT_PADDING_BLOCKS,
+                minZ - FULL_EXPORT_PADDING_BLOCKS,
+                maxX + FULL_EXPORT_PADDING_BLOCKS,
+                maxZ + FULL_EXPORT_PADDING_BLOCKS,
+                polylines
+        );
     }
 
     private static void drawRailViewport(Graphics2D g2d, ExportViewport viewport, Rail rail) {
@@ -406,6 +475,22 @@ public final class DashboardRailExporter {
         private RailPolyline(int argb, List<double[]> points) {
             this.argb = argb;
             this.points = points;
+        }
+    }
+
+    private static final class FullExportData {
+        private final double minX;
+        private final double minZ;
+        private final double maxX;
+        private final double maxZ;
+        private final List<RailPolyline> polylines;
+
+        private FullExportData(double minX, double minZ, double maxX, double maxZ, List<RailPolyline> polylines) {
+            this.minX = minX;
+            this.minZ = minZ;
+            this.maxX = maxX;
+            this.maxZ = maxZ;
+            this.polylines = polylines;
         }
     }
 }

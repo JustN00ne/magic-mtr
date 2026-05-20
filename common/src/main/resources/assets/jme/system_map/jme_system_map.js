@@ -52,6 +52,12 @@
     showSignals: true,
     showVehicles: true,
     respectRouteFilters: false,
+    lineMode: "speed", // speed | usage | frequency | delay
+    routeVehicleCountById: new Map(),
+    routeDelayAvgMillisById: new Map(),
+    maxRailUsageCount: 0,
+    maxRouteVehicleCount: 0,
+    maxRouteDelayAvgMillis: 0,
     menuRoot: null,
     menuButton: null,
     menuPanel: null,
@@ -80,6 +86,8 @@
     }
 
     ensureGoogleIconsLoaded();
+    loadLocalLineMode();
+    loadLocalOverlaySettings();
 
     if (state.ready) {
       return;
@@ -222,6 +230,8 @@
       applyServerOverlaySettings(data);
       state.rails = Array.isArray(data.rails) ? data.rails : [];
       state.vehicles = Array.isArray(data.vehicles) ? data.vehicles : [];
+      rebuildVehicleMetrics();
+      decorateRailsWithMetrics();
       if (state.menuOpen) {
         updateMenuState();
       }
@@ -275,19 +285,34 @@
     }
 
     if (typeof data.jmeShowBaseRails === "boolean") {
-      state.showBaseRails = data.jmeShowBaseRails;
+      const stored = readLocalStorage("jme_show_base_rails");
+      if (stored !== "true" && stored !== "false") {
+        state.showBaseRails = data.jmeShowBaseRails;
+      }
     }
     if (typeof data.jmeShowDetails === "boolean") {
-      state.showDetails = data.jmeShowDetails;
+      const stored = readLocalStorage("jme_show_details");
+      if (stored !== "true" && stored !== "false") {
+        state.showDetails = data.jmeShowDetails;
+      }
     }
     if (typeof data.jmeShowSignals === "boolean") {
-      state.showSignals = data.jmeShowSignals;
+      const stored = readLocalStorage("jme_show_signals");
+      if (stored !== "true" && stored !== "false") {
+        state.showSignals = data.jmeShowSignals;
+      }
     }
     if (typeof data.jmeShowVehicles === "boolean") {
-      state.showVehicles = data.jmeShowVehicles;
+      const stored = readLocalStorage("jme_show_vehicles");
+      if (stored !== "true" && stored !== "false") {
+        state.showVehicles = data.jmeShowVehicles;
+      }
     }
     if (typeof data.jmeRespectRouteFilters === "boolean") {
-      state.respectRouteFilters = data.jmeRespectRouteFilters;
+      const stored = readLocalStorage("jme_respect_route_filters");
+      if (stored !== "true" && stored !== "false") {
+        state.respectRouteFilters = data.jmeRespectRouteFilters;
+      }
     }
   }
 
@@ -353,6 +378,115 @@
       }
       state.stationByName.set(name, entries);
     });
+  }
+
+  function rebuildVehicleMetrics() {
+    state.routeVehicleCountById.clear();
+    state.routeDelayAvgMillisById.clear();
+    state.maxRouteVehicleCount = 0;
+    state.maxRouteDelayAvgMillis = 0;
+
+    const delaySumByRoute = new Map();
+    const delayCountByRoute = new Map();
+
+    const vehicles = Array.isArray(state.vehicles) ? state.vehicles : [];
+    vehicles.forEach(vehicle => {
+      const routeId = normalizeId(vehicle && vehicle.routeId);
+      if (!routeId) {
+        return;
+      }
+
+      const nextCount = (state.routeVehicleCountById.get(routeId) || 0) + 1;
+      state.routeVehicleCountById.set(routeId, nextCount);
+      if (nextCount > state.maxRouteVehicleCount) {
+        state.maxRouteVehicleCount = nextCount;
+      }
+
+      const delayRaw = parseNumeric(vehicle && vehicle.deviationMillis);
+      if (Number.isFinite(delayRaw)) {
+        const delay = Math.max(0, delayRaw);
+        delaySumByRoute.set(routeId, (delaySumByRoute.get(routeId) || 0) + delay);
+        delayCountByRoute.set(routeId, (delayCountByRoute.get(routeId) || 0) + 1);
+      }
+    });
+
+    delaySumByRoute.forEach((sum, routeId) => {
+      const count = delayCountByRoute.get(routeId) || 0;
+      if (count <= 0) {
+        return;
+      }
+      const avg = sum / count;
+      state.routeDelayAvgMillisById.set(routeId, avg);
+      if (avg > state.maxRouteDelayAvgMillis) {
+        state.maxRouteDelayAvgMillis = avg;
+      }
+    });
+  }
+
+  function decorateRailsWithMetrics() {
+    state.maxRailUsageCount = 0;
+
+    const rails = Array.isArray(state.rails) ? state.rails : [];
+    rails.forEach(rail => {
+      if (!rail || typeof rail !== "object") {
+        return;
+      }
+
+      const usageCount = computeRailUsageCount(rail);
+      rail.__jmeUsageCount = usageCount;
+      if (usageCount > state.maxRailUsageCount) {
+        state.maxRailUsageCount = usageCount;
+      }
+
+      const routeIds = getRouteIdsForRail(rail);
+      let maxVehicles = 0;
+      let maxDelayMillis = 0;
+      routeIds.forEach(routeId => {
+        const vehicleCount = state.routeVehicleCountById.get(routeId) || 0;
+        if (vehicleCount > maxVehicles) {
+          maxVehicles = vehicleCount;
+        }
+        const avgDelayMillis = state.routeDelayAvgMillisById.get(routeId) || 0;
+        if (avgDelayMillis > maxDelayMillis) {
+          maxDelayMillis = avgDelayMillis;
+        }
+      });
+      rail.__jmeMaxRouteVehicles = maxVehicles;
+      rail.__jmeMaxRouteDelayMillis = maxDelayMillis;
+    });
+  }
+
+  function computeRailUsageCount(rail) {
+    const nodes = Array.isArray(rail && rail.connectedNodes) ? rail.connectedNodes : [];
+    if (nodes.length < 2) {
+      return 0;
+    }
+
+    const trains1 = Array.isArray(nodes[0] && nodes[0].trains) ? nodes[0].trains : [];
+    const trains2 = Array.isArray(nodes[nodes.length - 1] && nodes[nodes.length - 1].trains) ? nodes[nodes.length - 1].trains : [];
+    if (!trains1.length || !trains2.length) {
+      return 0;
+    }
+
+    const small = trains1.length <= trains2.length ? trains1 : trains2;
+    const large = small === trains1 ? trains2 : trains1;
+
+    const ids = new Set();
+    small.forEach(train => {
+      const id = normalizeId(train && train.id);
+      if (id) {
+        ids.add(id);
+      }
+    });
+
+    let count = 0;
+    large.forEach(train => {
+      const id = normalizeId(train && train.id);
+      if (id && ids.has(id)) {
+        count++;
+      }
+    });
+    return count;
   }
 
   function renderLoop(timestamp) {
@@ -499,7 +633,7 @@
         return;
       }
 
-      ctx.strokeStyle = colorOverride || railSpeedColor(speedKmh);
+      ctx.strokeStyle = colorOverride || getRailDetailColor(entry);
       ctx.globalAlpha = alpha;
       ctx.lineWidth = lineWidth;
       ctx.stroke();
@@ -800,6 +934,50 @@
 
     const last = colors[colors.length - 1];
     return `rgb(${last[0]}, ${last[1]}, ${last[2]})`;
+  }
+
+  function getRailDetailColor(entry) {
+    const mode = String(state.lineMode || "speed").trim().toLowerCase();
+    if (mode === "usage") {
+      return railUsageColor(entry && entry.usageCount);
+    }
+    if (mode === "frequency") {
+      return railFrequencyColor(entry && entry.routeVehicleCount);
+    }
+    if (mode === "delay") {
+      return railDelayColor(entry && entry.routeDelayMillis);
+    }
+    return railSpeedColor(entry && entry.speedKmh);
+  }
+
+  function lerpCssRgb(startRgb, endRgb, t) {
+    const tt = clamp(Number(t) || 0, 0, 1);
+    const r = Math.round(startRgb[0] + (endRgb[0] - startRgb[0]) * tt);
+    const g = Math.round(startRgb[1] + (endRgb[1] - startRgb[1]) * tt);
+    const b = Math.round(startRgb[2] + (endRgb[2] - startRgb[2]) * tt);
+    return `rgb(${r}, ${g}, ${b})`;
+  }
+
+  function railUsageColor(count) {
+    const max = Math.max(1, Math.round(Number(state.maxRailUsageCount) || 1));
+    const value = clamp(Math.round(Number(count) || 0), 0, max);
+    const t = max <= 0 ? 0 : value / max;
+    return lerpCssRgb([0, 64, 0], [120, 255, 120], t);
+  }
+
+  function railFrequencyColor(count) {
+    const max = Math.max(1, Math.round(Number(state.maxRouteVehicleCount) || 1));
+    const value = clamp(Math.round(Number(count) || 0), 0, max);
+    const t = max <= 0 ? 0 : value / max;
+    return lerpCssRgb([0, 45, 90], [120, 215, 255], t);
+  }
+
+  function railDelayColor(delayMillis) {
+    // Clamp to a fixed range so colors remain comparable across sessions.
+    const max = 10 * 60 * 1000;
+    const value = clamp(Number(delayMillis) || 0, 0, max);
+    const t = max <= 0 ? 0 : value / max;
+    return lerpCssRgb([64, 0, 0], [255, 0, 0], t);
   }
 
   function resolveSignalAspectColor(signalColors, rail) {
@@ -1132,6 +1310,26 @@
     return Math.max(min, Math.min(max, value));
   }
 
+  function normalizeLineMode(value) {
+    const mode = String(value || "").trim().toLowerCase();
+    if (mode === "speed" || mode === "usage" || mode === "frequency" || mode === "delay") {
+      return mode;
+    }
+    return "";
+  }
+
+  function loadLocalLineMode() {
+    const stored = readLocalStorage("jme_line_mode");
+    const mode = normalizeLineMode(stored);
+    if (mode) {
+      state.lineMode = mode;
+    }
+  }
+
+  function saveLocalLineMode() {
+    writeLocalStorage("jme_line_mode", String(state.lineMode || "speed"));
+  }
+
   function loadLocalOverlaySettings() {
     const showBaseRails = readLocalStorage("jme_show_base_rails");
     if (showBaseRails === "true" || showBaseRails === "false") {
@@ -1281,6 +1479,16 @@
         <div class="jme-menu-help">Enable Details to see speed colors, signal arrows, and vehicles.</div>
       </div>
       <div class="jme-menu-section">
+        <div class="jme-menu-section-title">Line Mode</div>
+        <div class="jme-menu-row">
+          <button type="button" class="jme-menu-chip" data-line-mode="speed"><span class="material-icons">speed</span><span>Speed</span></button>
+          <button type="button" class="jme-menu-chip" data-line-mode="usage"><span class="material-icons">insights</span><span>Usage</span></button>
+          <button type="button" class="jme-menu-chip" data-line-mode="frequency"><span class="material-icons">schedule</span><span>Freq</span></button>
+          <button type="button" class="jme-menu-chip" data-line-mode="delay"><span class="material-icons">report</span><span>Delay</span></button>
+        </div>
+        <div class="jme-menu-help">Controls how rails are colored when Details is enabled.</div>
+      </div>
+      <div class="jme-menu-section">
         <div class="jme-menu-section-title">Config</div>
         <div class="jme-menu-col">
           <label class="jme-menu-toggle">
@@ -1347,6 +1555,7 @@
         <div class="jme-menu-section-title">Export Rails</div>
         <div class="jme-menu-col">
           <button type="button" class="jme-menu-action" data-export="png_viewport"><span class="material-icons">image</span><span>PNG (viewport)</span></button>
+          <button type="button" class="jme-menu-action" data-export="png_full"><span class="material-icons">map</span><span>PNG (all rails)</span></button>
           <button type="button" class="jme-menu-action" data-export="svg_viewport"><span class="material-icons">polyline</span><span>SVG (viewport)</span></button>
           <button type="button" class="jme-menu-action" data-export="svg_full"><span class="material-icons">map</span><span>SVG (all rails)</span></button>
         </div>
@@ -1388,12 +1597,22 @@
       });
     });
 
+    panel.querySelectorAll("[data-line-mode]").forEach(chip => {
+      chip.addEventListener("click", event => {
+        event.stopPropagation();
+        const mode = chip.getAttribute("data-line-mode");
+        setLineMode(mode);
+      });
+    });
+
     panel.querySelectorAll("[data-export]").forEach(action => {
       action.addEventListener("click", event => {
         event.stopPropagation();
         const type = action.getAttribute("data-export") || "";
         if (type === "png_viewport") {
           exportRailsPngViewport();
+        } else if (type === "png_full") {
+          exportRailsPngFull();
         } else if (type === "svg_viewport") {
           exportRailsSvgViewport();
         } else if (type === "svg_full") {
@@ -1495,6 +1714,11 @@
     state.menuPanel.querySelectorAll("[data-rail-mode]").forEach(chip => {
       const mode = chip.getAttribute("data-rail-mode");
       chip.classList.toggle("active", mode === state.railOverlayMode);
+    });
+
+    state.menuPanel.querySelectorAll("[data-line-mode]").forEach(chip => {
+      const mode = chip.getAttribute("data-line-mode");
+      chip.classList.toggle("active", mode === state.lineMode);
     });
 
     const cullSettings = state.menuPanel.querySelector("[data-jme-cull-settings]");
@@ -1857,6 +2081,16 @@
     patchConfig({ dashboard_rail_overlay_mode: normalized.toUpperCase() }, "dashboard_rail_overlay_mode");
   }
 
+  function setLineMode(mode) {
+    const normalized = normalizeLineMode(mode);
+    if (!normalized) {
+      return;
+    }
+    state.lineMode = normalized;
+    saveLocalLineMode();
+    updateMenuState();
+  }
+
   function patchConfig(patch, keyHint) {
     const patchObject = patch && typeof patch === "object" ? patch : null;
     if (!patchObject) {
@@ -2109,6 +2343,9 @@
         rail,
         points,
         speedKmh: getRailSpeedLimitKmh(rail),
+        usageCount: Number(rail && rail.__jmeUsageCount) || 0,
+        routeVehicleCount: Number(rail && rail.__jmeMaxRouteVehicles) || 0,
+        routeDelayMillis: Number(rail && rail.__jmeMaxRouteDelayMillis) || 0,
       });
     }
 
@@ -2143,6 +2380,118 @@
     drawSignals(ctx, pxPerBlock, preparedRails);
 
     downloadDataUrl(`magic-rails-${state.dimension || "0"}-viewport.png`, canvas.toDataURL("image/png"));
+  }
+
+  function exportRailsPngFull() {
+    if (!Array.isArray(state.rails) || !state.rails.length) {
+      return;
+    }
+
+    let minX = Number.POSITIVE_INFINITY;
+    let minZ = Number.POSITIVE_INFINITY;
+    let maxX = Number.NEGATIVE_INFINITY;
+    let maxZ = Number.NEGATIVE_INFINITY;
+
+    const railEntries = [];
+    state.rails.forEach(rail => {
+      const points = getRailPoints(rail);
+      if (points.length < 2) {
+        return;
+      }
+
+      railEntries.push({
+        rail,
+        points,
+        speedKmh: getRailSpeedLimitKmh(rail),
+        usageCount: Number(rail && rail.__jmeUsageCount) || 0,
+        routeVehicleCount: Number(rail && rail.__jmeMaxRouteVehicles) || 0,
+        routeDelayMillis: Number(rail && rail.__jmeMaxRouteDelayMillis) || 0,
+      });
+
+      points.forEach(point => {
+        const x = Number(point && point.x);
+        const z = Number(point && point.z);
+        if (!Number.isFinite(x) || !Number.isFinite(z)) {
+          return;
+        }
+        minX = Math.min(minX, x);
+        minZ = Math.min(minZ, z);
+        maxX = Math.max(maxX, x);
+        maxZ = Math.max(maxZ, z);
+      });
+    });
+
+    if (!Number.isFinite(minX) || !Number.isFinite(minZ) || !Number.isFinite(maxX) || !Number.isFinite(maxZ)) {
+      return;
+    }
+
+    const marginBlocks = 2;
+    minX -= marginBlocks;
+    minZ -= marginBlocks;
+    maxX += marginBlocks;
+    maxZ += marginBlocks;
+
+    const worldWidth = Math.max(1, maxX - minX);
+    const worldHeight = Math.max(1, maxZ - minZ);
+
+    // Limit raster export size to avoid allocating enormous canvases on big networks.
+    const maxPx = 8192;
+    const maxWorldDim = Math.max(worldWidth, worldHeight);
+    const pxPerBlock = Math.max(0.01, Math.min(8, maxPx / Math.max(1, maxWorldDim)));
+
+    const widthPx = Math.max(1, Math.min(maxPx, Math.ceil(worldWidth * pxPerBlock)));
+    const heightPx = Math.max(1, Math.min(maxPx, Math.ceil(worldHeight * pxPerBlock)));
+
+    const canvas = document.createElement("canvas");
+    canvas.width = widthPx;
+    canvas.height = heightPx;
+
+    const ctx = canvas.getContext("2d");
+    if (!ctx) {
+      return;
+    }
+
+    ctx.globalAlpha = 0.95;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.lineWidth = clamp(pxPerBlock * 0.22, 1.2, 5.6);
+
+    railEntries.forEach(entry => {
+      const points = entry.points || [];
+      if (points.length < 2) {
+        return;
+      }
+
+      ctx.beginPath();
+      for (let i = 0; i < points.length; i++) {
+        const x = Number(points[i] && points[i].x);
+        const z = Number(points[i] && points[i].z);
+        if (!Number.isFinite(x) || !Number.isFinite(z)) {
+          continue;
+        }
+        const sx = (x - minX) * pxPerBlock;
+        const sy = (z - minZ) * pxPerBlock;
+        if (i === 0) {
+          ctx.moveTo(sx, sy);
+        } else {
+          ctx.lineTo(sx, sy);
+        }
+      }
+
+      ctx.strokeStyle = getRailDetailColor(entry);
+      ctx.stroke();
+    });
+
+    const filename = `magic-rails-${state.dimension || "0"}-full.png`;
+    if (typeof canvas.toBlob === "function") {
+      canvas.toBlob(blob => {
+        if (blob) {
+          downloadBlob(filename, blob);
+        }
+      }, "image/png");
+    } else {
+      downloadDataUrl(filename, canvas.toDataURL("image/png"));
+    }
   }
 
   function exportRailsSvgViewport() {
@@ -2202,7 +2551,7 @@
         d += (i === 0 ? `M${x} ${y}` : ` L${x} ${y}`);
       }
 
-      const color = railSpeedColor(entry.speedKmh);
+      const color = getRailDetailColor(entry);
       svg += `<path d="${d}" stroke="${escapeAttr(color)}" stroke-opacity="0.95" stroke-width="${escapeAttr(roundSvgNumber(lineWidth))}"/>`;
     });
 
@@ -2248,7 +2597,9 @@
 
     const width = Math.max(1, maxX - minX);
     const height = Math.max(1, maxZ - minZ);
-    const strokeWidth = 0.35;
+    // Use a non-scaling stroke so huge networks don't export as "invisible hairlines"
+    // when the SVG viewport is the default 300x150.
+    const strokeWidth = 1.6;
 
     let svg = "";
     svg += `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${escapeAttr(roundSvgNumber(minX))} ${escapeAttr(roundSvgNumber(minZ))} ${escapeAttr(roundSvgNumber(width))} ${escapeAttr(roundSvgNumber(height))}">`;
@@ -2267,8 +2618,14 @@
         d += (i === 0 ? `M${x} ${z}` : ` L${x} ${z}`);
       }
 
-      const color = railSpeedColor(getRailSpeedLimitKmh(entry.rail));
-      svg += `<path d="${d}" stroke="${escapeAttr(color)}" stroke-opacity="0.95" stroke-width="${escapeAttr(strokeWidth)}"/>`;
+      const color = getRailDetailColor({
+        rail: entry.rail,
+        speedKmh: getRailSpeedLimitKmh(entry.rail),
+        usageCount: Number(entry.rail && entry.rail.__jmeUsageCount) || 0,
+        routeVehicleCount: Number(entry.rail && entry.rail.__jmeMaxRouteVehicles) || 0,
+        routeDelayMillis: Number(entry.rail && entry.rail.__jmeMaxRouteDelayMillis) || 0,
+      });
+      svg += `<path d="${d}" stroke="${escapeAttr(color)}" stroke-opacity="0.95" stroke-width="${escapeAttr(strokeWidth)}" vector-effect="non-scaling-stroke"/>`;
     });
 
     svg += `</g></svg>`;

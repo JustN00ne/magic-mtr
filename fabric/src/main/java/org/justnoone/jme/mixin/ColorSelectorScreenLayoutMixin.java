@@ -14,6 +14,11 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public abstract class ColorSelectorScreenLayoutMixin implements IGui {
 
     @Shadow
+    private int getMainHeight() {
+        throw new AssertionError();
+    }
+
+    @Shadow
     @Final
     private TextFieldWidgetExtension textFieldColor;
 
@@ -35,11 +40,19 @@ public abstract class ColorSelectorScreenLayoutMixin implements IGui {
 
     @Inject(method = "init2", at = @At("TAIL"), remap = false)
     private void jme$shiftColorControlsUp(CallbackInfo ci) {
-        final int offset = SQUARE_SIZE * 2;
-        textFieldColor.setY2(textFieldColor.getY2() - offset);
-        textFieldRed.setY2(textFieldRed.getY2() - offset);
-        textFieldGreen.setY2(textFieldGreen.getY2() - offset);
-        textFieldBlue.setY2(textFieldBlue.getY2() - offset);
-        buttonReset.setY2(buttonReset.getY2() - offset);
+        // MTR tweaks this layout across versions; only shift widgets when they would overflow
+        // the bottom of the screen (otherwise we end up with severely offset input boxes).
+        final int screenBottom = Math.max(0, getMainHeight() + SQUARE_SIZE);
+        final int resetBottom = buttonReset.getY2() + buttonReset.getHeight2();
+        final int overflow = resetBottom - screenBottom;
+        if (overflow <= 0) {
+            return;
+        }
+
+        textFieldColor.setY2(textFieldColor.getY2() - overflow);
+        textFieldRed.setY2(textFieldRed.getY2() - overflow);
+        textFieldGreen.setY2(textFieldGreen.getY2() - overflow);
+        textFieldBlue.setY2(textFieldBlue.getY2() - overflow);
+        buttonReset.setY2(buttonReset.getY2() - overflow);
     }
 }

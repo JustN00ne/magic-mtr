@@ -105,6 +105,22 @@ public class AlternativePlatformSelectorScreen extends DashboardListSelectorScre
             }
         }
 
+        // If the user selected everything, store the wildcard (-1) instead of enumerating every platform ID.
+        // This keeps configs small and makes the "all platforms in station" workflow achievable from the UI.
+        if (allCandidatesSelected && !originalWildcardEnabled) {
+            final boolean changed = AlternativePlatformRegistry.setAlternative(routeId, primaryPlatformId, -1L, true);
+            if (changed) {
+                final PacketByteBuf wildcardPacket = PacketByteBufs.create();
+                wildcardPacket.writeLong(routeId);
+                wildcardPacket.writeLong(primaryPlatformId);
+                wildcardPacket.writeLong(-1L);
+                wildcardPacket.writeBoolean(true);
+                MagicNetworkingCompat.sendToServer(MagicRailConstants.SET_ALTERNATIVE_PLATFORM_PACKET_ID, wildcardPacket);
+            }
+            super.onClose2();
+            return;
+        }
+
         // If the wildcard (-1) is enabled and the user kept everything selected, keep the config unchanged.
         if (originalWildcardEnabled && allCandidatesSelected) {
             super.onClose2();

@@ -61,6 +61,15 @@ public final class JmeYaclConfigScreen {
                 .controller(TickBoxControllerBuilder::create)
                 .build();
 
+        final Option<Boolean> inWorldSpeedText = Option.<Boolean>createBuilder()
+                .name(Text.literal("In-world Speed Text"))
+                .description(OptionDescription.createBuilder()
+                        .text(Text.literal("Render speed labels on rails in-world (can reduce FPS on large networks)."))
+                        .build())
+                .binding(false, () -> state.inWorldSpeedTextEnabled, value -> state.inWorldSpeedTextEnabled = value)
+                .controller(TickBoxControllerBuilder::create)
+                .build();
+
         final Option<Boolean> cameraTiltEnabled = Option.<Boolean>createBuilder()
                 .name(Text.literal("Camera Tilt"))
                 .description(OptionDescription.createBuilder()
@@ -84,6 +93,7 @@ public final class JmeYaclConfigScreen {
                 .group(OptionGroup.createBuilder()
                         .name(Text.literal("Speed Units"))
                         .option(useMph)
+                        .option(inWorldSpeedText)
                         .build())
                 .group(OptionGroup.createBuilder()
                         .name(Text.literal("Camera"))
@@ -103,6 +113,15 @@ public final class JmeYaclConfigScreen {
         final Option<Boolean> mapAutoSave = Option.<Boolean>createBuilder()
                 .name(Text.literal("Auto-save Dashboard Map"))
                 .binding(true, () -> state.dashboardMapAutoSaveEnabled, value -> state.dashboardMapAutoSaveEnabled = value)
+                .controller(TickBoxControllerBuilder::create)
+                .build();
+
+        final Option<Boolean> alternativePlatforms = Option.<Boolean>createBuilder()
+                .name(Text.literal("Alternative Platforms"))
+                .description(OptionDescription.createBuilder()
+                        .text(Text.literal("Dynamic platform rerouting (can be CPU-heavy on large networks)."))
+                        .build())
+                .binding(true, () -> state.alternativePlatformsEnabled, value -> state.alternativePlatformsEnabled = value)
                 .controller(TickBoxControllerBuilder::create)
                 .build();
 
@@ -127,6 +146,10 @@ public final class JmeYaclConfigScreen {
                         .name(Text.literal("Layout"))
                         .option(routeListMode)
                         .option(mapAutoSave)
+                        .build())
+                .group(OptionGroup.createBuilder()
+                        .name(Text.literal("Routing"))
+                        .option(alternativePlatforms)
                         .build())
                 .group(OptionGroup.createBuilder()
                         .name(Text.literal("Overlay"))
@@ -550,6 +573,7 @@ public final class JmeYaclConfigScreen {
 
     private static final class State {
         private boolean useMph = JmeConfig.useMph();
+        private boolean inWorldSpeedTextEnabled = JmeConfig.inWorldSpeedTextEnabled();
         private boolean cameraTiltEnabled = JmeConfig.cameraTiltEnabled();
         private double cameraTiltStrength = JmeConfig.cameraTiltStrength();
 
@@ -557,6 +581,7 @@ public final class JmeYaclConfigScreen {
         private boolean dashboardMapAutoSaveEnabled = JmeConfig.dashboardMapAutoSaveEnabled();
         private JmeConfig.DashboardRailOverlayMode dashboardRailOverlayMode = JmeConfig.dashboardRailOverlayMode();
         private int dashboardRailCullMaxPerCell = JmeConfig.dashboardRailOverlayCullMaxPerCell();
+        private boolean alternativePlatformsEnabled = JmeConfig.alternativePlatformsEnabled();
 
         private boolean systemMapOverlayCacheEnabled = JmeConfig.systemMapOverlayCacheEnabled();
         private boolean systemMapOverlayCachePersistEnabled = JmeConfig.systemMapOverlayCachePersistEnabled();
@@ -605,6 +630,7 @@ public final class JmeYaclConfigScreen {
 
         private void apply() {
             JmeConfig.setUseMph(useMph);
+            JmeConfig.setInWorldSpeedTextEnabled(inWorldSpeedTextEnabled);
             JmeConfig.setCameraTiltEnabled(cameraTiltEnabled);
             JmeConfig.setCameraTiltStrength(cameraTiltStrength);
 
@@ -612,6 +638,7 @@ public final class JmeYaclConfigScreen {
             JmeConfig.setDashboardMapAutoSaveEnabled(dashboardMapAutoSaveEnabled);
             JmeConfig.setDashboardRailOverlayMode(dashboardRailOverlayMode);
             JmeConfig.setDashboardRailOverlayCullMaxPerCell(dashboardRailCullMaxPerCell);
+            JmeConfig.setAlternativePlatformsEnabled(alternativePlatformsEnabled);
 
             JmeConfig.setSystemMapOverlayCacheEnabled(systemMapOverlayCacheEnabled);
             JmeConfig.setSystemMapOverlayCachePersistEnabled(systemMapOverlayCachePersistEnabled);

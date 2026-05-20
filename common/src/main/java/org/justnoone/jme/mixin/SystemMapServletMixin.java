@@ -959,6 +959,7 @@ public abstract class SystemMapServletMixin {
                         trainJson.addProperty("id", vehicleId);
                         trainJson.addProperty("speed", speed);
                         trainJson.addProperty("railProgress", railProgress);
+                        trainJson.addProperty("deviationMillis", ((VehicleDelayAccessor) vehicle).jme$getDeviation());
                         final long thisRouteId = jme$getThisRouteId(vehicleExtraData);
                         final String routeId = Utilities.numberToPaddedHexString(thisRouteId);
                         trainJson.addProperty("routeId", routeId);
@@ -1066,6 +1067,7 @@ public abstract class SystemMapServletMixin {
                         vehicleJson.addProperty("id", vehicleId);
                         vehicleJson.addProperty("speed", speed);
                         vehicleJson.addProperty("railProgress", railProgress);
+                        vehicleJson.addProperty("deviationMillis", ((VehicleDelayAccessor) vehicle).jme$getDeviation());
                         vehicleJson.addProperty("routeId", routeId);
                         final JsonObject headPosition = jme$getVehicleHeadPosition(vehicle);
                         if (headPosition != null) {

@@ -3,11 +3,15 @@ package org.justnoone.jme.client;
 import com.mojang.brigadier.Command;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
+import net.minecraft.client.MinecraftClient;
 import net.minecraft.text.Text;
+import org.justnoone.jme.config.MagicConfigReloader;
+import org.justnoone.jme.mixin.DashboardScreenAccessor;
 import org.mtr.core.data.Position;
 import org.mtr.core.data.Rail;
 import org.mtr.libraries.it.unimi.dsi.fastutil.objects.Object2ObjectOpenHashMap;
 import org.mtr.mod.client.MinecraftClientData;
+import org.mtr.mod.screen.DashboardScreen;
 
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
@@ -23,7 +27,10 @@ public final class MagicClientCommands {
         try {
             final Class<?> callbackClass = Class.forName(CLIENT_COMMAND_CALLBACK);
             final Object event = callbackClass.getField("EVENT").get(null);
-            final Method registerMethod = event.getClass().getMethod("register", callbackClass);
+            final Method registerMethod = jme$findEventRegisterMethod(event, callbackClass);
+            if (registerMethod == null) {
+                throw new NoSuchMethodException(event.getClass().getName() + ".register(...)");
+            }
 
             final Object callback = Proxy.newProxyInstance(callbackClass.getClassLoader(), new Class<?>[]{callbackClass}, (proxy, method, args) -> {
                 if (!"register".equals(method.getName()) || args == null || args.length < 1 || !(args[0] instanceof CommandDispatcher)) {
@@ -41,6 +48,36 @@ public final class MagicClientCommands {
         } catch (Throwable throwable) {
             System.err.println("[MAGIC] Failed to register client commands: " + throwable.getMessage());
         }
+    }
+
+    private static Method jme$findEventRegisterMethod(Object event, Class<?> callbackClass) {
+        if (event == null || callbackClass == null) {
+            return null;
+        }
+
+        for (final Method method : event.getClass().getMethods()) {
+            if (!"register".equals(method.getName()) || method.getParameterCount() != 1) {
+                continue;
+            }
+            final Class<?> param = method.getParameterTypes()[0];
+            if (param.isAssignableFrom(callbackClass)) {
+                return method;
+            }
+        }
+
+        // Fallback for odd/relocated event implementations.
+        for (final Method method : event.getClass().getDeclaredMethods()) {
+            if (!"register".equals(method.getName()) || method.getParameterCount() != 1) {
+                continue;
+            }
+            final Class<?> param = method.getParameterTypes()[0];
+            if (param.isAssignableFrom(callbackClass)) {
+                method.setAccessible(true);
+                return method;
+            }
+        }
+
+        return null;
     }
 
     private static LiteralArgumentBuilder<Object> jme$buildRootCommand() {
@@ -63,8 +100,43 @@ public final class MagicClientCommands {
                 .then(LiteralArgumentBuilder.literal("syncpositionsondash")
                         .executes(context -> jme$syncDashboardRailPositions(context.getSource()))));
 
+        final LiteralArgumentBuilder<Object> debug = LiteralArgumentBuilder.literal("debug");
+        debug.then(LiteralArgumentBuilder.literal("config")
+                .then(LiteralArgumentBuilder.literal("reload")
+                        .executes(context -> jme$reloadConfig(context.getSource())))
+                .then(LiteralArgumentBuilder.literal("status")
+                        .executes(context -> jme$configStatus(context.getSource()))));
+        debug.then(LiteralArgumentBuilder.literal("reload")
+                .then(LiteralArgumentBuilder.literal("all")
+                        .executes(context -> jme$reloadState(context.getSource())))
+                .then(LiteralArgumentBuilder.literal("resources")
+                        .executes(context -> jme$reloadResources(context.getSource()))));
+        debug.then(LiteralArgumentBuilder.literal("dashboard")
+                .then(LiteralArgumentBuilder.literal("centerplayer")
+                        .executes(context -> jme$centerDashboardOnPlayer(context.getSource())))
+                .then(LiteralArgumentBuilder.literal("centerPlayer")
+                        .executes(context -> jme$centerDashboardOnPlayer(context.getSource()))));
+
+        root.then(debug);
         root.then(settings);
         return root;
+    }
+
+    private static int jme$reloadConfig(Object source) {
+        try {
+            final MagicConfigReloader.ReloadResult result = MagicConfigReloader.reloadMainConfigFromDisk();
+            jme$sendFeedback(source, "[MAGIC] Reloaded magic.json: " + result.toDebugString());
+            return Command.SINGLE_SUCCESS;
+        } catch (Exception e) {
+            jme$sendFeedback(source, "[MAGIC] Failed to reload config: " + e.getMessage());
+            return 0;
+        }
+    }
+
+    private static int jme$configStatus(Object source) {
+        final MagicConfigReloader.ReloadResult result = MagicConfigReloader.current();
+        jme$sendFeedback(source, "[MAGIC] Current config: " + result.toDebugString());
+        return Command.SINGLE_SUCCESS;
     }
 
     private static int jme$reloadResources(Object source) {
@@ -88,6 +160,23 @@ public final class MagicClientCommands {
         MagicReloadHooks.reloadState();
         jme$sendFeedback(source, "[MAGIC] Reloaded MAGIC state from disk.");
         return Command.SINGLE_SUCCESS;
+    }
+
+    private static int jme$centerDashboardOnPlayer(Object source) {
+        final MinecraftClient client = MinecraftClient.getInstance();
+        if (client == null || !(client.currentScreen instanceof DashboardScreen)) {
+            jme$sendFeedback(source, "[MAGIC] Open the dashboard before centering its map on the player.");
+            return 0;
+        }
+
+        final DashboardScreenAccessor accessor = (DashboardScreenAccessor) client.currentScreen;
+        if (DashboardMapAreaStore.centerOnPlayer(accessor.jme$getWidgetMap())) {
+            jme$sendFeedback(source, "[MAGIC] Centered dashboard map on the player pointer.");
+            return Command.SINGLE_SUCCESS;
+        }
+
+        jme$sendFeedback(source, "[MAGIC] Player location is unavailable.");
+        return 0;
     }
 
     private static int jme$syncDashboardRailPositions(Object source) {

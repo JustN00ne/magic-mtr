@@ -58,6 +58,12 @@ public final class JmeClothConfigScreen {
                 .setSaveConsumer(value -> state.useMph = value)
                 .build());
 
+        category.addEntry(entryBuilder.startBooleanToggle(literal("In-world Speed Text"), state.inWorldSpeedTextEnabled)
+                .setDefaultValue(false)
+                .setTooltip(literal("Render speed labels on rails in-world (can reduce FPS on large networks)."))
+                .setSaveConsumer(value -> state.inWorldSpeedTextEnabled = value)
+                .build());
+
         category.addEntry(entryBuilder.startBooleanToggle(literal("Camera Tilt"), state.cameraTiltEnabled)
                 .setDefaultValue(true)
                 .setTooltip(literal("Enable MAGIC's vehicle camera tilt smoothing."))
@@ -85,6 +91,12 @@ public final class JmeClothConfigScreen {
         category.addEntry(entryBuilder.startBooleanToggle(literal("Auto-save Dashboard Map"), state.dashboardMapAutoSaveEnabled)
                 .setDefaultValue(true)
                 .setSaveConsumer(value -> state.dashboardMapAutoSaveEnabled = value)
+                .build());
+
+        category.addEntry(entryBuilder.startBooleanToggle(literal("Alternative Platforms"), state.alternativePlatformsEnabled)
+                .setDefaultValue(true)
+                .setTooltip(literal("Dynamic platform rerouting (can be CPU-heavy on large networks)."))
+                .setSaveConsumer(value -> state.alternativePlatformsEnabled = value)
                 .build());
 
         category.addEntry(entryBuilder.startEnumSelector(literal("Rail Overlay Mode"), JmeConfig.DashboardRailOverlayMode.class, state.dashboardRailOverlayMode)
@@ -473,6 +485,7 @@ public final class JmeClothConfigScreen {
 
     private static final class State {
         private boolean useMph = JmeConfig.useMph();
+        private boolean inWorldSpeedTextEnabled = JmeConfig.inWorldSpeedTextEnabled();
         private boolean cameraTiltEnabled = JmeConfig.cameraTiltEnabled();
         private double cameraTiltStrength = JmeConfig.cameraTiltStrength();
 
@@ -480,6 +493,7 @@ public final class JmeClothConfigScreen {
         private boolean dashboardMapAutoSaveEnabled = JmeConfig.dashboardMapAutoSaveEnabled();
         private JmeConfig.DashboardRailOverlayMode dashboardRailOverlayMode = JmeConfig.dashboardRailOverlayMode();
         private int dashboardRailCullMaxPerCell = JmeConfig.dashboardRailOverlayCullMaxPerCell();
+        private boolean alternativePlatformsEnabled = JmeConfig.alternativePlatformsEnabled();
 
         private boolean systemMapOverlayCacheEnabled = JmeConfig.systemMapOverlayCacheEnabled();
         private boolean systemMapOverlayCachePersistEnabled = JmeConfig.systemMapOverlayCachePersistEnabled();
@@ -528,6 +542,7 @@ public final class JmeClothConfigScreen {
 
         private void apply() {
             JmeConfig.setUseMph(useMph);
+            JmeConfig.setInWorldSpeedTextEnabled(inWorldSpeedTextEnabled);
             JmeConfig.setCameraTiltEnabled(cameraTiltEnabled);
             JmeConfig.setCameraTiltStrength(cameraTiltStrength);
 
@@ -535,6 +550,7 @@ public final class JmeClothConfigScreen {
             JmeConfig.setDashboardMapAutoSaveEnabled(dashboardMapAutoSaveEnabled);
             JmeConfig.setDashboardRailOverlayMode(dashboardRailOverlayMode);
             JmeConfig.setDashboardRailOverlayCullMaxPerCell(dashboardRailCullMaxPerCell);
+            JmeConfig.setAlternativePlatformsEnabled(alternativePlatformsEnabled);
 
             JmeConfig.setSystemMapOverlayCacheEnabled(systemMapOverlayCacheEnabled);
             JmeConfig.setSystemMapOverlayCachePersistEnabled(systemMapOverlayCachePersistEnabled);

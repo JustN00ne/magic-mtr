@@ -21,6 +21,7 @@
     "VehicleAlternativePlatformRerouteMixin",
     "VehicleExtraDataAlternativePlatformMixin",
     "VehicleMutableExtraDataAccessor",
+    "VehiclePlatformStopPositionMixin",
     "VehicleSignalInvoker",
     "VehiclePlatformRouteInfoAccessor",
     "WebserverResourcesMixin",

@@ -2,6 +2,7 @@ package org.justnoone.jme.mixin;
 
 import net.minecraft.client.MinecraftClient;
 import org.justnoone.jme.client.DashboardRouteFolderStore;
+import org.justnoone.jme.client.ui.OverlayMenuState;
 import org.justnoone.jme.client.screen.RouteFolderEditScreen;
 import org.mtr.core.data.Platform;
 import org.mtr.core.data.Route;
@@ -161,7 +162,8 @@ public abstract class DashboardScreenRouteFoldersMixin extends ScreenExtension i
             return;
         }
         final List<DashboardListItem> routeRows = DashboardRouteFolderStore.buildRows(editingRoute);
-        dashboardList.setData(new ObjectArrayList<>(routeRows), false, true, true, false, false, true);
+        // Hide stock row icons (edit/draw/delete); route actions are exposed via a 3-dot overflow menu.
+        dashboardList.setData(new ObjectArrayList<>(routeRows), false, false, false, false, false, false);
     }
 
     @Inject(method = "onEdit", at = @At("HEAD"), cancellable = true, remap = false)
@@ -224,6 +226,12 @@ public abstract class DashboardScreenRouteFoldersMixin extends ScreenExtension i
         if (editingRoute == null || jme$folderRenameActive) {
             jme$clearDragState();
             jme$hideContextMenu();
+            return;
+        }
+
+        // Prevent drag/click handling while an overlay dropdown is open (eg the 3-dot menu).
+        if ((Object) this instanceof OverlayMenuState && ((OverlayMenuState) (Object) this).jme$isOverlayMenuOpen()) {
+            jme$clearDragState();
             return;
         }
 
@@ -353,7 +361,8 @@ public abstract class DashboardScreenRouteFoldersMixin extends ScreenExtension i
         if (!jme$isInListBounds(mouseX, mouseY)) {
             return;
         }
-        if (mouseX >= dashboardList.x + dashboardList.width - SQUARE_SIZE * 4) {
+        // Keep the far-right slot free for the 3-dot overflow menu; dragging starts from the rest of the row.
+        if (mouseX >= dashboardList.x + dashboardList.width - SQUARE_SIZE) {
             return;
         }
         dashboardList.mouseMoved(mouseX, mouseY);

@@ -9,6 +9,7 @@ import org.justnoone.jme.item.ModItemGroups;
 import org.justnoone.jme.item.ModItems;
 import org.justnoone.jme.network.MagicRailNetworking;
 import org.justnoone.jme.bluemap.BlueMapRailIntegration;
+import org.justnoone.jme.config.MagicConfigReloader;
 import org.justnoone.jme.systemmap.SystemMapOverlayCacheStore;
 import org.mtr.mapping.registry.Registry;
 import org.apache.logging.log4j.LogManager;
@@ -29,8 +30,11 @@ public class JmeFabric implements ModInitializer {
         Jme.init(registry);
         registry.init();
         MagicRailNetworking.registerServer();
+        MagicServerCommands.register();
 
         ServerLifecycleEvents.SERVER_STARTED.register(server -> {
+            final MagicConfigReloader.ReloadResult result = MagicConfigReloader.reloadAllFromDisk();
+            LOGGER.info("[MAGIC] Reloaded config on server start: {}", result.toDebugString());
             SystemMapOverlayCacheStore.onServerStarted(server);
             if (FabricLoader.getInstance().isModLoaded("bluemap")) {
                 BlueMapRailIntegration.onServerStarted(server);

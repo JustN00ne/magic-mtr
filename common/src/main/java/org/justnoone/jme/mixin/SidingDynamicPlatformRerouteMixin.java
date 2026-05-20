@@ -234,7 +234,7 @@ public abstract class SidingDynamicPlatformRerouteMixin {
             return null;
         }
 
-        Main.LOGGER.info("[MAGIC] Rerouting siding {} from platform {} to {}", siding.getId(), firstStopSelection[0], selectedFirstStop.getId());
+        Main.LOGGER.debug("[MAGIC] Rerouting siding {} from platform {} to {}", siding.getId(), firstStopSelection[0], selectedFirstStop.getId());
 
         final ObjectArrayList<PathData> dynamicSidingToMainRoute = selectedFirstStopPaths[0];
         final ObjectArrayList<PathData> dynamicFirstLeg = selectedFirstStopPaths[1];
@@ -574,7 +574,7 @@ public abstract class SidingDynamicPlatformRerouteMixin {
 
         // If we reached this point we wanted to divert, but couldn't find a usable alternative.
         if (primaryBlocked || primaryScore > 0) {
-            Main.LOGGER.info(
+            Main.LOGGER.debug(
                     "[MAGIC] No alternative platform found for siding {} (primary {}, primaryScore {}, primarySignalBlocked {}, primaryClearanceBlocked {}, candidates {}, stats {deployingReserved {}, worseThanPrimary {}, missingPlatform {}, pathFail {}, signalBlocked {}, clearanceBlocked {}, approachOccupied {}})",
                     siding.getId(),
                     primaryPlatformId,

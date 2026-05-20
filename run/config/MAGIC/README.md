@@ -43,6 +43,9 @@ Controls the rails overlay mode for the `:8888` map overlay and related dashboar
 `dashboard_rail_overlay_cull_max_per_cell` (integer, default `8`, range `1` to `64`)
 Only used when `dashboard_rail_overlay_mode` is `CULL`. Higher values render more rails per screen cell.
 
+`alternative_platforms_enabled` (boolean, default `true`)
+Enables/disables Alternative Platforms (dynamic platform rerouting). Disable if it causes lag.
+
 `system_map_overlay_cache_enabled` (boolean, default `false`)
 If enabled, the server caches rails/vehicles for the `:8888` map so content stays visible even after chunks unload.
 This also helps the map remain usable when the integrated server pauses (singleplayer pause screen).
@@ -77,6 +80,19 @@ This file is optional. When present it should look like:
 Valid values (case-insensitive):
 `normal`, `light_rail`, `high_speed`, `metro`, `tram`, `bus`, `sbahn`
 
+Optional per-route Alternative Platforms override:
+
+```json
+{
+  "alternative_platforms_enabled": {
+    "0123456789ABCDEF": false
+  }
+}
+```
+
+If a route ID is present:
+- `false` disables Alternative Platforms for that route (even if `alternative_platforms_enabled` is true in `magic.json`).
+
 ## System Map styling and scripting
 
 Edit:
@@ -84,4 +100,3 @@ Edit:
 - `map/system_map.js` for extra behaviour
 
 You can also edit/save both from the MAGIC menu inside the `:8888` System Map.
-

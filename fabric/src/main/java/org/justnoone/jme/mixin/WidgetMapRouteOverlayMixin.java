@@ -2,7 +2,6 @@ package org.justnoone.jme.mixin;
 
 import org.justnoone.jme.client.DashboardRouteRenderState;
 import org.justnoone.jme.client.DashboardMapOverlayCacheStore;
-import org.justnoone.jme.client.DashboardRailViewMode;
 import org.justnoone.jme.client.PositionAngleKey;
 import org.justnoone.jme.config.JmeConfig;
 import org.justnoone.jme.rail.AlternativePlatformRegistry;
@@ -125,11 +124,9 @@ public abstract class WidgetMapRouteOverlayMixin {
         if (scale >= 0.1D) {
             final JmeConfig.DashboardRailOverlayMode overlayMode = JmeConfig.dashboardRailOverlayMode();
             if (overlayMode != JmeConfig.DashboardRailOverlayMode.OFF) {
-                final boolean speedMode = DashboardRailViewMode.isSpeedMode();
-                final int networkColor = editingRoute == null ? jme$withAlpha(0x3F8BFF, 0x95) : jme$withAlpha(0x8A8A8A, 0x6F);
                 final List<DashboardMapOverlayCacheStore.RailSnapshot> railsToDraw = jme$selectAllKnownRailsForOverlay(overlayMode, mapWidth, mapHeight);
-                jme$drawKnownRails(guiDrawing, railsToDraw, networkColor, Math.max(1.0D, lineThickness * 0.68D), mapWidth, mapHeight, speedMode, editingRoute != null);
-                final int signalColor = speedMode ? (editingRoute == null ? jme$withAlpha(0xDCE7FF, 0x8C) : jme$withAlpha(0x9A9A9A, 0x6A)) : networkColor;
+                jme$drawKnownRails(guiDrawing, railsToDraw, Math.max(1.0D, lineThickness * 0.68D), mapWidth, mapHeight, editingRoute != null);
+                final int signalColor = editingRoute == null ? jme$withAlpha(0xDCE7FF, 0x8C) : jme$withAlpha(0x9A9A9A, 0x6A);
                 jme$drawKnownSignalArrows(guiDrawing, railsToDraw, signalColor, Math.max(0.9D, lineThickness * 0.6D), mapWidth, mapHeight);
             }
         }
@@ -420,11 +417,9 @@ public abstract class WidgetMapRouteOverlayMixin {
     private void jme$drawKnownRails(
             GuiDrawing guiDrawing,
             List<DashboardMapOverlayCacheStore.RailSnapshot> rails,
-            int color,
             double thickness,
             int mapWidth,
             int mapHeight,
-            boolean speedMode,
             boolean dimmed
     ) {
         if (rails == null || rails.isEmpty()) {
@@ -437,13 +432,13 @@ public abstract class WidgetMapRouteOverlayMixin {
                 continue;
             }
 
-            final int railColor = jme$getRailOverlayColor(rail, color, alpha, speedMode);
+            final int railColor = jme$getRailOverlayColor(rail, alpha);
             jme$drawRailPolyline(guiDrawing, rail.points, railColor, thickness, mapWidth, mapHeight);
         }
     }
 
     @Unique
-    private static int jme$getRailOverlayColor(DashboardMapOverlayCacheStore.RailSnapshot rail, int fallbackColor, int alpha, boolean speedMode) {
+    private static int jme$getRailOverlayColor(DashboardMapOverlayCacheStore.RailSnapshot rail, int alpha) {
         if (rail == null) {
             return jme$withAlpha(0x3F8BFF, alpha);
         }
@@ -458,7 +453,7 @@ public abstract class WidgetMapRouteOverlayMixin {
             return jme$withAlpha(RailType.TURN_BACK.color, alpha);
         }
 
-        return speedMode ? jme$getRailSpeedColor(rail.speedKmh, alpha) : jme$withAlpha(fallbackColor, alpha);
+        return jme$getRailSpeedColor(rail.speedKmh, alpha);
     }
 
     @Unique

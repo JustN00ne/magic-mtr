@@ -26,6 +26,7 @@ public final class RouteTypeOverrideConfig {
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     private static final Path CONFIG_PATH = MagicConfigPaths.resolveConfigFile("route_types.json", "route_types.json", "jme_route_types.json");
     private static final Map<String, String> ROUTE_TYPE_BY_ID = new ConcurrentHashMap<>();
+    private static final Map<String, Boolean> ALTERNATIVE_PLATFORMS_ENABLED_BY_ID = new ConcurrentHashMap<>();
 
     static {
         reload();
@@ -36,19 +37,64 @@ public final class RouteTypeOverrideConfig {
 
     public static synchronized void reload() {
         ROUTE_TYPE_BY_ID.clear();
+        ALTERNATIVE_PLATFORMS_ENABLED_BY_ID.clear();
         if (!Files.exists(CONFIG_PATH)) {
             return;
         }
 
         try {
             final JsonObject root = new JsonParser().parse(new String(Files.readAllBytes(CONFIG_PATH), StandardCharsets.UTF_8)).getAsJsonObject();
-            final JsonObject routeTypes = root.has("route_types") && root.get("route_types").isJsonObject() ? root.getAsJsonObject("route_types") : root;
+            final JsonObject routeTypes = root.has("route_types") && root.get("route_types").isJsonObject()
+                    ? root.getAsJsonObject("route_types")
+                    : root;
 
+            // Route type overrides (strings).
             for (final Map.Entry<String, JsonElement> entry : routeTypes.entrySet()) {
                 final String routeId = normalizeRouteId(entry.getKey());
-                final String routeType = normalizeTrainType(entry.getValue() == null || entry.getValue().isJsonNull() ? "" : entry.getValue().getAsString());
-                if (!routeId.isEmpty() && !routeType.isEmpty()) {
+                if (routeId.isEmpty()) {
+                    continue;
+                }
+
+                final JsonElement value = entry.getValue();
+                if (value == null || value.isJsonNull() || !value.isJsonPrimitive() || !value.getAsJsonPrimitive().isString()) {
+                    continue;
+                }
+
+                final String routeType = normalizeTrainType(value.getAsString());
+                if (!routeType.isEmpty()) {
                     ROUTE_TYPE_BY_ID.put(routeId, routeType);
+                }
+            }
+
+            // Alternative platforms route overrides (booleans).
+            if (root.has("alternative_platforms_enabled") && root.get("alternative_platforms_enabled").isJsonObject()) {
+                final JsonObject enabledByRoute = root.getAsJsonObject("alternative_platforms_enabled");
+                for (final Map.Entry<String, JsonElement> entry : enabledByRoute.entrySet()) {
+                    final String routeId = normalizeRouteId(entry.getKey());
+                    if (routeId.isEmpty()) {
+                        continue;
+                    }
+                    final JsonElement value = entry.getValue();
+                    if (value == null || value.isJsonNull() || !value.isJsonPrimitive()) {
+                        continue;
+                    }
+                    try {
+                        ALTERNATIVE_PLATFORMS_ENABLED_BY_ID.put(routeId, value.getAsBoolean());
+                    } catch (Exception ignored) {
+                    }
+                }
+            } else {
+                // Backward-compatible fallback: allow per-route booleans at the root level.
+                for (final Map.Entry<String, JsonElement> entry : root.entrySet()) {
+                    final String routeId = normalizeRouteId(entry.getKey());
+                    if (routeId.isEmpty()) {
+                        continue;
+                    }
+                    final JsonElement value = entry.getValue();
+                    if (value == null || value.isJsonNull() || !value.isJsonPrimitive() || !value.getAsJsonPrimitive().isBoolean()) {
+                        continue;
+                    }
+                    ALTERNATIVE_PLATFORMS_ENABLED_BY_ID.put(routeId, value.getAsBoolean());
                 }
             }
         } catch (Exception ignored) {
@@ -63,6 +109,14 @@ public final class RouteTypeOverrideConfig {
                     .sorted(Map.Entry.comparingByKey())
                     .forEach(entry -> routeTypes.addProperty(entry.getKey(), entry.getValue()));
             root.add("route_types", routeTypes);
+
+            if (!ALTERNATIVE_PLATFORMS_ENABLED_BY_ID.isEmpty()) {
+                final JsonObject enabledByRoute = new JsonObject();
+                ALTERNATIVE_PLATFORMS_ENABLED_BY_ID.entrySet().stream()
+                        .sorted(Map.Entry.comparingByKey())
+                        .forEach(entry -> enabledByRoute.addProperty(entry.getKey(), entry.getValue()));
+                root.add("alternative_platforms_enabled", enabledByRoute);
+            }
 
             Files.createDirectories(CONFIG_PATH.getParent());
             Files.write(CONFIG_PATH, GSON.toJson(root).getBytes(StandardCharsets.UTF_8));
@@ -99,6 +153,19 @@ public final class RouteTypeOverrideConfig {
 
     public static synchronized void clearRouteType(String routeId) {
         setRouteType(routeId, "");
+    }
+
+    public static synchronized Boolean getAlternativePlatformsEnabledOverride(String routeId) {
+        final String normalizedRouteId = normalizeRouteId(routeId);
+        if (normalizedRouteId.isEmpty()) {
+            return null;
+        }
+        return ALTERNATIVE_PLATFORMS_ENABLED_BY_ID.get(normalizedRouteId);
+    }
+
+    public static synchronized boolean isAlternativePlatformsEnabled(String routeId) {
+        final Boolean override = getAlternativePlatformsEnabledOverride(routeId);
+        return override == null || override;
     }
 
     public static String normalizeRouteId(String routeId) {

@@ -2,9 +2,9 @@ package org.justnoone.jme.client;
 
 import net.minecraft.client.MinecraftClient;
 import org.justnoone.jme.client.data.SidingSpeedSliderFileStore;
+import org.justnoone.jme.config.MagicConfigReloader;
 import org.justnoone.jme.config.JmeConfig;
-import org.justnoone.jme.rail.AlternativePlatformRegistry;
-import org.justnoone.jme.rail.DepotCancellationRegistry;
+import org.justnoone.jme.rail.MagicRailTiltRegistry;
 
 public final class MagicReloadHooks {
 
@@ -21,13 +21,12 @@ public final class MagicReloadHooks {
 
     public static void reloadTiltState() {
         JmeConfig.reload();
+        MagicRailTiltRegistry.reloadFromDisk();
         MagicRailTiltClient.clearSmoothingCache();
     }
 
     public static void reloadState() {
-        JmeConfig.reload();
-        AlternativePlatformRegistry.reloadFromDisk();
-        DepotCancellationRegistry.reloadFromDisk();
+        MagicConfigReloader.reloadAllFromDisk();
         DashboardRouteFolderStore.reloadFromDisk();
         SidingSpeedSliderFileStore.reloadFromDisk();
         MagicRailTiltClient.clearSmoothingCache();

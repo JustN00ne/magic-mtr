@@ -31,7 +31,7 @@ glintStrength:0.75
 damageTiltStrength:1.0
 highContrast:false
 gamma:0.5
-renderDistance:21
+renderDistance:32
 simulationDistance:12
 entityDistanceScaling:1.0
 guiScale:3
@@ -118,7 +118,6 @@ key_key.hotbar.6:key.keyboard.6
 key_key.hotbar.7:key.keyboard.7
 key_key.hotbar.8:key.keyboard.8
 key_key.hotbar.9:key.keyboard.9
-key_key.modmenu.open_menu:key.keyboard.unknown
 key_key.mtr.lift_menu:key.keyboard.z
 key_key.mtr.train_accelerate:key.keyboard.up
 key_key.mtr.train_brake:key.keyboard.down
@@ -131,7 +130,8 @@ key_key.mtr.debug_2_positive:key.keyboard.keypad.8
 key_key.mtr.debug_3_positive:key.keyboard.keypad.9
 key_key.mtr.debug_cycle_negative:key.keyboard.keypad.subtract
 key_key.mtr.debug_cycle_positive:key.keyboard.keypad.add
-soundCategory_master:0.0
+key_key.modmenu.open_menu:key.keyboard.unknown
+soundCategory_master:1.0
 soundCategory_music:0.0
 soundCategory_record:1.0
 soundCategory_weather:1.0

@@ -6,7 +6,9 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import org.justnoone.jme.config.JmeConfig;
 import org.justnoone.jme.config.MagicConfigPaths;
+import org.justnoone.jme.config.RouteTypeOverrideConfig;
 import org.mtr.core.data.Platform;
 import org.mtr.core.data.Route;
 
@@ -35,11 +37,22 @@ public final class AlternativePlatformRegistry {
     }
 
     public static boolean isEnabled() {
-        return FEATURE_ENABLED;
+        return FEATURE_ENABLED && JmeConfig.alternativePlatformsEnabled();
+    }
+
+    private static boolean isEnabledForRoute(long routeId) {
+        if (!isEnabled()) {
+            return false;
+        }
+        if (routeId == 0) {
+            return true;
+        }
+        final String routeIdHex = String.format("%016X", routeId);
+        return RouteTypeOverrideConfig.isAlternativePlatformsEnabled(routeIdHex);
     }
 
     public static synchronized boolean setAlternative(long routeId, long primaryPlatformId, long alternativePlatformId, boolean enabled) {
-        if (!isEnabled()) {
+        if (!isEnabledForRoute(routeId)) {
             return false;
         }
         ensureLoaded();
@@ -66,7 +79,7 @@ public final class AlternativePlatformRegistry {
     }
 
     public static synchronized boolean toggleAlternative(long routeId, long primaryPlatformId, long alternativePlatformId) {
-        if (!isEnabled()) {
+        if (!isEnabledForRoute(routeId)) {
             return false;
         }
         ensureLoaded();
@@ -75,7 +88,7 @@ public final class AlternativePlatformRegistry {
     }
 
     public static synchronized List<Long> getAlternatives(long routeId, long primaryPlatformId) {
-        if (!isEnabled()) {
+        if (!isEnabledForRoute(routeId)) {
             return Collections.emptyList();
         }
         ensureLoaded();
@@ -87,7 +100,7 @@ public final class AlternativePlatformRegistry {
     }
 
     public static synchronized boolean setAlternatives(long routeId, long primaryPlatformId, List<Long> alternativePlatformIds) {
-        if (!isEnabled()) {
+        if (!isEnabledForRoute(routeId)) {
             return false;
         }
         ensureLoaded();
@@ -124,7 +137,7 @@ public final class AlternativePlatformRegistry {
     }
 
     public static synchronized List<Long> getPrimaryPlatformIds(long routeId) {
-        if (!isEnabled()) {
+        if (!isEnabledForRoute(routeId)) {
             return Collections.emptyList();
         }
         ensureLoaded();
@@ -147,7 +160,7 @@ public final class AlternativePlatformRegistry {
     }
 
     public static synchronized long getPrimaryForAlternative(long routeId, long alternativePlatformId) {
-        if (!isEnabled()) {
+        if (!isEnabledForRoute(routeId)) {
             return 0;
         }
         ensureLoaded();
@@ -189,7 +202,7 @@ public final class AlternativePlatformRegistry {
             return Collections.emptyList();
         }
 
-        if (!isEnabled()) {
+        if (!isEnabledForRoute(route.getId())) {
             return new ArrayList<>(Collections.singletonList(primaryPlatform.getId()));
         }
 
@@ -236,7 +249,7 @@ public final class AlternativePlatformRegistry {
     }
 
     public static Platform choosePlatform(Route route, Platform primaryPlatform, long previousPlatformId, Map<Long, Platform> platformIdMap, Map<Long, Integer> reservationCounts) {
-        if (!isEnabled()) {
+        if (route == null || !isEnabledForRoute(route.getId())) {
             return primaryPlatform;
         }
         if (route == null || primaryPlatform == null || platformIdMap == null || platformIdMap.isEmpty()) {
@@ -289,12 +302,13 @@ public final class AlternativePlatformRegistry {
     }
 
     public static synchronized void reloadFromDisk() {
-        loaded = true;
         if (!isEnabled()) {
             ALTERNATIVES.clear();
+            loaded = false;
             return;
         }
         load();
+        loaded = true;
     }
 
     private static void ensureLoaded() {
