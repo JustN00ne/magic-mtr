@@ -1,0 +1,82 @@
+{
+  "multipart": [
+    {
+      "when": {
+        "blink": "false",
+        "facing": "north"
+      },
+      "apply": {
+        "model": "jme:block/platform_wmta_off"
+      }
+    },
+    {
+      "when": {
+        "blink": "false",
+        "facing": "east"
+      },
+      "apply": {
+        "model": "jme:block/platform_wmta_off",
+        "y": 90
+      }
+    },
+    {
+      "when": {
+        "blink": "false",
+        "facing": "south"
+      },
+      "apply": {
+        "model": "jme:block/platform_wmta_off",
+        "y": 180
+      }
+    },
+    {
+      "when": {
+        "blink": "false",
+        "facing": "west"
+      },
+      "apply": {
+        "model": "jme:block/platform_wmta_off",
+        "y": 270
+      }
+    },
+    {
+      "when": {
+        "blink": "true",
+        "facing": "north"
+      },
+      "apply": {
+        "model": "jme:block/platform_wmta_on"
+      }
+    },
+    {
+      "when": {
+        "blink": "true",
+        "facing": "east"
+      },
+      "apply": {
+        "model": "jme:block/platform_wmta_on",
+        "y": 90
+      }
+    },
+    {
+      "when": {
+        "blink": "true",
+        "facing": "south"
+      },
+      "apply": {
+        "model": "jme:block/platform_wmta_on",
+        "y": 180
+      }
+    },
+    {
+      "when": {
+        "blink": "true",
+        "facing": "west"
+      },
+      "apply": {
+        "model": "jme:block/platform_wmta_on",
+        "y": 270
+      }
+    }
+  ]
+}

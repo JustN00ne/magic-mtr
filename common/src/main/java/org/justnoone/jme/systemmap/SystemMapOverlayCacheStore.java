@@ -5,6 +5,7 @@ import net.minecraft.server.world.ServerWorld;
 import net.minecraft.util.WorldSavePath;
 import org.justnoone.jme.config.JmeConfig;
 import org.justnoone.jme.config.MagicConfigPaths;
+import org.justnoone.jme.rail.CanceledTrainRegistry;
 import org.mtr.libraries.com.google.gson.Gson;
 import org.mtr.libraries.com.google.gson.GsonBuilder;
 import org.mtr.libraries.com.google.gson.JsonArray;
@@ -40,7 +41,12 @@ public final class SystemMapOverlayCacheStore {
     private static final Gson GSON = new GsonBuilder().create();
     private static final long SAVE_DEBOUNCE_MILLIS = 15000;
     private static final long VEHICLE_STALE_MILLIS = 5000;
-    private static final long RAIL_PRUNE_GRACE_MILLIS = 0;
+    /**
+     * Grace period before pruning rails that disappear from the live snapshot.
+     * Prevents "flash disappearance" when the live data briefly doesn't include a rail
+     * (e.g. during chunk load/unload transitions).
+     */
+    private static final long RAIL_PRUNE_GRACE_MILLIS = 10000;
 
     private static final Map<String, DimensionCache> CACHE_BY_DIMENSION = new LinkedHashMap<>();
 
@@ -178,6 +184,10 @@ public final class SystemMapOverlayCacheStore {
             changed = true;
         }
 
+        if (pruneExpiredCanceledVehicles(cache, now)) {
+            changed = true;
+        }
+
         if (changed) {
             cache.vehiclesArrayDirty = true;
             cache.dirtyForSave = true;
@@ -205,12 +215,56 @@ public final class SystemMapOverlayCacheStore {
         }
         dimension = normalizeDimensionId(dimension);
         final DimensionCache cache = ensureLoaded(dimension);
+        if (pruneExpiredCanceledVehicles(cache, System.currentTimeMillis())) {
+            cache.vehiclesArrayDirty = true;
+        }
         if (cache.vehiclesArrayDirty || cache.vehiclesArrayCache == null) {
             cache.vehiclesArrayCache = new JsonArray();
             cache.vehiclesById.values().forEach(cache.vehiclesArrayCache::add);
             cache.vehiclesArrayDirty = false;
         }
         return cache.vehiclesArrayCache;
+    }
+
+    public static synchronized void mergeWaypoints(JsonArray waypoints) {
+        if (waypoints == null || waypoints.size() == 0) {
+            return;
+        }
+
+        final DimensionCache cache = ensureLoaded("");
+        boolean changed = false;
+
+        for (int i = 0; i < waypoints.size(); i++) {
+            final JsonElement element = waypoints.get(i);
+            if (element == null || !element.isJsonObject()) {
+                continue;
+            }
+            final JsonObject wpJson = element.getAsJsonObject();
+            final String id = wpJson.has("id") ? wpJson.get("id").getAsString() : "";
+            if (id.isEmpty()) {
+                continue;
+            }
+            final JsonObject previous = cache.waypointsById.put(id, wpJson);
+            if (previous == null || !previous.equals(wpJson)) {
+                changed = true;
+            }
+        }
+
+        if (changed) {
+            cache.waypointsArrayDirty = true;
+            cache.dirtyForSave = true;
+            maybeScheduleSave("", cache);
+        }
+    }
+
+    public static synchronized JsonArray getWaypointsForResponse() {
+        final DimensionCache cache = ensureLoaded("");
+        if (cache.waypointsArrayDirty || cache.waypointsArrayCache == null) {
+            cache.waypointsArrayCache = new JsonArray();
+            cache.waypointsById.values().forEach(cache.waypointsArrayCache::add);
+            cache.waypointsArrayDirty = false;
+        }
+        return cache.waypointsArrayCache;
     }
 
     private static String getId(JsonObject object) {
@@ -257,8 +311,9 @@ public final class SystemMapOverlayCacheStore {
         final String worldKeySnapshot = worldKey;
         final LinkedHashMap<String, JsonObject> railsSnapshot = new LinkedHashMap<>(cache.railsById);
         final LinkedHashMap<String, JsonObject> vehiclesSnapshot = new LinkedHashMap<>(cache.vehiclesById);
+        final LinkedHashMap<String, JsonObject> waypointsSnapshot = new LinkedHashMap<>(cache.waypointsById);
 
-        SAVE_EXECUTOR.execute(() -> saveToDisk(worldKeySnapshot, dimension, railsSnapshot, vehiclesSnapshot));
+        SAVE_EXECUTOR.execute(() -> saveToDisk(worldKeySnapshot, dimension, railsSnapshot, vehiclesSnapshot, waypointsSnapshot));
     }
 
     private static void loadFromDisk(String dimension, DimensionCache cache) {
@@ -311,13 +366,29 @@ public final class SystemMapOverlayCacheStore {
                 }
             }
 
+            if (root.has("waypoints") && root.get("waypoints").isJsonArray()) {
+                final JsonArray waypoints = root.getAsJsonArray("waypoints");
+                for (int i = 0; i < waypoints.size(); i++) {
+                    final JsonElement element = waypoints.get(i);
+                    if (element == null || !element.isJsonObject()) {
+                        continue;
+                    }
+                    final JsonObject waypointJson = element.getAsJsonObject();
+                    final String id = getId(waypointJson);
+                    if (!id.isEmpty()) {
+                        cache.waypointsById.put(id, waypointJson);
+                    }
+                }
+            }
+
             cache.railsArrayDirty = true;
             cache.vehiclesArrayDirty = true;
+            cache.waypointsArrayDirty = true;
         } catch (Exception ignored) {
         }
     }
 
-    private static void saveToDisk(String worldKeySnapshot, String dimension, LinkedHashMap<String, JsonObject> railsById, LinkedHashMap<String, JsonObject> vehiclesById) {
+    private static void saveToDisk(String worldKeySnapshot, String dimension, LinkedHashMap<String, JsonObject> railsById, LinkedHashMap<String, JsonObject> vehiclesById, LinkedHashMap<String, JsonObject> waypointsById) {
         try {
             final JsonObject root = new JsonObject();
             root.addProperty("savedAt", System.currentTimeMillis());
@@ -332,6 +403,10 @@ public final class SystemMapOverlayCacheStore {
             final JsonArray vehicles = new JsonArray();
             vehiclesById.values().forEach(vehicles::add);
             root.add("vehicles", vehicles);
+
+            final JsonArray waypoints = new JsonArray();
+            waypointsById.values().forEach(waypoints::add);
+            root.add("waypoints", waypoints);
 
             final Path path = getCachePath(worldKeySnapshot, dimension);
             Files.createDirectories(path.getParent());
@@ -351,6 +426,40 @@ public final class SystemMapOverlayCacheStore {
                 ? ""
                 : worldKeyValue.replaceAll("[^a-zA-Z0-9\\-_.]+", "_") + "_";
         return MagicConfigPaths.resolveMapFile("system_map_overlay_cache_" + safeWorldKey + safeDimension + ".lzma2");
+    }
+
+    private static boolean pruneExpiredCanceledVehicles(DimensionCache cache, long nowMillis) {
+        if (cache == null || cache.vehiclesById.isEmpty()) {
+            return false;
+        }
+
+        final long cutoff = nowMillis - CanceledTrainRegistry.MAP_DISPLAY_MILLIS;
+        final boolean[] removed = {false};
+        cache.vehiclesById.entrySet().removeIf(entry -> {
+            if (entry == null) {
+                return false;
+            }
+            final JsonObject vehicleJson = entry.getValue();
+            if (vehicleJson == null || !vehicleJson.has("canceledAtMillis") || !vehicleJson.get("canceledAtMillis").isJsonPrimitive()) {
+                return false;
+            }
+
+            final long canceledAtMillis;
+            try {
+                canceledAtMillis = vehicleJson.get("canceledAtMillis").getAsLong();
+            } catch (Exception ignored) {
+                return false;
+            }
+            if (canceledAtMillis > cutoff) {
+                return false;
+            }
+
+            cache.vehicleLastSeenMillisById.remove(entry.getKey());
+            removed[0] = true;
+            return true;
+        });
+
+        return removed[0];
     }
 
     private static boolean pruneStaleVehicles(DimensionCache cache, HashSet<String> liveIds, long nowMillis) {
@@ -585,12 +694,15 @@ public final class SystemMapOverlayCacheStore {
         private boolean loaded;
         private final LinkedHashMap<String, JsonObject> railsById = new LinkedHashMap<>();
         private final LinkedHashMap<String, JsonObject> vehiclesById = new LinkedHashMap<>();
+        private final LinkedHashMap<String, JsonObject> waypointsById = new LinkedHashMap<>();
         private final LinkedHashMap<String, Long> railLastSeenMillisById = new LinkedHashMap<>();
         private final LinkedHashMap<String, Long> vehicleLastSeenMillisById = new LinkedHashMap<>();
         private JsonArray railsArrayCache;
         private JsonArray vehiclesArrayCache;
+        private JsonArray waypointsArrayCache;
         private boolean railsArrayDirty = true;
         private boolean vehiclesArrayDirty = true;
+        private boolean waypointsArrayDirty = true;
         private boolean dirtyForSave;
         private long lastSaveStartMillis;
         private long lastMergedRailsSnapshotTimeMillis;

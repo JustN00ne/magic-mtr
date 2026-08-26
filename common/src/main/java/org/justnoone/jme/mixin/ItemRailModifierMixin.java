@@ -2,6 +2,7 @@ package org.justnoone.jme.mixin;
 
 import org.mtr.mapping.holder.Identifier;
 import org.justnoone.jme.rail.MagicRailConstants;
+import org.justnoone.jme.rail.MagicRailRotationRegistry;
 import org.justnoone.jme.rail.MagicRailTiltRegistry;
 import org.mtr.core.data.Rail;
 import org.mtr.core.data.TransportMode;
@@ -30,6 +31,9 @@ public class ItemRailModifierMixin {
     private static final ThreadLocal<Integer> JME_MAGIC_TILT_START_CONTEXT = new ThreadLocal<>();
     private static final ThreadLocal<Integer> JME_MAGIC_TILT_MIDDLE_CONTEXT = new ThreadLocal<>();
     private static final ThreadLocal<Integer> JME_MAGIC_TILT_END_CONTEXT = new ThreadLocal<>();
+    private static final ThreadLocal<Double> JME_MAGIC_ROTATION_START_CONTEXT = new ThreadLocal<>();
+    private static final ThreadLocal<Double> JME_MAGIC_ROTATION_END_CONTEXT = new ThreadLocal<>();
+    private static final ThreadLocal<World> JME_MAGIC_WORLD_CONTEXT = new ThreadLocal<>();
 
     @Inject(method = "onConnect", at = @At("HEAD"), cancellable = true, remap = false)
     private void jme$cacheMagicConnectorSpeed(
@@ -54,6 +58,8 @@ public class ItemRailModifierMixin {
             JME_MAGIC_TILT_START_CONTEXT.set(MagicRailConstants.getStartTiltFromStack(stack));
             JME_MAGIC_TILT_MIDDLE_CONTEXT.set(MagicRailConstants.getMiddleTiltFromStack(stack));
             JME_MAGIC_TILT_END_CONTEXT.set(MagicRailConstants.getEndTiltFromStack(stack));
+            JME_MAGIC_ROTATION_START_CONTEXT.set(MagicRailConstants.getStartRotationFromStack(stack));
+            JME_MAGIC_ROTATION_END_CONTEXT.set(MagicRailConstants.getEndRotationFromStack(stack));
         } else {
             JME_MAGIC_SPEED_CONTEXT.remove();
             JME_MAGIC_STYLE_CONTEXT.remove();
@@ -61,7 +67,10 @@ public class ItemRailModifierMixin {
             JME_MAGIC_TILT_START_CONTEXT.remove();
             JME_MAGIC_TILT_MIDDLE_CONTEXT.remove();
             JME_MAGIC_TILT_END_CONTEXT.remove();
+            JME_MAGIC_ROTATION_START_CONTEXT.remove();
+            JME_MAGIC_ROTATION_END_CONTEXT.remove();
         }
+        JME_MAGIC_WORLD_CONTEXT.set(world);
     }
 
     @Inject(method = "onConnect", at = @At("TAIL"), remap = false)
@@ -84,6 +93,9 @@ public class ItemRailModifierMixin {
         JME_MAGIC_TILT_START_CONTEXT.remove();
         JME_MAGIC_TILT_MIDDLE_CONTEXT.remove();
         JME_MAGIC_TILT_END_CONTEXT.remove();
+        JME_MAGIC_ROTATION_START_CONTEXT.remove();
+        JME_MAGIC_ROTATION_END_CONTEXT.remove();
+        JME_MAGIC_WORLD_CONTEXT.remove();
     }
 
     @Inject(method = "createRail", at = @At("RETURN"), cancellable = true, remap = false)
@@ -104,12 +116,11 @@ public class ItemRailModifierMixin {
         final Integer configuredTiltStart = JME_MAGIC_TILT_START_CONTEXT.get();
         final Integer configuredTiltMiddle = JME_MAGIC_TILT_MIDDLE_CONTEXT.get();
         final Integer configuredTiltEnd = JME_MAGIC_TILT_END_CONTEXT.get();
+        final Double configuredRotationStart = JME_MAGIC_ROTATION_START_CONTEXT.get();
+        final Double configuredRotationEnd = JME_MAGIC_ROTATION_END_CONTEXT.get();
+        final World world = JME_MAGIC_WORLD_CONTEXT.get();
         final Rail rail = cir.getReturnValue();
         if (configuredSpeed == null || rail == null) {
-            return;
-        }
-
-        if (rail.isPlatform() || rail.isSiding() || rail.canTurnBack()) {
             return;
         }
 
@@ -127,7 +138,7 @@ public class ItemRailModifierMixin {
         final long speedA = accessor.jme$getSpeedLimit1() <= 0 ? 0 : configuredSpeed;
         final long speedB = accessor.jme$getSpeedLimit2() <= 0 ? 0 : configuredSpeed;
 
-        final Rail updatedRail = Rail.newRail(
+        final Rail rebuiltRail = Rail.newRail(
                 accessor.jme$getPosition1(), accessor.jme$getAngle1(),
                 accessor.jme$getPosition2(), accessor.jme$getAngle2(),
                 configuredShape == null ? accessor.jme$getShape() : configuredShape, accessor.jme$getVerticalRadius(),
@@ -135,11 +146,26 @@ public class ItemRailModifierMixin {
                 speedA, speedB,
                 rail.isPlatform(), rail.isSiding(), rail.canAccelerate(), rail.canConnectRemotely(), accessor.jme$getCanHaveSignal(), accessor.jme$getTransportMode()
         );
+        final Rail updatedRail = rebuiltRail == null ? rail : rebuiltRail;
+        if (rebuiltRail != null) {
+            updatedRail.copySignalColors(rail);
+        }
 
         if (configuredTiltStart != null && configuredTiltMiddle != null && configuredTiltEnd != null) {
             MagicRailTiltRegistry.setTiltAbsolute(updatedRail.getHexId(), configuredTiltStart, configuredTiltMiddle, configuredTiltEnd);
         } else {
             MagicRailTiltRegistry.removeTilt(updatedRail.getHexId());
+        }
+
+        double finalRotStart = configuredRotationStart != null ? configuredRotationStart : 0.0;
+        double finalRotEnd = configuredRotationEnd != null ? configuredRotationEnd : 0.0;
+
+        if (rail.canTurnBack()) {
+            MagicRailRotationRegistry.removeRotation(updatedRail.getHexId());
+        } else if (finalRotStart != 0.0 || finalRotEnd != 0.0) {
+            MagicRailRotationRegistry.setRotation(updatedRail.getHexId(), finalRotStart, finalRotEnd);
+        } else {
+            MagicRailRotationRegistry.removeRotation(updatedRail.getHexId());
         }
 
         cir.setReturnValue(updatedRail);
@@ -156,4 +182,6 @@ public class ItemRailModifierMixin {
         }
         return MagicRailConstants.DEFAULT_SPEED_KMH;
     }
+
+
 }

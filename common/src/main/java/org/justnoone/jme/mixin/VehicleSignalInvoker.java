@@ -23,8 +23,6 @@ public interface VehicleSignalInvoker {
             boolean secondPass
     );
 
-    @Invoker("isCurrentlyManual")
-    boolean jme$isCurrentlyManual();
 
     @Invoker("setNextStoppingIndex")
     void jme$setNextStoppingIndex();

@@ -22,7 +22,9 @@ public abstract class WebserverResourcesMixin {
     private static final String JME_ROUTE_TYPE_METRO_VALUE = "{icon:\"subway\",text:\"Metro\"}";
     private static final String JME_ROUTE_TYPE_BUS_VALUE = "{icon:\"directions_bus\",text:\"Bus\"}";
     private static final String JME_ROUTE_TYPE_TRAM_VALUE = "{icon:\"tram\",text:\"Tram\"}";
-    private static final String JME_ROUTE_TYPE_SBAHN_VALUE = "{icon:\"directions_railway_2\",text:\"S-Bahn\"}";
+    // Use directions_railway (Material Icons + Symbols) so S-Bahn stays 1:1 with other mode icons.
+    // directions_railway_2 is Symbols-only and falls back to a wide ligature string in Material Icons.
+    private static final String JME_ROUTE_TYPE_SBAHN_VALUE = "{icon:\"directions_railway\",text:\"S-Bahn\"}";
 
     @Inject(method = "get", at = @At("RETURN"), cancellable = true)
     private static void jme$injectCustomCssAndJs(String resource, CallbackInfoReturnable<String> cir) {
@@ -86,44 +88,47 @@ public abstract class WebserverResourcesMixin {
             return bundleText;
         }
 
-        final char quote = jme$detectRouteTypeKeyQuote(bundleText);
+        // Normalize any previously injected S-Bahn icon to the square Material Icons glyph.
+        String patchedText = bundleText.replace("directions_railway_2", "directions_railway");
+
+        final char quote = jme$detectRouteTypeKeyQuote(patchedText);
 
         final StringBuilder missingRouteTypes = new StringBuilder();
-        if (!jme$containsRouteTypeKey(bundleText, "train_metro")) {
+        if (!jme$containsRouteTypeKey(patchedText, "train_metro")) {
             missingRouteTypes.append(jme$formatRouteTypeEntry("train_metro", JME_ROUTE_TYPE_METRO_VALUE, quote));
         }
-        if (!jme$containsRouteTypeKey(bundleText, "train_bus")) {
+        if (!jme$containsRouteTypeKey(patchedText, "train_bus")) {
             missingRouteTypes.append(jme$formatRouteTypeEntry("train_bus", JME_ROUTE_TYPE_BUS_VALUE, quote));
         }
-        if (!jme$containsRouteTypeKey(bundleText, "train_tram")) {
+        if (!jme$containsRouteTypeKey(patchedText, "train_tram")) {
             missingRouteTypes.append(jme$formatRouteTypeEntry("train_tram", JME_ROUTE_TYPE_TRAM_VALUE, quote));
         }
-        if (!jme$containsRouteTypeKey(bundleText, "train_sbahn")) {
+        if (!jme$containsRouteTypeKey(patchedText, "train_sbahn")) {
             missingRouteTypes.append(jme$formatRouteTypeEntry("train_sbahn", JME_ROUTE_TYPE_SBAHN_VALUE, quote));
         }
 
         if (missingRouteTypes.length() == 0) {
-            return bundleText;
+            return patchedText;
         }
 
-        int anchorStart = jme$indexOfRouteTypeKey(bundleText, "train_high_speed");
+        int anchorStart = jme$indexOfRouteTypeKey(patchedText, "train_high_speed");
         if (anchorStart < 0) {
-            anchorStart = jme$indexOfRouteTypeKey(bundleText, "train_normal");
+            anchorStart = jme$indexOfRouteTypeKey(patchedText, "train_normal");
         }
         if (anchorStart < 0) {
-            anchorStart = jme$indexOfRouteTypeKey(bundleText, "boat_normal");
+            anchorStart = jme$indexOfRouteTypeKey(patchedText, "boat_normal");
         }
         if (anchorStart < 0) {
-            return bundleText;
+            return patchedText;
         }
 
-        final int entrySeparatorIndex = jme$findObjectEntrySeparator(bundleText, anchorStart);
+        final int entrySeparatorIndex = jme$findObjectEntrySeparator(patchedText, anchorStart);
         if (entrySeparatorIndex < 0) {
-            return bundleText;
+            return patchedText;
         }
 
         final int insertIndex = entrySeparatorIndex + 1;
-        return bundleText.substring(0, insertIndex) + missingRouteTypes + bundleText.substring(insertIndex);
+        return patchedText.substring(0, insertIndex) + missingRouteTypes + patchedText.substring(insertIndex);
     }
 
     private static boolean jme$containsRouteTypeKey(String text, String key) {

@@ -71,6 +71,30 @@ public abstract class VehiclePlatformStopPositionMixin {
         return pathIndex;
     }
 
+
+    @Inject(
+            method = "simulateStopped(JLorg/mtr/libraries/it/unimi/dsi/fastutil/objects/ObjectArrayList;I)V",
+            at = @At("HEAD"),
+            require = 0
+    )
+    private void jme$normalizeAdjustedStopProgress(long millisElapsed, ObjectArrayList<?> trains, int pathIndex, CallbackInfo ci) {
+        if (vehicleExtraData == null || vehicleExtraData.immutablePath == null || pathIndex < 0 || pathIndex >= vehicleExtraData.immutablePath.size()) {
+            return;
+        }
+        final PathData pathData = vehicleExtraData.immutablePath.get(pathIndex);
+        if (pathData == null || PlatformStopPositionRegistry.get(pathData.getSavedRailBaseId()) == PlatformStopPositionRegistry.StopPosition.END) {
+            return;
+        }
+
+        final double adjustedStoppingPoint = jme$adjustStoppingPoint(pathData);
+        final double railProgress = jme$getRailProgress();
+        // If we are within 0.5 blocks of the adjusted stopping point, clamp it perfectly
+        // so that the override triggers.
+        if (Math.abs(railProgress - adjustedStoppingPoint) < 0.5D) {
+            jme$setRailProgress(adjustedStoppingPoint);
+        }
+    }
+
     @ModifyArg(
             method = "simulate(JLorg/mtr/libraries/it/unimi/dsi/fastutil/objects/ObjectArrayList;Lorg/mtr/libraries/it/unimi/dsi/fastutil/longs/Long2LongAVLTreeMap;)V",
             at = @At(value = "INVOKE", target = "Lorg/mtr/core/data/Vehicle;simulateStopped(JLorg/mtr/libraries/it/unimi/dsi/fastutil/objects/ObjectArrayList;I)V"),
@@ -120,10 +144,37 @@ public abstract class VehiclePlatformStopPositionMixin {
             require = 0
     )
     private void jme$setStoppedRailProgress(Vehicle vehicle, double value) {
-        if (Double.isFinite(jme$stoppedPlatformProgressOverride)) {
+        if (!Double.isFinite(jme$stoppedPlatformProgressOverride)) {
+            jme$setRailProgress(value);
             return;
         }
-        jme$setRailProgress(value);
+
+        // If we have an override, we must determine if the train is reversing.
+        // If it is NOT reversing, we return early to keep the train at the adjusted stopping point.
+        // If it IS reversing, we must apply the new 'value' (which is the opposite rail coordinate),
+        // but adjusted by the distance the train DID NOT travel on the platform!
+        if (vehicle.vehicleExtraData != null && vehicle.vehicleExtraData.immutablePath != null) {
+            int pathIndex = org.mtr.core.tool.Utilities.getIndexFromConditionalList(vehicle.vehicleExtraData.immutablePath, jme$stoppedPlatformProgressOverride);
+            if (pathIndex >= 0 && pathIndex < vehicle.vehicleExtraData.immutablePath.size()) {
+                PathData currentPathData = vehicle.vehicleExtraData.immutablePath.get(pathIndex);
+                int nextIndex = ((VehicleExtraDataAccessor) vehicle.vehicleExtraData).jme$getRepeatIndex2() > 0 && pathIndex + 1 >= ((VehicleExtraDataAccessor) vehicle.vehicleExtraData).jme$getRepeatIndex2() ? ((VehicleExtraDataAccessor) vehicle.vehicleExtraData).jme$getRepeatIndex1() : pathIndex + 1;
+                if (nextIndex < vehicle.vehicleExtraData.immutablePath.size()) {
+                    PathData nextPathData = vehicle.vehicleExtraData.immutablePath.get(nextIndex);
+                    if (currentPathData != null && nextPathData != null && currentPathData.isOppositeRail(nextPathData)) {
+                        // The train is reversing!
+                        // MTR sets value = nextPathData.getStartDistance() + trainLength.
+                        // But the train stopped early at jme$stoppedPlatformProgressOverride.
+                        // Distance not traveled = currentPathData.getEndDistance() - jme$stoppedPlatformProgressOverride.
+                        // When reversing, the train's head is shifted forward on the opposite rail by this untraveled distance.
+                        double untraveledDistance = currentPathData.getEndDistance() - jme$stoppedPlatformProgressOverride;
+                        jme$setRailProgress(value + untraveledDistance);
+                        return;
+                    }
+                }
+            }
+        }
+
+        // Not reversing, just stopped in the middle of a continuous path. Ignore the MTR snap to next rail.
     }
 
     @Inject(

@@ -49,6 +49,8 @@ public class MagicRailConnectorScreen extends ScreenExtension {
     private int tiltStartDegrees;
     private int tiltMiddleDegrees;
     private int tiltEndDegrees;
+    private double rotationStartDegrees;
+    private double rotationEndDegrees;
 
     private SliderWidgetExtension speedSlider;
     private SliderWidgetExtension tiltStartSlider;
@@ -75,7 +77,7 @@ public class MagicRailConnectorScreen extends ScreenExtension {
     @Override
     protected void init2() {
         final int panelWidth = 368;
-        final int panelHeight = 248;
+        final int panelHeight = 274;
         final int panelX = (width - panelWidth) / 2;
         final int panelY = (height - panelHeight) / 2;
         final int leftWidth = 148;
@@ -137,7 +139,7 @@ public class MagicRailConnectorScreen extends ScreenExtension {
         renderBackground(graphicsHolder);
 
         final int panelWidth = 368;
-        final int panelHeight = 248;
+        final int panelHeight = 274;
         final int panelX = (width - panelWidth) / 2;
         final int panelY = (height - panelHeight) / 2;
         final int leftWidth = 148;
@@ -546,6 +548,8 @@ public class MagicRailConnectorScreen extends ScreenExtension {
         MagicRailConstants.setStartTiltOnStack(stack, tiltStartDegrees);
         MagicRailConstants.setMiddleTiltOnStack(stack, tiltMiddleDegrees);
         MagicRailConstants.setEndTiltOnStack(stack, tiltEndDegrees);
+        MagicRailConstants.setStartRotationOnStack(stack, rotationStartDegrees);
+        MagicRailConstants.setEndRotationOnStack(stack, rotationEndDegrees);
 
         final PacketByteBuf buf = PacketByteBufs.create();
         buf.writeVarInt(speedKmh);
@@ -555,6 +559,8 @@ public class MagicRailConnectorScreen extends ScreenExtension {
         buf.writeVarInt(tiltStartDegrees);
         buf.writeVarInt(tiltMiddleDegrees);
         buf.writeVarInt(tiltEndDegrees);
+        buf.writeDouble(rotationStartDegrees);
+        buf.writeDouble(rotationEndDegrees);
         MagicNetworkingCompat.sendToServer(MagicRailConstants.SET_SPEED_PACKET_ID, buf);
     }
 

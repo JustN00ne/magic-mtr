@@ -92,9 +92,7 @@ public abstract class VehicleAlternativePlatformRerouteMixin {
         if (vehiclePositions == null || vehiclePositions.size() < 2) {
             return;
         }
-        if (invoker.jme$isCurrentlyManual()) {
-            return;
-        }
+
 
         final Depot depot = data.depotIdMap.get(vehicleExtraData.getDepotId());
         if (depot == null) {

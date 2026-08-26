@@ -6,6 +6,8 @@ import org.mtr.mod.data.RailType;
 public final class MagicRailSpeedColor {
 
     private static final int COPPER_250_COLOR = 0xFFB87333;
+    private static final java.util.concurrent.ConcurrentHashMap<Integer, Integer> COLOR_CACHE = new java.util.concurrent.ConcurrentHashMap<>();
+    private static volatile int lastConfigSignature = Integer.MIN_VALUE;
 
     // OpenRailwayMap-like palette (MAGIC historic default).
     private static final int[] ORM_SPEED_STOPS = {5, 100, 180, 220, 300, 400};
@@ -33,7 +35,23 @@ public final class MagicRailSpeedColor {
 
     public static int colorForSpeed(int speedKmh) {
         final int speed = MagicRailConstants.clampToStep(speedKmh <= 0 ? 1 : speedKmh);
+        final int configSignature = getConfigSignature();
+        if (lastConfigSignature != configSignature) {
+            COLOR_CACHE.clear();
+            lastConfigSignature = configSignature;
+        }
+        final int cacheKey = configSignature * 4099 + speed;
+        final Integer cached = COLOR_CACHE.get(cacheKey);
+        if (cached != null) {
+            return cached;
+        }
 
+        final int color = computeColorForSpeed(speed);
+        COLOR_CACHE.put(cacheKey, color);
+        return color;
+    }
+
+    private static int computeColorForSpeed(int speed) {
         final JmeConfig.TrackColorMode mode;
         try {
             mode = JmeConfig.trackColorMode();
@@ -51,6 +69,27 @@ public final class MagicRailSpeedColor {
         }
 
         return lerpByStops(speed, ORM_SPEED_STOPS, ORM_COLOR_STOPS);
+    }
+
+    private static int getConfigSignature() {
+        int signature = 1;
+        try {
+            final JmeConfig.TrackColorMode mode = JmeConfig.trackColorMode();
+            signature = signature * 31 + (mode == null ? 0 : mode.ordinal());
+            final JmeConfig.TrackColorStop[] stops = JmeConfig.trackColorCustomGradientStops();
+            if (stops != null) {
+                signature = signature * 31 + stops.length;
+                for (final JmeConfig.TrackColorStop stop : stops) {
+                    if (stop == null) {
+                        continue;
+                    }
+                    signature = signature * 31 + stop.speedKmh;
+                    signature = signature * 31 + stop.colorArgb;
+                }
+            }
+        } catch (Throwable ignored) {
+        }
+        return signature;
     }
 
     private static int[][] buildMtrPaletteStops() {

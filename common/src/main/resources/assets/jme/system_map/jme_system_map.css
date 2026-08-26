@@ -370,3 +370,30 @@ html.jme-collapse-route-chips .p-inputchips:hover .p-inputchips-multiple-contain
   max-height: 14em;
   overflow: auto;
 }
+
+/* Transit mode icon normalization: force a square (1:1) glyph box for map chrome icons.
+ * Prevents S-Bahn / Material Icons ligatures from stretching wider than peer icons. */
+.jme-menu-chip .material-icons,
+.jme-menu-action .material-icons,
+.jme-menu-icon.material-icons,
+.jme-menu-close.material-icons {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 1 / 1;
+  width: 1em;
+  height: 1em;
+  line-height: 1;
+  overflow: hidden;
+  flex: 0 0 auto;
+  font-variation-settings: "OPSZ" 24, "wght" 400, "FILL" 0, "GRAD" 0;
+}
+
+/* Also normalize MTR Angular route-type material icons when present in the map shell. */
+app-root .material-icons,
+app-root .material-symbols-outlined {
+  aspect-ratio: 1 / 1;
+  line-height: 1;
+  overflow: hidden;
+  box-sizing: content-box;
+}

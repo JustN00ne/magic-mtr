@@ -8,8 +8,8 @@ import org.justnoone.jme.block.ModBlocks;
 import org.justnoone.jme.item.ModItemGroups;
 import org.justnoone.jme.item.ModItems;
 import org.justnoone.jme.network.MagicRailNetworking;
-import org.justnoone.jme.bluemap.BlueMapRailIntegration;
 import org.justnoone.jme.config.MagicConfigReloader;
+import org.justnoone.jme.dashboard.MagicDashboardServer;
 import org.justnoone.jme.systemmap.SystemMapOverlayCacheStore;
 import org.mtr.mapping.registry.Registry;
 import org.apache.logging.log4j.LogManager;
@@ -36,15 +36,12 @@ public class JmeFabric implements ModInitializer {
             final MagicConfigReloader.ReloadResult result = MagicConfigReloader.reloadAllFromDisk();
             LOGGER.info("[MAGIC] Reloaded config on server start: {}", result.toDebugString());
             SystemMapOverlayCacheStore.onServerStarted(server);
-            if (FabricLoader.getInstance().isModLoaded("bluemap")) {
-                BlueMapRailIntegration.onServerStarted(server);
-            }
+            MagicDashboardServer.setTileProvider((x, z, zoom) -> org.justnoone.jme.dashboard.TileRenderer.getTile(server, x, z, zoom));
+            // MagicDashboardServer.start(); // Disabled in 1.3.0 — dashboard under rework
         });
 
         ServerLifecycleEvents.SERVER_STOPPING.register(server -> {
-            if (FabricLoader.getInstance().isModLoaded("bluemap")) {
-                BlueMapRailIntegration.onServerStopping();
-            }
+            MagicDashboardServer.stop();
             SystemMapOverlayCacheStore.onServerStopping();
         });
     }

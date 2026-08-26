@@ -501,19 +501,19 @@ public final class JmeYaclConfigScreen {
                 .description(OptionDescription.createBuilder()
                         .text(Text.literal("Higher values draw smoother curves but cost more CPU."))
                         .build())
-                .binding(24, () -> state.blueMapCurveSampleTargetPoints, value -> state.blueMapCurveSampleTargetPoints = value)
+                .binding(12, () -> state.blueMapCurveSampleTargetPoints, value -> state.blueMapCurveSampleTargetPoints = value)
                 .controller(option -> IntegerSliderControllerBuilder.create(option).range(4, 256).step(1))
                 .build();
 
         final Option<Double> curveIntervalMin = Option.<Double>createBuilder()
                 .name(Text.literal("Curve Interval Min"))
-                .binding(0.4D, () -> state.blueMapCurveSampleIntervalMin, value -> state.blueMapCurveSampleIntervalMin = value)
+                .binding(1.0D, () -> state.blueMapCurveSampleIntervalMin, value -> state.blueMapCurveSampleIntervalMin = value)
                 .controller(option -> DoubleFieldControllerBuilder.create(option).range(0.01D, 50D))
                 .build();
 
         final Option<Double> curveIntervalMax = Option.<Double>createBuilder()
                 .name(Text.literal("Curve Interval Max"))
-                .binding(1.25D, () -> state.blueMapCurveSampleIntervalMax, value -> state.blueMapCurveSampleIntervalMax = value)
+                .binding(4.0D, () -> state.blueMapCurveSampleIntervalMax, value -> state.blueMapCurveSampleIntervalMax = value)
                 .controller(option -> DoubleFieldControllerBuilder.create(option).range(0.01D, 50D))
                 .build();
 

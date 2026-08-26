@@ -24,9 +24,9 @@ import java.lang.reflect.Method;
 @Mixin(value = EditDepotScreen.class, remap = false)
 public abstract class EditDepotScreenCancellationMixin implements IGui {
 
-    // Hidden for the main release UI.
+    // Shown on EditDepotScreen so operators can configure T_cancel from the depot UI.
     @Unique
-    private static final boolean JME_ENABLE_CANCELLATIONS_BUTTON = false;
+    private static final boolean JME_ENABLE_CANCELLATIONS_BUTTON = true;
 
     @Shadow
     @Final
@@ -58,11 +58,10 @@ public abstract class EditDepotScreenCancellationMixin implements IGui {
 
         // EditDepotScreen can be re-initialized after returning from child screens.
         // Re-add every init pass so the tab never disappears.
-        jme$cancellationButtonAdded = false;
-        if (!jme$cancellationButtonAdded) {
-            jme$addChild(new ClickableWidget(jme$cancellationButton));
-            jme$cancellationButtonAdded = true;
-        }
+        jme$addChild(new ClickableWidget(jme$cancellationButton));
+        jme$cancellationButtonAdded = true;
+        jme$cancellationButton.visible = true;
+        jme$cancellationButton.active = true;
     }
 
     @Inject(method = "tick2", at = @At("TAIL"), remap = false)

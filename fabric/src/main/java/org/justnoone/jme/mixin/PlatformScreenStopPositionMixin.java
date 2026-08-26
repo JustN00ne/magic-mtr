@@ -4,11 +4,13 @@ import net.fabricmc.fabric.api.networking.v1.PacketByteBufs;
 import net.minecraft.network.PacketByteBuf;
 import org.justnoone.jme.network.MagicNetworkingCompat;
 import org.justnoone.jme.rail.MagicRailConstants;
+
 import org.justnoone.jme.rail.PlatformStopPositionRegistry;
 import org.mtr.core.data.Platform;
 import org.mtr.core.data.SavedRailBase;
 import org.mtr.mapping.holder.ClickableWidget;
 import org.mtr.mapping.holder.Text;
+import org.mtr.mapping.mapper.CheckboxWidgetExtension;
 import org.mtr.mapping.mapper.ButtonWidgetExtension;
 import org.mtr.mapping.mapper.TextHelper;
 import org.mtr.mod.client.IDrawing;
@@ -30,6 +32,7 @@ public abstract class PlatformScreenStopPositionMixin implements IGui {
     @Unique
     private ButtonWidgetExtension jme$stopPositionButton;
 
+
     @Inject(method = "init2", at = @At("TAIL"), remap = false)
     private void jme$initStopPositionButton(CallbackInfo ci) {
         final Platform platform = jme$getPlatform();
@@ -45,6 +48,8 @@ public abstract class PlatformScreenStopPositionMixin implements IGui {
         IDrawing.setPositionAndWidth(jme$stopPositionButton, bounds[0], bounds[1], bounds[2]);
         jme$stopPositionButton.setMessage2(Text.cast(jme$getStopPositionText(platform)));
         jme$addChild(new ClickableWidget(jme$stopPositionButton));
+
+
     }
 
     @Unique
@@ -64,6 +69,8 @@ public abstract class PlatformScreenStopPositionMixin implements IGui {
         packet.writeString(stopPosition.getSerializedId());
         MagicNetworkingCompat.sendToServer(MagicRailConstants.SET_PLATFORM_STOP_POSITION_PACKET_ID, packet);
     }
+
+
 
     @Unique
     private org.mtr.mapping.holder.MutableText jme$getStopPositionText(Platform platform) {

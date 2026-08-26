@@ -1,0 +1,8 @@
+{
+  "parent": "mtr:block/platform_base",
+  "textures": {
+    "main": "block/stone",
+    "top": "jme:block/platform_wmta_off",
+    "particle": "jme:block/platform_wmta"
+  }
+}

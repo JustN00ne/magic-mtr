@@ -5,6 +5,7 @@ import org.justnoone.jme.client.data.SidingSpeedSliderFileStore;
 import org.justnoone.jme.config.MagicConfigReloader;
 import org.justnoone.jme.config.JmeConfig;
 import org.justnoone.jme.rail.MagicRailTiltRegistry;
+import org.justnoone.jme.rail.MagicRailRotationRegistry;
 
 public final class MagicReloadHooks {
 
@@ -22,6 +23,7 @@ public final class MagicReloadHooks {
     public static void reloadTiltState() {
         JmeConfig.reload();
         MagicRailTiltRegistry.reloadFromDisk();
+        MagicRailRotationRegistry.reloadFromDisk();
         MagicRailTiltClient.clearSmoothingCache();
     }
 

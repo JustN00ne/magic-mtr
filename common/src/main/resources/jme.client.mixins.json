@@ -1,44 +1,45 @@
 {
-  "required": true,
-  "minVersion": "0.8",
-  "package": "org.justnoone.jme.mixin",
-  "compatibilityLevel": "${mixin_compatibility_level}",
-  "client": [
-    "BlockNodeBrushProfileMixin",
-    "ClientPacketHelperTrainDetectorMixin",
-    "ColorSelectorScreenLayoutMixin",
-    "ConfigScreenMagicSettingsButtonMixin",
-    "DashboardListAccessor",
-    "DashboardScreenAccessor",
-    "DashboardScreenAlternativePlatformMixin",
-    "DashboardScreenMagicMenuMixin",
-    "DashboardScreenMapAreasMixin",
-    "DashboardScreenRouteFoldersMixin",
-    "EditDepotScreenCancellationMixin",
-    "EditDepotScreenTrainLengthMixin",
-    "EditRouteScreenRouteTypesMixin",
-    "EditNameColorScreenBaseAccessor",
-    "GameRendererTiltMixin",
-    "MtrRegistryHideRailsMixin",
-    "RailTypeMixin",
-    "RenderRailsMixin",
-    "RenderRailsTiltMixin",
-    "RenderVehiclesTiltMixin",
-    "RenderRailsColorContextMixin",
-    "RailModifierScreenMixin",
-    "ScreenAbstractMappingOverlayClickMixin",
-    "SavedRailScreenBaseAccessor",
-    "PlatformScreenStopPositionMixin",
-    "SidingScreenMixin",
-    "SavedRailBasePositionAccessor",
-    "TranslationHolderVehicleSpeedMixin",
-    "WidgetMapAccessor",
-    "WidgetMapRouteOverlayMixin"
-  ],
-  "injectors": {
-    "defaultRequire": 1
-  },
-  "overwrites": {
-    "requireAnnotations": true
-  }
+    "required": true,
+    "minVersion": "0.8",
+    "package": "org.justnoone.jme.mixin",
+    "compatibilityLevel": "${mixin_compatibility_level}",
+    "client": [
+        "BlockNodeBrushProfileMixin",
+        "ClientPacketHelperTrainDetectorMixin",
+        "ColorSelectorScreenLayoutMixin",
+        "ConfigScreenMagicSettingsButtonMixin",
+        "DashboardListAccessor",
+        "DashboardScreenAccessor",
+        "DashboardScreenAlternativePlatformMixin",
+        "DashboardScreenMagicMenuMixin",
+        "DashboardScreenMapAreasMixin",
+        "DashboardScreenRouteFoldersMixin",
+        "EditDepotScreenCancellationMixin",
+        "EditDepotScreenTrainLengthMixin",
+        "EditRouteScreenRouteTypesMixin",
+        "EditNameColorScreenBaseAccessor",
+        "GameRendererTiltMixin",
+        "MtrRegistryHideRailsMixin",
+        "RailTypeMixin",
+        "RenderRailsMixin",
+        "RenderRailsTiltMixin",
+        "RenderRailsRotationMixin",
+        "RenderVehiclesTiltMixin",
+        "RenderRailsColorContextMixin",
+        "RailModifierScreenMixin",
+        "ScreenAbstractMappingOverlayClickMixin",
+        "SavedRailScreenBaseAccessor",
+        "PlatformScreenStopPositionMixin",
+        "SidingScreenMixin",
+        "SavedRailBasePositionAccessor",
+        "TranslationHolderVehicleSpeedMixin",
+        "WidgetMapAccessor",
+        "WidgetMapRouteOverlayMixin"
+    ],
+    "injectors": {
+        "defaultRequire": 1
+    },
+    "overwrites": {
+        "requireAnnotations": true
+    }
 }

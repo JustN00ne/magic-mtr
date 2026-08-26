@@ -9,4 +9,10 @@ public interface VehicleExtraDataAccessor {
 
     @Invoker(value = "setSpeedTarget", remap = false)
     void jme$setSpeedTarget(double speedTarget);
+
+    @Invoker(value = "getRepeatIndex1", remap = false)
+    int jme$getRepeatIndex1();
+
+    @Invoker(value = "getRepeatIndex2", remap = false)
+    int jme$getRepeatIndex2();
 }

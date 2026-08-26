@@ -1,8 +1,5 @@
 package org.justnoone.jme.mixin;
 
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.entity.Entity;
-import net.minecraft.util.math.Vec3d;
 import org.justnoone.jme.client.MagicRailTiltClient;
 import org.mtr.mod.render.PositionAndRotation;
 import org.mtr.mod.render.RenderVehicles;
@@ -12,21 +9,15 @@ import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.ModifyArgs;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 import org.spongepowered.asm.mixin.injection.invoke.arg.Args;
-
-import java.util.IdentityHashMap;
 
 @Mixin(RenderVehicles.class)
 public class RenderVehiclesTiltMixin {
 
     @Unique
     private static final ThreadLocal<Long> JME_SMOOTHING_COUNTER = ThreadLocal.withInitial(() -> 0L);
-
-    @Unique
-    private static final ThreadLocal<IdentityHashMap<PositionAndRotation, PositionAndRotation>> JME_RENDER_TO_ABSOLUTE =
-            ThreadLocal.withInitial(IdentityHashMap::new);
 
     @Inject(
             method = "render(JLorg/mtr/mapping/holder/Vector3d;)V",
@@ -36,28 +27,7 @@ public class RenderVehiclesTiltMixin {
     )
     private static void jme$beginVehicleTiltFrame(long millisElapsed, org.mtr.mapping.holder.Vector3d cameraShakeOffset, CallbackInfo ci) {
         JME_SMOOTHING_COUNTER.set(0L);
-        JME_RENDER_TO_ABSOLUTE.get().clear();
-    }
-
-    @Inject(
-            method = "getRenderPositionAndRotation(Lorg/mtr/mapping/holder/Vector3d;Ljava/lang/Double;Lorg/mtr/mod/render/PositionAndRotation;Lorg/mtr/mod/render/PositionAndRotation;Lorg/mtr/mapping/holder/Vector3d;)Lorg/mtr/mod/render/PositionAndRotation;",
-            at = @At("RETURN"),
-            remap = false,
-            require = 0
-    )
-    private static void jme$captureAbsolutePositionForTilt(
-            org.mtr.mapping.holder.Vector3d offsetVector,
-            Double offsetRotation,
-            PositionAndRotation ridingCarPositionAndRotation,
-            PositionAndRotation absolutePositionAndRotation,
-            org.mtr.mapping.holder.Vector3d cameraShakeOffset,
-            CallbackInfoReturnable<PositionAndRotation> cir
-    ) {
-        final PositionAndRotation renderingPositionAndRotation = cir.getReturnValue();
-        if (renderingPositionAndRotation == null || absolutePositionAndRotation == null) {
-            return;
-        }
-        JME_RENDER_TO_ABSOLUTE.get().put(renderingPositionAndRotation, absolutePositionAndRotation);
+        MagicRailTiltClient.beginRenderFrame();
     }
 
     @Inject(method = "getStoredMatrixTransformations", at = @At("RETURN"), cancellable = true, remap = false, require = 0)
@@ -141,38 +111,15 @@ public class RenderVehiclesTiltMixin {
 
     @Unique
     private static double jme$getSmoothedTiltDegreesAtRenderPosition(boolean useOffset, PositionAndRotation renderingPositionAndRotation) {
+        // The riding car and the local riding player must roll exactly like the camera: share one
+        // smoothed "riding car roll" value instead of a per-position lookup that can drift apart.
+        if (!useOffset) {
+            return MagicRailTiltClient.getRidingCarRollDegrees();
+        }
+
         final long smoothingKey = jme$nextSmoothingKey();
         final double fallbackForwardX = Math.sin(renderingPositionAndRotation.yaw);
         final double fallbackForwardZ = Math.cos(renderingPositionAndRotation.yaw);
-
-        if (!useOffset) {
-            final PositionAndRotation absolute = JME_RENDER_TO_ABSOLUTE.get().get(renderingPositionAndRotation);
-            if (absolute != null) {
-                final double forwardX = Math.sin(absolute.yaw);
-                final double forwardZ = Math.cos(absolute.yaw);
-                return MagicRailTiltClient.getSmoothedSignedTiltDegreesAt(
-                        smoothingKey,
-                        absolute.position.x,
-                        absolute.position.y,
-                        absolute.position.z,
-                        forwardX,
-                        forwardZ
-                );
-            }
-
-            final Entity cameraEntity = MinecraftClient.getInstance().getCameraEntity();
-            if (cameraEntity != null) {
-                final Vec3d cameraPos = cameraEntity.getPos();
-                return MagicRailTiltClient.getSmoothedSignedTiltDegreesAt(
-                        smoothingKey,
-                        cameraPos.x,
-                        cameraPos.y,
-                        cameraPos.z,
-                        fallbackForwardX,
-                        fallbackForwardZ
-                );
-            }
-        }
 
         return MagicRailTiltClient.getSmoothedSignedTiltDegreesAt(
                 smoothingKey,

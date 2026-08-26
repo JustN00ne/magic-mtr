@@ -6,6 +6,7 @@ import org.justnoone.jme.client.PositionAngleKey;
 import org.justnoone.jme.config.JmeConfig;
 import org.justnoone.jme.rail.AlternativePlatformRegistry;
 import org.justnoone.jme.rail.MagicRailSpeedColor;
+import org.justnoone.jme.rail.WaypointRegistry;
 import org.mtr.core.data.Platform;
 import org.mtr.core.data.Position;
 import org.mtr.core.data.Rail;
@@ -39,10 +40,12 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.PriorityQueue;
+import java.util.Set;
 
 @Mixin(value = WidgetMap.class, remap = false)
 public abstract class WidgetMapRouteOverlayMixin {
@@ -131,9 +134,15 @@ public abstract class WidgetMapRouteOverlayMixin {
             }
         }
 
+        // Draw waypoints using station-like styling (name label + diamond marker).
+        if (showStations && scale >= 0.05D) {
+            jme$drawWaypoints(guiDrawing, mapWidth, mapHeight);
+        }
+
         if (editingRoute != null && !routePlatforms.isEmpty()) {
+            final Set<String> renderedRouteGeometry = new HashSet<>();
             for (int i = 0; i < routePlatforms.size() - 1; i++) {
-                jme$drawRailPath(guiDrawing, routePlatforms.get(i), routePlatforms.get(i + 1), mainLineColor, lineThickness, mapWidth, mapHeight, currentRailsHash);
+                jme$drawRailPath(guiDrawing, routePlatforms.get(i), routePlatforms.get(i + 1), mainLineColor, lineThickness, mapWidth, mapHeight, currentRailsHash, renderedRouteGeometry);
             }
 
             final int selectedIndex = DashboardRouteRenderState.getEditingRoutePlatformIndex();
@@ -165,7 +174,7 @@ public abstract class WidgetMapRouteOverlayMixin {
                     if (alternativePlatform == null) {
                         continue;
                     }
-                    jme$drawRailPath(guiDrawing, platform, alternativePlatform, alternativeLineColor, Math.max(1.25D, lineThickness * 0.8D), mapWidth, mapHeight, currentRailsHash);
+                    jme$drawRailPath(guiDrawing, platform, alternativePlatform, alternativeLineColor, Math.max(1.25D, lineThickness * 0.8D), mapWidth, mapHeight, currentRailsHash, renderedRouteGeometry);
                     jme$drawPoint(guiDrawing, alternativePlatform.getMidPosition(), 1.8D, alternativeLineColor, mapWidth, mapHeight);
                 }
             }
@@ -173,10 +182,13 @@ public abstract class WidgetMapRouteOverlayMixin {
     }
 
     @Unique
-    private void jme$drawRailPath(GuiDrawing guiDrawing, Platform startPlatform, Platform endPlatform, int color, double thickness, int mapWidth, int mapHeight, int railsHash) {
+    private void jme$drawRailPath(GuiDrawing guiDrawing, Platform startPlatform, Platform endPlatform, int color, double thickness, int mapWidth, int mapHeight, int railsHash, Set<String> renderedGeometry) {
         final Position startMid = startPlatform.getMidPosition();
         final Position endMid = endPlatform.getMidPosition();
         final List<Object[]> path = jme$getRailPath(startPlatform, endPlatform, railsHash);
+        if (renderedGeometry != null && !renderedGeometry.add(jme$routeGeometryKey(startPlatform, endPlatform, path, color, thickness))) {
+            return;
+        }
 
         if (path.isEmpty()) {
             jme$drawWorldSegment(guiDrawing, startMid.getX() + 0.5D, startMid.getZ() + 0.5D, endMid.getX() + 0.5D, endMid.getZ() + 0.5D, color, thickness, mapWidth, mapHeight);
@@ -190,6 +202,31 @@ public abstract class WidgetMapRouteOverlayMixin {
             jme$drawRailEdge(guiDrawing, from, to, rail, color, thickness, mapWidth, mapHeight);
             jme$drawRailSignalArrows(guiDrawing, from, to, rail, color, Math.max(0.9D, thickness * 0.8D), mapWidth, mapHeight);
         }
+    }
+
+    @Unique
+    private static String jme$routeGeometryKey(Platform startPlatform, Platform endPlatform, List<Object[]> path, int color, double thickness) {
+        final StringBuilder key = new StringBuilder();
+        key.append(color).append(':').append(Math.round(thickness * 100D)).append(':');
+        if (path == null || path.isEmpty()) {
+            final long first = startPlatform == null ? 0L : startPlatform.getId();
+            final long second = endPlatform == null ? 0L : endPlatform.getId();
+            key.append(Math.min(first, second)).append('-').append(Math.max(first, second));
+            return key.toString();
+        }
+
+        final List<String> railIds = new ArrayList<>();
+        for (final Object[] pathEdge : path) {
+            if (pathEdge == null || pathEdge.length < 3 || !(pathEdge[2] instanceof Rail)) {
+                continue;
+            }
+            railIds.add(((Rail) pathEdge[2]).getHexId());
+        }
+        Collections.sort(railIds);
+        for (final String railId : railIds) {
+            key.append(railId).append(';');
+        }
+        return key.toString();
     }
 
     @Unique
@@ -720,6 +757,44 @@ public abstract class WidgetMapRouteOverlayMixin {
             return;
         }
         guiDrawing.drawRectangle(jme$getX2() + x - radius, jme$getY2() + y - radius, jme$getX2() + x + radius, jme$getY2() + y + radius, color);
+    }
+
+    @Unique
+    private void jme$drawWaypoints(GuiDrawing guiDrawing, int mapWidth, int mapHeight) {
+        final java.util.Collection<WaypointRegistry.Waypoint> waypoints = WaypointRegistry.getAll();
+        if (waypoints.isEmpty()) {
+            return;
+        }
+
+        final double markerRadius = 2.5D;
+
+        for (final WaypointRegistry.Waypoint wp : waypoints) {
+            if (wp == null || wp.position == null) {
+                continue;
+            }
+
+            final double worldX = wp.position.getX() + 0.5D;
+            final double worldZ = wp.position.getZ() + 0.5D;
+            final double mapX = jme$toMapX(worldX);
+            final double mapY = jme$toMapY(worldZ);
+
+            // Skip off-screen waypoints.
+            if (mapX < -50 || mapY < -50 || mapX > mapWidth + 50 || mapY > mapHeight + 50) {
+                continue;
+            }
+
+            // Draw diamond marker (rotated square) at waypoint position, styled like station icons.
+            final int wpColor = jme$withAlpha(wp.color == 0 ? 0x6C63FF : wp.color, 0xD0);
+            jme$drawDiamond(guiDrawing, mapX, mapY, markerRadius, wpColor);
+        }
+    }
+
+    @Unique
+    private void jme$drawDiamond(GuiDrawing guiDrawing, double centerX, double centerY, double size, int color) {
+        // Draw a small diamond (rotated square) shape using rectangles.
+        final double halfDiag = size * 0.707D;
+        guiDrawing.drawRectangle(jme$getX2() + centerX - halfDiag, jme$getY2() + centerY - 0.5D, jme$getX2() + centerX + halfDiag, jme$getY2() + centerY + 0.5D, color);
+        guiDrawing.drawRectangle(jme$getX2() + centerX - 0.5D, jme$getY2() + centerY - halfDiag, jme$getX2() + centerX + 0.5D, jme$getY2() + centerY + halfDiag, color);
     }
 
     private double jme$toMapX(double worldX) {

@@ -16,6 +16,12 @@ public final class MagicRailConstants {
     public static final Identifier SET_BRUSH_PROFILE_PACKET_ID = new Identifier("jme", "set_brush_profile");
     public static final Identifier APPLY_BRUSH_PROFILE_PACKET_ID = new Identifier("jme", "apply_brush_profile");
     public static final Identifier SET_PLATFORM_STOP_POSITION_PACKET_ID = new Identifier("jme", "set_platform_stop_position");
+    public static final Identifier SET_PLATFORM_MANUAL_DOOR_OPENING_PACKET_ID = new Identifier("jme", "set_platform_manual_door_opening");
+    public static final Identifier REQUEST_MANUAL_DOOR_OPEN_PACKET_ID = new Identifier("jme", "request_manual_door_open");
+    public static final Identifier SYNC_MANUAL_DOOR_OPEN_PACKET_ID = new Identifier("jme", "sync_manual_door_open");
+    public static final Identifier SET_RAIL_ROTATION_PACKET_ID = new Identifier("jme", "set_magic_rail_rotation");
+    public static final Identifier SET_MAGIC_NODE_ANGLE_PACKET_ID = new Identifier("jme", "set_magic_node_angle");
+    public static final Identifier SET_WAYPOINT_PACKET_ID = new Identifier("jme", "set_waypoint");
 
     public static final int DEFAULT_SPEED_KMH = 80;
     public static final int MIN_SPEED_KMH = 1;
@@ -27,6 +33,13 @@ public final class MagicRailConstants {
     public static final int DEFAULT_TILT_DEGREES = 0;
     public static final int MIN_TILT_DEGREES = -45;
     public static final int MAX_TILT_DEGREES = 45;
+
+    public static final double DEFAULT_ROTATION_DEGREES = 0.0;
+    public static final double MIN_ROTATION_DEGREES = -180.0;
+    public static final double MAX_ROTATION_DEGREES = 180.0;
+
+    public static final String NBT_ROTATION_START = "jme_rotation_start";
+    public static final String NBT_ROTATION_END = "jme_rotation_end";
 
     private MagicRailConstants() {
     }
@@ -57,7 +70,7 @@ public final class MagicRailConstants {
         // Keep treating it as universal only if it carries MAGIC NBT.
         if (translationKey.contains("rail_connector_300")) {
             final CompoundTag nbt = stack.getTag();
-            return nbt != null && (nbt.contains("jme_speed", 3) || nbt.contains("jme_style", 8) || nbt.contains("jme_shape", 8) || nbt.contains("jme_tilt_start", 3) || nbt.contains("jme_tilt_middle", 3) || nbt.contains("jme_tilt_end", 3));
+            return nbt != null && (nbt.contains("jme_speed", 3) || nbt.contains("jme_style", 8) || nbt.contains("jme_shape", 8) || nbt.contains("jme_tilt_start", 3) || nbt.contains("jme_tilt_middle", 3) || nbt.contains("jme_tilt_end", 3) || nbt.contains(NBT_ROTATION_START, 6) || nbt.contains(NBT_ROTATION_END, 6));
         }
 
         return false;
@@ -154,6 +167,22 @@ public final class MagicRailConstants {
         setTiltOnStack(stack, "jme_tilt_end", tiltDegrees);
     }
 
+    public static double getStartRotationFromStack(ItemStack stack) {
+        return getRotationFromStack(stack, NBT_ROTATION_START);
+    }
+
+    public static double getEndRotationFromStack(ItemStack stack) {
+        return getRotationFromStack(stack, NBT_ROTATION_END);
+    }
+
+    public static void setStartRotationOnStack(ItemStack stack, double degrees) {
+        setRotationOnStack(stack, NBT_ROTATION_START, degrees);
+    }
+
+    public static void setEndRotationOnStack(ItemStack stack, double degrees) {
+        setRotationOnStack(stack, NBT_ROTATION_END, degrees);
+    }
+
     public static String getStyleLabel(String styleId) {
         if (styleId == null || styleId.isEmpty() || styleId.equals("default")) {
             return "Standard MTR";
@@ -210,5 +239,24 @@ public final class MagicRailConstants {
         }
         final CompoundTag nbt = stack.getOrCreateTag();
         nbt.putInt(nbtKey, clampTiltDegrees(tiltDegrees));
+    }
+
+    private static double getRotationFromStack(ItemStack stack, String nbtKey) {
+        if (stack == null || stack.isEmpty()) {
+            return DEFAULT_ROTATION_DEGREES;
+        }
+        final CompoundTag nbt = stack.getTag();
+        if (nbt == null || !nbt.contains(nbtKey, 6)) { // 6 = DOUBLE
+            return DEFAULT_ROTATION_DEGREES;
+        }
+        return Math.max(MIN_ROTATION_DEGREES, Math.min(MAX_ROTATION_DEGREES, nbt.getDouble(nbtKey)));
+    }
+
+    private static void setRotationOnStack(ItemStack stack, String nbtKey, double degrees) {
+        if (stack == null || stack.isEmpty()) {
+            return;
+        }
+        final CompoundTag nbt = stack.getOrCreateTag();
+        nbt.putDouble(nbtKey, Math.max(MIN_ROTATION_DEGREES, Math.min(MAX_ROTATION_DEGREES, degrees)));
     }
 }

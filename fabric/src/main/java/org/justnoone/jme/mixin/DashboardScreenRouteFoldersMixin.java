@@ -162,8 +162,8 @@ public abstract class DashboardScreenRouteFoldersMixin extends ScreenExtension i
             return;
         }
         final List<DashboardListItem> routeRows = DashboardRouteFolderStore.buildRows(editingRoute);
-        // Hide stock row icons (edit/draw/delete); route actions are exposed via a 3-dot overflow menu.
-        dashboardList.setData(new ObjectArrayList<>(routeRows), false, false, false, false, false, false);
+        // Keep the stock dock actions available (Edit/Delete) instead of forcing everything into an overflow menu.
+        dashboardList.setData(new ObjectArrayList<>(routeRows), false, false, true, false, false, true);
     }
 
     @Inject(method = "onEdit", at = @At("HEAD"), cancellable = true, remap = false)

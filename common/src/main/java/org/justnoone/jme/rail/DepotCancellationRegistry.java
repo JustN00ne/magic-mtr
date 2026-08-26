@@ -21,9 +21,9 @@ public final class DepotCancellationRegistry {
 
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     private static final Path CONFIG_PATH = MagicConfigPaths.resolveConfigFile("depot_cancellations.json", "jme_depot_cancellations.json");
-    private static final int MIN_THRESHOLD_MINUTES = 1;
-    private static final int MAX_THRESHOLD_MINUTES = 24 * 60;
-    private static final int DEFAULT_THRESHOLD_MINUTES = 120;
+    public static final int MIN_THRESHOLD_MINUTES = 1;
+    public static final int MAX_THRESHOLD_MINUTES = 12 * 60;
+    public static final int DEFAULT_THRESHOLD_MINUTES = 120;
 
     private static final Map<Long, Settings> SETTINGS_BY_DEPOT = new ConcurrentHashMap<>();
     private static final Map<Long, Set<Long>> RETURN_PENDING_BY_SIDING = new ConcurrentHashMap<>();

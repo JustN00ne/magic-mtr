@@ -13,6 +13,8 @@ import net.minecraft.registry.Registry;
 import net.minecraft.registry.RegistryKey;
 import net.minecraft.registry.RegistryKeys;
 import net.minecraft.util.Identifier;
+import net.minecraft.block.entity.BlockEntityType;
+import net.fabricmc.fabric.api.object.builder.v1.block.entity.FabricBlockEntityTypeBuilder;
 import org.mtr.mapping.registry.BlockRegistryObject;
 import org.mtr.mapping.holder.BlockSettings;
 import org.mtr.mod.block.BlockPlatform;
@@ -40,6 +42,7 @@ public class ModBlocks {
             new BlockPlatform(new BlockSettings(AbstractBlock.Settings.copy(Blocks.STONE)), false));
     public static final Block PLATFORM_CZECH_SLAB = registerBlock("platform_czech_slab",
             new BlockPlatformSlab(new BlockSettings(AbstractBlock.Settings.copy(Blocks.STONE))));
+
 
     // Use real MTR PIDS blocks so block entities and RenderPIDS arrival logic work.
     public static final Item PIDS_1 = registerExternalBlockItem("pids_1", getMtrBlock(org.mtr.mod.Blocks.PIDS_1));
@@ -100,6 +103,7 @@ public class ModBlocks {
             entries.add(PIDS_3);
             entries.add(PIDS_POLE);
             entries.add(PIDS_ODD);
+
         });
     }
 }

@@ -58,6 +58,11 @@ public abstract class DashboardScreenMagicMenuMixin extends ScreenExtension impl
     @Unique
     private static final boolean JME_ENABLE_MAGIC_DASHBOARD_BUTTON = true;
 
+    // When enabled, replaces the stock per-row dock buttons with a 3-dot overflow menu.
+    // The user requested restoring the dock buttons.
+    @Unique
+    private static final boolean JME_ENABLE_DASHBOARD_ROW_OVERFLOW_MENU = false;
+
     @Unique
     private ButtonWidgetExtension jme$magicMenuButton;
     @Unique
@@ -103,7 +108,8 @@ public abstract class DashboardScreenMagicMenuMixin extends ScreenExtension impl
     @Unique
     @Override
     public boolean jme$isOverlayMenuOpen() {
-        return jme$routeOverflowOpen || jme$listOverflowOpen || (JME_ENABLE_MAGIC_DASHBOARD_BUTTON && jme$magicMenuOpen);
+        final boolean overflowOpen = JME_ENABLE_DASHBOARD_ROW_OVERFLOW_MENU && (jme$routeOverflowOpen || jme$listOverflowOpen);
+        return overflowOpen || (JME_ENABLE_MAGIC_DASHBOARD_BUTTON && jme$magicMenuOpen);
     }
 
     @Inject(method = "<init>", at = @At("TAIL"), remap = false)
@@ -149,7 +155,14 @@ public abstract class DashboardScreenMagicMenuMixin extends ScreenExtension impl
 
     @Inject(method = "render", at = @At("TAIL"), remap = false)
     private void jme$renderMagicMenu(GraphicsHolder graphicsHolder, int mouseX, int mouseY, float delta, CallbackInfo ci) {
-        jme$renderOverflow(graphicsHolder, mouseX, mouseY);
+        if (JME_ENABLE_DASHBOARD_ROW_OVERFLOW_MENU) {
+            jme$renderOverflow(graphicsHolder, mouseX, mouseY);
+        } else {
+            jme$routeOverflowOpen = false;
+            jme$listOverflowOpen = false;
+            jme$routeOverflowVisibleIndex = -1;
+            jme$listOverflowIndex = -1;
+        }
 
         if (!JME_ENABLE_MAGIC_DASHBOARD_BUTTON || jme$magicMenuButton == null) {
             return;
@@ -216,6 +229,9 @@ public abstract class DashboardScreenMagicMenuMixin extends ScreenExtension impl
 
     @Inject(method = "tick2", at = @At("TAIL"), remap = false, order = 1100)
     private void jme$overrideDashboardListRowButtons(CallbackInfo ci) {
+        if (!JME_ENABLE_DASHBOARD_ROW_OVERFLOW_MENU) {
+            return;
+        }
         if (dashboardList == null) {
             return;
         }
@@ -262,11 +278,13 @@ public abstract class DashboardScreenMagicMenuMixin extends ScreenExtension impl
     @Unique
     @Override
     public boolean jme$handleOverlayClick(double mouseX, double mouseY, int button) {
-        if (jme$handleTopLevelOverflowClick(mouseX, mouseY, button)) {
-            return true;
-        }
-        if (jme$handleRouteOverflowClick(mouseX, mouseY, button)) {
-            return true;
+        if (JME_ENABLE_DASHBOARD_ROW_OVERFLOW_MENU) {
+            if (jme$handleTopLevelOverflowClick(mouseX, mouseY, button)) {
+                return true;
+            }
+            if (jme$handleRouteOverflowClick(mouseX, mouseY, button)) {
+                return true;
+            }
         }
 
         if (!JME_ENABLE_MAGIC_DASHBOARD_BUTTON || jme$magicMenuButton == null) {
@@ -1215,7 +1233,7 @@ public abstract class DashboardScreenMagicMenuMixin extends ScreenExtension impl
 
         try {
             final Route duplicate = new Route(sourceRoute.getTransportMode(), MinecraftClientData.getDashboardInstance());
-            duplicate.setName(sourceRoute.getName() + " Copy");
+            duplicate.setName(jme$getDuplicateRouteName(sourceRoute.getName()));
             duplicate.setColor(sourceRoute.getColor());
             duplicate.setRouteNumber(sourceRoute.getRouteNumber());
             duplicate.setHidden(sourceRoute.getHidden());
@@ -1258,6 +1276,24 @@ public abstract class DashboardScreenMagicMenuMixin extends ScreenExtension impl
             Main.LOGGER.warn("[MAGIC] Failed duplicating route", throwable);
             jme$sendClientMessage("MAGIC: Duplicate route failed (" + throwable.getClass().getSimpleName() + ")");
         }
+    }
+
+    @Unique
+    private static String jme$getDuplicateRouteName(String sourceName) {
+        final String rawName = sourceName == null ? "" : sourceName.trim();
+        if (rawName.isEmpty()) {
+            return "Copy";
+        }
+
+        final int variationIndex = rawName.indexOf("||");
+        if (variationIndex < 0) {
+            return rawName + "||Copy";
+        }
+
+        final String baseName = rawName.substring(0, variationIndex).trim();
+        final String variationName = rawName.substring(variationIndex + 2).trim();
+        final String duplicateVariationName = variationName.isEmpty() ? "Copy" : variationName + " Copy";
+        return (baseName.isEmpty() ? rawName : baseName) + "||" + duplicateVariationName;
     }
 
     @Unique

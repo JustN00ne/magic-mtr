@@ -473,19 +473,19 @@ public final class JmeYaclConfigScreen {
         final Option<Integer> curveTargetPoints = Option.<Integer>createBuilder(Integer.class)
                 .name(Text.literal("Curve Target Points"))
                 .tooltip(Text.literal("Higher values draw smoother curves but cost more CPU."))
-                .binding(24, () -> state.blueMapCurveSampleTargetPoints, value -> state.blueMapCurveSampleTargetPoints = value)
+                .binding(12, () -> state.blueMapCurveSampleTargetPoints, value -> state.blueMapCurveSampleTargetPoints = value)
                 .controller(option -> new IntegerSliderController(option, 4, 256, 1))
                 .build();
 
         final Option<Double> curveIntervalMin = Option.<Double>createBuilder(Double.class)
                 .name(Text.literal("Curve Interval Min"))
-                .binding(0.4D, () -> state.blueMapCurveSampleIntervalMin, value -> state.blueMapCurveSampleIntervalMin = value)
+                .binding(1.0D, () -> state.blueMapCurveSampleIntervalMin, value -> state.blueMapCurveSampleIntervalMin = value)
                 .controller(option -> new DoubleFieldController(option, 0.01D, 50D))
                 .build();
 
         final Option<Double> curveIntervalMax = Option.<Double>createBuilder(Double.class)
                 .name(Text.literal("Curve Interval Max"))
-                .binding(1.25D, () -> state.blueMapCurveSampleIntervalMax, value -> state.blueMapCurveSampleIntervalMax = value)
+                .binding(4.0D, () -> state.blueMapCurveSampleIntervalMax, value -> state.blueMapCurveSampleIntervalMax = value)
                 .controller(option -> new DoubleFieldController(option, 0.01D, 50D))
                 .build();
 

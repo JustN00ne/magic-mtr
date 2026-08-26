@@ -10,15 +10,26 @@ import org.justnoone.jme.rail.AlternativePlatformRegistry;
 import org.justnoone.jme.rail.BrushRailProfile;
 import org.justnoone.jme.rail.DepotCancellationRegistry;
 import org.justnoone.jme.rail.MagicRailConstants;
+import org.justnoone.jme.rail.MagicRailRotationRegistry;
 import org.justnoone.jme.rail.MagicRailTiltRegistry;
+
 import org.justnoone.jme.rail.PlatformStopPositionRegistry;
+import org.justnoone.jme.rail.VirtualPlatformRegistry;
+import org.justnoone.jme.mixin.SidingVehiclesAccessor;
+import org.justnoone.jme.mixin.VehicleExtraDataDoorInvoker;
+import org.mtr.core.data.Siding;
+import org.mtr.core.data.Vehicle;
+import org.mtr.core.simulation.Simulator;
 import org.mtr.core.data.Rail;
+import org.mtr.core.tool.Vector;
 import org.mtr.mapping.holder.ItemStack;
 import org.mtr.mod.Items;
 import org.mtr.mod.item.ItemNodeModifierBase;
 import org.mtr.mod.packet.PacketUpdateData;
 
+import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.util.List;
 
 public final class MagicRailNetworking {
 
@@ -39,8 +50,16 @@ public final class MagicRailNetworking {
             final int tiltStart = MagicRailConstants.clampTiltDegrees(buf.readVarInt());
             final int tiltMiddle = MagicRailConstants.clampTiltDegrees(buf.readVarInt());
             final int tiltEnd = MagicRailConstants.clampTiltDegrees(buf.readVarInt());
+            double rotationStart = MagicRailConstants.DEFAULT_ROTATION_DEGREES;
+            double rotationEnd = MagicRailConstants.DEFAULT_ROTATION_DEGREES;
+            if (buf.readableBytes() >= 16) {
+                rotationStart = buf.readDouble();
+                rotationEnd = buf.readDouble();
+            }
+            final double finalRotationStart = rotationStart;
+            final double finalRotationEnd = rotationEnd;
 
-            MagicNetworkingCompat.executeOnServer(server, () -> applySettingsToHeldConnector(player, hand, speedKmh, style, shape, tiltStart, tiltMiddle, tiltEnd));
+            MagicNetworkingCompat.executeOnServer(server, () -> applySettingsToHeldConnector(player, hand, speedKmh, style, shape, tiltStart, tiltMiddle, tiltEnd, finalRotationStart, finalRotationEnd));
         });
 
         MagicNetworkingCompat.registerServerReceiver(MagicRailConstants.SET_RAIL_TILT_PACKET_ID, (server, player, buf) -> {
@@ -50,6 +69,14 @@ public final class MagicRailNetworking {
             final int tiltEnd = MagicRailConstants.clampTiltDegrees(buf.readVarInt());
 
             MagicNetworkingCompat.executeOnServer(server, () -> applyTiltToRail(railId, tiltStart, tiltMiddle, tiltEnd));
+        });
+
+        MagicNetworkingCompat.registerServerReceiver(MagicRailConstants.SET_RAIL_ROTATION_PACKET_ID, (server, player, buf) -> {
+            final String railId = buf.readString();
+            final double rotationStart = buf.readDouble();
+            final double rotationEnd = buf.readDouble();
+
+            MagicNetworkingCompat.executeOnServer(server, () -> applyRotationToRail(railId, rotationStart, rotationEnd));
         });
 
         MagicNetworkingCompat.registerServerReceiver(MagicRailConstants.SET_BRUSH_PROFILE_PACKET_ID, (server, player, buf) -> {
@@ -96,8 +123,10 @@ public final class MagicRailNetworking {
             final long depotId = buf.readLong();
             final boolean enabled = buf.readBoolean();
             final int thresholdMinutes = buf.readVarInt();
-            final DepotCancellationRegistry.Action action = DepotCancellationRegistry.Action.fromId(buf.readString());
-            MagicNetworkingCompat.executeOnServer(server, () -> DepotCancellationRegistry.set(depotId, new DepotCancellationRegistry.Settings(enabled, thresholdMinutes, action)));
+            if (buf.readableBytes() > 0) {
+                buf.readString();
+            }
+            MagicNetworkingCompat.executeOnServer(server, () -> DepotCancellationRegistry.set(depotId, new DepotCancellationRegistry.Settings(enabled, thresholdMinutes, DepotCancellationRegistry.Action.DESPAWN)));
         });
 
         MagicNetworkingCompat.registerServerReceiver(MagicRailConstants.SET_TRAIN_DETECTOR_RANGE_PACKET_ID, (server, player, buf) -> {
@@ -127,9 +156,12 @@ public final class MagicRailNetworking {
             final PlatformStopPositionRegistry.StopPosition stopPosition = PlatformStopPositionRegistry.StopPosition.fromString(buf.readString());
             MagicNetworkingCompat.executeOnServer(server, () -> PlatformStopPositionRegistry.set(platformId, stopPosition));
         });
+
+
+
     }
 
-    private static void applySettingsToHeldConnector(ServerPlayerEntity player, Hand hand, int speedKmh, String style, Rail.Shape shape, int tiltStart, int tiltMiddle, int tiltEnd) {
+    private static void applySettingsToHeldConnector(ServerPlayerEntity player, Hand hand, int speedKmh, String style, Rail.Shape shape, int tiltStart, int tiltMiddle, int tiltEnd, double rotationStart, double rotationEnd) {
         final ItemStack stack = new ItemStack(player.getStackInHand(hand));
         if (!MagicRailConstants.isUniversalConnector(stack)) {
             return;
@@ -141,6 +173,8 @@ public final class MagicRailNetworking {
         MagicRailConstants.setStartTiltOnStack(stack, tiltStart);
         MagicRailConstants.setMiddleTiltOnStack(stack, tiltMiddle);
         MagicRailConstants.setEndTiltOnStack(stack, tiltEnd);
+        MagicRailConstants.setStartRotationOnStack(stack, rotationStart);
+        MagicRailConstants.setEndRotationOnStack(stack, rotationEnd);
         player.currentScreenHandler.sendContentUpdates();
     }
 
@@ -188,6 +222,13 @@ public final class MagicRailNetworking {
         MagicRailTiltRegistry.setTiltAbsolute(railId, tiltStart, tiltMiddle, tiltEnd);
     }
 
+    private static void applyRotationToRail(String railId, double rotationStart, double rotationEnd) {
+        if (railId == null || railId.isEmpty()) {
+            return;
+        }
+        MagicRailRotationRegistry.setRotation(railId, rotationStart, rotationEnd);
+    }
+
     private static void applyTrainDetectorConfig(ServerPlayerEntity player, BlockPos blockPos, int nodeRange, boolean useSecondsOffset, int secondsOffset) {
         final net.minecraft.world.World playerWorld = jme$getPlayerWorld(player);
         if (player == null || playerWorld == null || blockPos == null) {
@@ -229,6 +270,8 @@ public final class MagicRailNetworking {
         return null;
     }
 
+
+
     private static BrushRailProfile readBrushProfile(PacketByteBuf packetByteBuf) {
         final int speedKmh = MagicRailConstants.clampToStep(packetByteBuf.readVarInt());
         final String style = packetByteBuf.readString();
@@ -241,7 +284,13 @@ public final class MagicRailNetworking {
         final int tiltStart = MagicRailConstants.clampTiltDegrees(packetByteBuf.readVarInt());
         final int tiltMiddle = MagicRailConstants.clampTiltDegrees(packetByteBuf.readVarInt());
         final int tiltEnd = MagicRailConstants.clampTiltDegrees(packetByteBuf.readVarInt());
-        return new BrushRailProfile(speedKmh, style, shape, tiltStart, tiltMiddle, tiltEnd);
+        double rotationStart = MagicRailConstants.DEFAULT_ROTATION_DEGREES;
+        double rotationEnd = MagicRailConstants.DEFAULT_ROTATION_DEGREES;
+        if (packetByteBuf.readableBytes() >= 16) {
+            rotationStart = packetByteBuf.readDouble();
+            rotationEnd = packetByteBuf.readDouble();
+        }
+        return new BrushRailProfile(speedKmh, style, shape, tiltStart, tiltMiddle, tiltEnd, rotationStart, rotationEnd);
     }
 
     private static Hand decodeHand(int handOrdinal) {

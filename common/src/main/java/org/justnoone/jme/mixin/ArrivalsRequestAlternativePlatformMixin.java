@@ -1,6 +1,7 @@
 package org.justnoone.jme.mixin;
 
 import org.justnoone.jme.rail.AlternativePlatformRegistry;
+import org.justnoone.jme.rail.CanceledTrainRegistry;
 import org.mtr.core.data.Platform;
 import org.mtr.core.data.Route;
 import org.mtr.core.data.Station;
@@ -62,10 +63,6 @@ public abstract class ArrivalsRequestAlternativePlatformMixin {
             }
 
             final ObjectImmutableList<ArrivalResponse> originalArrivals = originalResponse.getArrivals();
-            if (originalArrivals.isEmpty()) {
-                return;
-            }
-
             final ObjectArrayList<ArrivalResponse> patchedArrivals = new ObjectArrayList<>();
             final ObjectArraySet<String> seenKeys = new ObjectArraySet<>();
 
@@ -131,6 +128,8 @@ public abstract class ArrivalsRequestAlternativePlatformMixin {
                     }
                 }
             }
+
+            jme$addCanceledArrivals(simulator, requestedPlatformIds, patchedArrivals, seenKeys);
 
             Collections.sort(patchedArrivals);
             final ArrivalsResponse patchedResponse = new ArrivalsResponse(originalResponse.getCurrentTime());
@@ -368,6 +367,38 @@ public abstract class ArrivalsRequestAlternativePlatformMixin {
             }
             platformNameField.set(arrivalResponse, platformName);
         } catch (Exception ignored) {
+        }
+    }
+
+
+    @Unique
+    private static void jme$addCanceledArrivals(Simulator simulator, Iterable<Long> requestedPlatformIds, ObjectArrayList<ArrivalResponse> arrivals, ObjectArraySet<String> seenKeys) {
+        if (simulator == null || arrivals == null || seenKeys == null) {
+            return;
+        }
+
+        for (final CanceledTrainRegistry.CanceledTrain canceledTrain : CanceledTrainRegistry.activeForPlatformIds(requestedPlatformIds)) {
+            final Route route = simulator.routeIdMap.get(canceledTrain.routeId);
+            final Platform platform = simulator.platformIdMap.get(canceledTrain.platformId);
+            if (route == null || platform == null) {
+                continue;
+            }
+
+            try {
+                final ArrivalResponse canceledArrival = new ArrivalResponse(
+                        canceledTrain.struckDestination,
+                        canceledTrain.canceledAtMillis,
+                        canceledTrain.canceledAtMillis,
+                        0,
+                        true,
+                        -Math.abs(canceledTrain.vehicleId),
+                        jme$getStopIndex(route, canceledTrain.platformId, canceledTrain.platformId),
+                        route,
+                        platform
+                );
+                jme$addUnique(arrivals, seenKeys, canceledArrival);
+            } catch (Exception ignored) {
+            }
         }
     }
 

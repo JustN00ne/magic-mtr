@@ -31,6 +31,8 @@ public class ItemRailModifierTooltipMixin {
         final int tiltStart = MagicRailConstants.getStartTiltFromStack(stack);
         final int tiltMiddle = MagicRailConstants.getMiddleTiltFromStack(stack);
         final int tiltEnd = MagicRailConstants.getEndTiltFromStack(stack);
+        final double rotationStart = MagicRailConstants.getStartRotationFromStack(stack);
+        final double rotationEnd = MagicRailConstants.getEndRotationFromStack(stack);
 
         String speedLabel;
         try {
@@ -44,5 +46,6 @@ public class ItemRailModifierTooltipMixin {
         tooltip.add(TextHelper.literal("MAGIC style: " + style).formatted(TextFormatting.GRAY));
         tooltip.add(TextHelper.literal("MAGIC easing: " + easing).formatted(TextFormatting.GRAY));
         tooltip.add(TextHelper.literal("MAGIC tilt: " + tiltStart + "/" + tiltMiddle + "/" + tiltEnd + " deg").formatted(TextFormatting.GRAY));
+        tooltip.add(TextHelper.literal(String.format("MAGIC rotation: %.1f/%.1f deg", rotationStart, rotationEnd)).formatted(TextFormatting.GRAY));
     }
 }

@@ -16,8 +16,8 @@ import org.mtr.mapping.mapper.TextHelper;
 
 public class DepotCancellationSettingsScreen extends ScreenExtension {
 
-    private static final int MIN_MINUTES = 1;
-    private static final int MAX_MINUTES = 24 * 60;
+    private static final int MIN_MINUTES = DepotCancellationRegistry.MIN_THRESHOLD_MINUTES;
+    private static final int MAX_MINUTES = DepotCancellationRegistry.MAX_THRESHOLD_MINUTES;
 
     private final Screen parent;
     private final long depotId;
@@ -27,7 +27,6 @@ public class DepotCancellationSettingsScreen extends ScreenExtension {
 
     private SliderWidgetExtension thresholdSlider;
     private ButtonWidgetExtension enabledButton;
-    private ButtonWidgetExtension actionButton;
 
     public DepotCancellationSettingsScreen(ScreenExtension parent, long depotId) {
         this(new Screen(parent), depotId);
@@ -39,7 +38,7 @@ public class DepotCancellationSettingsScreen extends ScreenExtension {
         final DepotCancellationRegistry.Settings settings = DepotCancellationRegistry.get(depotId);
         this.enabled = settings.enabled;
         this.thresholdMinutes = jme$clampMinutes(settings.thresholdMinutes);
-        this.action = settings.action;
+        this.action = DepotCancellationRegistry.Action.DESPAWN;
     }
 
     @Override
@@ -74,14 +73,6 @@ public class DepotCancellationSettingsScreen extends ScreenExtension {
         thresholdSlider.setMessage2(Text.cast(TextHelper.literal("Delay Threshold: " + thresholdMinutes + " min")));
         addChild(new ClickableWidget(thresholdSlider));
 
-        actionButton = new ButtonWidgetExtension(panelX + 12, panelY + 102, panelWidth - 24, 20, jme$getActionLabel(), button -> {
-            action = action == DepotCancellationRegistry.Action.DESPAWN ? DepotCancellationRegistry.Action.RETURN_TO_DEPOT : DepotCancellationRegistry.Action.DESPAWN;
-            if (actionButton != null) {
-                actionButton.setMessage2(Text.cast(jme$getActionLabel()));
-            }
-        });
-        addChild(new ClickableWidget(actionButton));
-
         final ButtonWidgetExtension doneButton = new ButtonWidgetExtension(panelX + panelWidth - 80, panelY + panelHeight - 26, 68, 20, TextHelper.literal("Done"), button -> jme$saveAndClose());
         addChild(new ClickableWidget(doneButton));
 
@@ -102,7 +93,7 @@ public class DepotCancellationSettingsScreen extends ScreenExtension {
 
         graphicsHolder.drawText(TextHelper.literal("Cancellations"), panelX + 12, panelY + 12, 0xFFFFFF, true, GraphicsHolder.getDefaultLight());
         graphicsHolder.drawText(TextHelper.literal("Cancel delayed trains for this depot"), panelX + 12, panelY + 46, 0xA0A0A0, true, GraphicsHolder.getDefaultLight());
-        graphicsHolder.drawText(TextHelper.literal("Action decides whether trains despawn instantly or wait until depot"), panelX + 12, panelY + 130, 0xA0A0A0, true, GraphicsHolder.getDefaultLight());
+        graphicsHolder.drawText(TextHelper.literal("Delays greater than the threshold despawn instantly"), panelX + 12, panelY + 130, 0xA0A0A0, true, GraphicsHolder.getDefaultLight());
 
         super.render(graphicsHolder, mouseX, mouseY, delta);
     }
@@ -115,6 +106,7 @@ public class DepotCancellationSettingsScreen extends ScreenExtension {
     }
 
     private void jme$saveAndClose() {
+        action = DepotCancellationRegistry.Action.DESPAWN;
         final DepotCancellationRegistry.Settings settings = new DepotCancellationRegistry.Settings(enabled, thresholdMinutes, action);
         DepotCancellationRegistry.set(depotId, settings);
 
@@ -129,11 +121,6 @@ public class DepotCancellationSettingsScreen extends ScreenExtension {
 
     private org.mtr.mapping.holder.MutableText jme$getEnabledLabel() {
         return TextHelper.literal("Enabled: " + (enabled ? "ON" : "OFF"));
-    }
-
-    private org.mtr.mapping.holder.MutableText jme$getActionLabel() {
-        final String actionText = action == DepotCancellationRegistry.Action.RETURN_TO_DEPOT ? "Return To Depot" : "Despawn";
-        return TextHelper.literal("Action: " + actionText);
     }
 
     private static int jme$fromSliderValue(double value) {

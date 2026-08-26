@@ -220,7 +220,7 @@
     }
     state.railsRequestInFlight = true;
     try {
-      const response = await fetchWithTimeout(apiUrl("rails"), { cache: "no-store" }, REQUEST_TIMEOUT_MS);
+      const response = await fetchWithTimeout(magicApiUrl("rails"), { cache: "no-store" }, REQUEST_TIMEOUT_MS);
       if (!response.ok) {
         return;
       }
@@ -707,7 +707,8 @@
 
       const routeType = state.routeTypeById.get(routeId) || "";
       const iconName = routeTypeToIcon(routeType);
-      const routeColor = state.routeColorById.has(routeId) ? intToColor(state.routeColorById.get(routeId)) : "#7ea6ff";
+      const isCancelled = vehicle && (vehicle.cancelled === true || vehicle.canceled === true);
+      const routeColor = isCancelled ? "#8f8f8f" : (state.routeColorById.has(routeId) ? intToColor(state.routeColorById.get(routeId)) : "#7ea6ff");
 
       const cars = Array.isArray(vehicle && vehicle.cars) ? vehicle.cars : [];
       cars.forEach(car => {
@@ -719,7 +720,7 @@
         if (!screen) {
           return;
         }
-        drawVehicleMarker(ctx, screen.x, screen.y, carSize, routeColor, iconName, 0.82);
+        drawVehicleMarker(ctx, screen.x, screen.y, carSize, routeColor, iconName, 0.82, routeType, isCancelled);
       });
 
       const position = vehicle && vehicle.position;
@@ -732,13 +733,16 @@
         return;
       }
 
-      drawVehicleMarker(ctx, screen.x, screen.y, headSize, routeColor, iconName, 1);
+      drawVehicleMarker(ctx, screen.x, screen.y, headSize, routeColor, iconName, 1, routeType, isCancelled);
+      if (isCancelled) {
+        drawCancelledDestination(ctx, screen.x, screen.y - headSize * 0.95, headSize, sanitizeDestinationText(vehicle.struckDestination || vehicle.destination || "Cancelled"));
+      }
     });
 
     ctx.globalAlpha = 1;
   }
 
-  function drawVehicleMarker(ctx, x, y, size, color, iconName, alpha) {
+  function drawVehicleMarker(ctx, x, y, size, color, iconName, alpha, routeType, cancelled) {
     ctx.save();
     ctx.globalAlpha = clamp(alpha, 0, 1);
 
@@ -749,16 +753,104 @@
     ctx.fill();
 
     ctx.lineWidth = clamp(size * 0.14, 1.2, 2.4);
-    ctx.strokeStyle = "#141414";
+    ctx.strokeStyle = cancelled ? "#2f2f2f" : "#141414";
     ctx.stroke();
 
-    ctx.fillStyle = "#ffffff";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.font = `${Math.round(size * 0.82)}px "Material Symbols Outlined", "Material Icons", sans-serif`;
-    ctx.fillText(iconName, x, y + size * 0.02);
+    // Strict 1:1 icon box: fit glyph inside a square and clip so nothing stretches or overflows.
+    const iconBox = size * 0.72;
+    drawSquareIcon(ctx, x, y + size * 0.02, iconBox, iconName, "#ffffff");
 
     ctx.restore();
+  }
+
+  function drawSquareIcon(ctx, x, y, boxSize, iconName, color) {
+    const box = Math.max(1, Number(boxSize) || 1);
+    const half = box / 2;
+    const iconFontSize = fitIconFontSize(ctx, iconName, box, box);
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(x - half, y - half, box, box);
+    ctx.clip();
+
+    ctx.fillStyle = color;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.font = `${Math.round(iconFontSize)}px "Material Symbols Outlined", "Material Icons", sans-serif`;
+    ctx.fillText(String(iconName || ""), x, y);
+    ctx.restore();
+  }
+
+  function fitIconFontSize(ctx, iconName, boxSize, maxFontSize) {
+    const normalizedBox = Math.max(1, Number(boxSize) || 1);
+    let fontSize = Math.max(1, Number(maxFontSize) || normalizedBox);
+    const glyph = String(iconName || "");
+
+    for (let i = 0; i < 10; i++) {
+      ctx.font = `${Math.round(fontSize)}px "Material Symbols Outlined", "Material Icons", sans-serif`;
+      const metrics = ctx.measureText(glyph);
+      const width = metrics && Number.isFinite(metrics.width) ? metrics.width : normalizedBox;
+      const ascent = metrics && Number.isFinite(metrics.actualBoundingBoxAscent) ? metrics.actualBoundingBoxAscent : fontSize * 0.5;
+      const descent = metrics && Number.isFinite(metrics.actualBoundingBoxDescent) ? metrics.actualBoundingBoxDescent : fontSize * 0.5;
+      const height = Math.max(1, ascent + descent);
+      const scale = Math.min(normalizedBox / Math.max(width, 1), normalizedBox / height);
+      if (scale >= 0.995) {
+        return fontSize;
+      }
+      fontSize *= scale;
+    }
+    return fontSize;
+  }
+
+  function sanitizeDestinationText(value) {
+    const stripped = String(value || "").replace(/\u00a7./g, "");
+    const firstLine = stripped.split("|")[0];
+    return (firstLine || "").trim() || "Cancelled";
+  }
+
+  function drawCancelledDestination(ctx, x, y, markerSize, destination) {
+    const text = String(destination || "Cancelled").trim() || "Cancelled";
+    const fontSize = clamp(markerSize * 0.58, 8, 12);
+    ctx.save();
+    ctx.font = `${Math.round(fontSize)}px system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    const paddingX = fontSize * 0.45;
+    const width = Math.min(ctx.measureText(text).width + paddingX * 2, 180);
+    const height = fontSize * 1.65;
+    const left = x - width / 2;
+    const top = y - height / 2;
+
+    ctx.fillStyle = "rgba(28, 28, 30, 0.82)";
+    ctx.strokeStyle = "rgba(180, 180, 180, 0.7)";
+    ctx.lineWidth = 1;
+    drawRoundRect(ctx, left, top, width, height, 4);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = "#a8a8a8";
+    ctx.fillText(text, x, y, width - paddingX * 2);
+    ctx.strokeStyle = "#a8a8a8";
+    ctx.lineWidth = Math.max(1, fontSize * 0.08);
+    ctx.beginPath();
+    ctx.moveTo(left + paddingX, y + fontSize * 0.04);
+    ctx.lineTo(left + width - paddingX, y + fontSize * 0.04);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawRoundRect(ctx, x, y, width, height, radius) {
+    const r = Math.max(0, Math.min(radius || 0, width / 2, height / 2));
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + width - r, y);
+    ctx.quadraticCurveTo(x + width, y, x + width, y + r);
+    ctx.lineTo(x + width, y + height - r);
+    ctx.quadraticCurveTo(x + width, y + height, x + width - r, y + height);
+    ctx.lineTo(x + r, y + height);
+    ctx.quadraticCurveTo(x, y + height, x, y + height - r);
+    ctx.lineTo(x, y + r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
   }
 
   function routeTypeToIcon(rawType) {
@@ -767,17 +859,17 @@
     const exact = {
       train_metro: "subway",
       train_bus: "directions_bus",
-      train_tram: "tram",
-      train_sbahn: "directions_railway_2",
-      train_normal: "directions_railway",
+      train_tram: "trolley_cable_car",
+      train_sbahn: "directions_subway",
+      train_normal: "train",
       train_light_rail: "tram",
-      train_high_speed: "train",
+      train_high_speed: "directions_railway_2",
       boat_normal: "sailing",
       boat_light_rail: "directions_boat",
       boat_high_speed: "snowmobile",
       cable_car_normal: "airline_seat_recline_extra",
       bus_normal: "directions_bus",
-      bus_light_rail: "local_taxi",
+      bus_light_rail: "commute",
       bus_high_speed: "airport_shuttle",
       airplane_normal: "flight",
     };
@@ -791,14 +883,23 @@
     if (type.includes("bus")) {
       return "directions_bus";
     }
-    if (type.includes("tram") || type.includes("lightrail")) {
+    if (type.includes("lightrail")) {
       return "tram";
     }
-    if (type.includes("sbahn") || type.includes("s_bahn")) {
-      return "directions_railway_2";
+    if (type.includes("tram")){
+      return "trolley_cable_car";
+    }
+    if (type.includes("bus_light_rail")){
+      return "commute";
+    }
+    if (type.includes("bus_high_speed")){
+      return "airport_shuttle";
+    }
+    if (type.includes("sbahn") || type.includes("s_bahn") || type.includes("s-bahn")) {
+      return "directions_subway";
     }
     if (type.includes("highspeed")) {
-      return "train";
+      return "directions_railway_2";
     }
 
     return "directions_railway";
@@ -1263,6 +1364,15 @@
   function apiUrl(endpoint) {
     const dimension = String(state.dimension || "0");
     const url = new URL(`/mtr/api/map/${endpoint}`, window.location.origin);
+    url.searchParams.set("dimension", dimension);
+    return url.toString();
+  }
+
+  function magicApiUrl(endpoint) {
+    const dimension = String(state.dimension || "0");
+    const host = String(window.location.hostname || "localhost");
+    const normalizedHost = host.includes(":") && !host.startsWith("[") ? `[${host}]` : host;
+    const url = new URL(`/api/${endpoint}`, `http://${normalizedHost}:8088`);
     url.searchParams.set("dimension", dimension);
     return url.toString();
   }

@@ -1,7 +1,5 @@
 # MAGIC (jme) - Features & How To Use Them
 
-This page is a complete, wiki-ready list of MAGIC features and the exact steps/UI to use them.
-
 Mod ID: `jme`  
 Config root folder: `.minecraft/config/MAGIC/`
 

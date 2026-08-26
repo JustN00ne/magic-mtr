@@ -1,5 +1,6 @@
 package org.justnoone.jme.mixin;
 
+import org.justnoone.jme.rail.CanceledTrainRegistry;
 import org.justnoone.jme.rail.DepotCancellationRegistry;
 import org.mtr.core.data.Siding;
 import org.mtr.core.data.Vehicle;
@@ -37,7 +38,7 @@ public abstract class SidingDelayCancellationMixin {
             }
 
             final long vehicleId = vehicle.getId();
-            if (jme$shouldDespawn(vehicle, sidingId, vehicleId, thresholdMillis, settings.action)) {
+            if (jme$shouldDespawn(vehicle, sidingId, vehicleId, thresholdMillis)) {
                 vehiclesToRemove.add(vehicle);
             }
         }
@@ -46,20 +47,16 @@ public abstract class SidingDelayCancellationMixin {
             return;
         }
 
+        // Instant despawn: remove the simulated vehicle entity and keep a canceled PIDS/map entry.
         vehiclesToRemove.forEach(vehicle -> {
+            CanceledTrainRegistry.markCanceled(vehicle);
             vehicles.remove(vehicle);
             DepotCancellationRegistry.clearReturnPending(sidingId, vehicle.getId());
         });
     }
 
     @Unique
-    private static boolean jme$shouldDespawn(
-            Vehicle vehicle,
-            long sidingId,
-            long vehicleId,
-            long thresholdMillis,
-            DepotCancellationRegistry.Action action
-    ) {
+    private static boolean jme$shouldDespawn(Vehicle vehicle, long sidingId, long vehicleId, long thresholdMillis) {
         if (DepotCancellationRegistry.isReturnPending(sidingId, vehicleId)) {
             return vehicle.closeToDepot();
         }
@@ -68,16 +65,8 @@ public abstract class SidingDelayCancellationMixin {
             return false;
         }
 
+        // Spec: Delay > T_cancel (even by 1 second) triggers cancellation.
         final long delayMillis = ((VehicleDelayAccessor) vehicle).jme$getDeviation();
-        if (delayMillis < thresholdMillis) {
-            return false;
-        }
-
-        if (action == DepotCancellationRegistry.Action.RETURN_TO_DEPOT) {
-            DepotCancellationRegistry.markReturnPending(sidingId, vehicleId);
-            return false;
-        }
-
-        return true;
+        return delayMillis > thresholdMillis;
     }
 }

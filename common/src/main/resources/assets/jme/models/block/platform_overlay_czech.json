@@ -1,0 +1,8 @@
+{
+  "parent": "jme:block/platform_overlay_base",
+  "textures": {
+    "overlay": "jme:block/platform_overlay_czech",
+    "particle": "jme:block/platform_overlay_czech"
+  }
+}
+

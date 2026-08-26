@@ -187,6 +187,10 @@ if (useYacl3) {
     }
 
     def yaclNestedDirProvider = layout.buildDirectory.dir("yacl-nested-jars")
+    def yaclNestedRuntimeJars = fileTree(dir: yaclNestedDirProvider, include: [
+            "**/gson-*.jar",
+            "**/json-*.jar",
+    ])
 
     tasks.register("extractYaclNestedJars", Copy) {
         from({
@@ -199,6 +203,14 @@ if (useYacl3) {
             }
         })
         into(yaclNestedDirProvider)
+    }
+
+    yaclNestedRuntimeJars.builtBy(tasks.named("extractYaclNestedJars"))
+
+    dependencies {
+        // YACL 3.6.6 needs Quilt Parser at client entrypoint time. Declaring the extracted
+        // nested jars here makes Gradle/IDE devlaunch put them on Fabric Loader's mod classpath.
+        modRuntimeOnly yaclNestedRuntimeJars
     }
 
     tasks.matching { it.name in ["runClient", "runServer"] }.configureEach { t ->

@@ -2,11 +2,18 @@ package org.justnoone.jme.fabric;
 
 import com.mojang.brigadier.Command;
 import com.mojang.brigadier.CommandDispatcher;
+import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import net.minecraft.server.command.CommandManager;
 import net.minecraft.server.command.ServerCommandSource;
 import net.minecraft.text.Text;
 import org.justnoone.jme.config.MagicConfigReloader;
+import org.justnoone.jme.rail.WaypointNodeCreator;
+import org.justnoone.jme.rail.WaypointRegistry;
+import org.mtr.core.data.Data;
+import org.mtr.core.data.Platform;
+import org.mtr.core.data.Position;
+import org.mtr.mapping.holder.World;
 
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
@@ -85,6 +92,17 @@ public final class MagicServerCommands {
 
     private static LiteralArgumentBuilder<ServerCommandSource> buildRootCommand() {
         return CommandManager.literal("magic")
+                .then(CommandManager.literal("waypoint")
+                        .requires(source -> source.hasPermissionLevel(2))
+                        .then(CommandManager.literal("add")
+                                .then(CommandManager.argument("name", StringArgumentType.word())
+                                        .executes(context -> addWaypoint(context.getSource(), StringArgumentType.getString(context, "name")))))
+                        .then(CommandManager.literal("remove")
+                                .then(CommandManager.argument("name", StringArgumentType.word())
+                                        .executes(context -> removeWaypoint(context.getSource(), StringArgumentType.getString(context, "name")))))
+                        .then(CommandManager.literal("list")
+                                .executes(context -> listWaypoints(context.getSource())))
+                )
                 .then(CommandManager.literal("debug")
                         .requires(source -> source.hasPermissionLevel(2))
                         .then(CommandManager.literal("config")
@@ -106,6 +124,86 @@ public final class MagicServerCommands {
     private static int reloadAll(ServerCommandSource source) {
         final MagicConfigReloader.ReloadResult result = MagicConfigReloader.reloadAllFromDisk();
         sendFeedback(source, "[MAGIC] Reloaded all MAGIC configs: " + result.toDebugString());
+        return Command.SINGLE_SUCCESS;
+    }
+
+    private static int addWaypoint(ServerCommandSource source, String name) {
+        final net.minecraft.server.world.ServerWorld serverWorld = source.getWorld();
+        final World wrappedWorld = new World(serverWorld);
+        final Data data = WaypointNodeCreator.resolveSimulator(wrappedWorld);
+        if (data == null) {
+            sendFeedback(source, "[MAGIC] Could not resolve MTR data for this world.");
+            return 0;
+        }
+
+        final int px = (int) Math.floor(source.getPosition().getX());
+        final int py = (int) Math.floor(source.getPosition().getY());
+        final int pz = (int) Math.floor(source.getPosition().getZ());
+        final Position pos = new Position(px, py, pz);
+        final Platform platform = WaypointNodeCreator.createWaypointPlatform(data, name, pos);
+        if (platform != null) {
+            WaypointRegistry.register(platform.getId(), name, 0x5555FF, pos);
+            sendFeedback(source, "[MAGIC] Waypoint '" + name + "' created (platform id=" + platform.getId() + ") at " + px + ", " + py + ", " + pz + " [dwellTime=0]");
+            return Command.SINGLE_SUCCESS;
+        }
+        sendFeedback(source, "[MAGIC] Failed to create waypoint '" + name + "'.");
+        return 0;
+    }
+
+    private static int removeWaypoint(ServerCommandSource source, String name) {
+        final net.minecraft.server.world.ServerWorld serverWorld = source.getWorld();
+        final World wrappedWorld = new World(serverWorld);
+        final Data data = WaypointNodeCreator.resolveSimulator(wrappedWorld);
+        if (data == null) {
+            sendFeedback(source, "[MAGIC] Could not resolve MTR data for this world.");
+            return 0;
+        }
+
+        final WaypointRegistry.Waypoint wpEntry = WaypointRegistry.getAllAsList().stream()
+                .filter(wp -> wp.name.equals(name))
+                .findFirst().orElse(null);
+        if (wpEntry != null) {
+            WaypointNodeCreator.removeWaypointPlatform(data, wpEntry.id);
+            WaypointRegistry.unregister(wpEntry.id);
+            sendFeedback(source, "[MAGIC] Waypoint '" + name + "' removed.");
+            return Command.SINGLE_SUCCESS;
+        }
+
+        for (final Platform p : data.platformIdMap.values()) {
+            if (p != null && name.equals(p.getName()) && p.getDwellTime() == 0) {
+                WaypointNodeCreator.removeWaypointPlatform(data, p.getId());
+                sendFeedback(source, "[MAGIC] Waypoint '" + name + "' removed (platform id=" + p.getId() + ").");
+                return Command.SINGLE_SUCCESS;
+            }
+        }
+
+        sendFeedback(source, "[MAGIC] Waypoint not found: " + name);
+        return 0;
+    }
+
+    private static int listWaypoints(ServerCommandSource source) {
+        final net.minecraft.server.world.ServerWorld serverWorld = source.getWorld();
+        final World wrappedWorld = new World(serverWorld);
+        final Data data = WaypointNodeCreator.resolveSimulator(wrappedWorld);
+
+        int count = 0;
+        if (data != null) {
+            for (final Platform p : data.platformIdMap.values()) {
+                if (p != null && p.getDwellTime() == 0) {
+                    final Position pos = WaypointNodeCreator.getPlatformPosition(p);
+                    final String posStr = pos != null
+                            ? pos.getX() + ", " + pos.getY() + ", " + pos.getZ()
+                            : "unknown";
+                    sendFeedback(source, "  - " + p.getName() + " (platform id=" + p.getId() + ") @ " + posStr);
+                    count++;
+                }
+            }
+        }
+        if (count == 0) {
+            sendFeedback(source, "[MAGIC] No waypoint platforms found.");
+        } else {
+            sendFeedback(source, "[MAGIC] Waypoint platforms (" + count + "):");
+        }
         return Command.SINGLE_SUCCESS;
     }
 

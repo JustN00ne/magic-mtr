@@ -2,7 +2,10 @@ package org.justnoone.jme.config;
 
 import org.justnoone.jme.rail.AlternativePlatformRegistry;
 import org.justnoone.jme.rail.DepotCancellationRegistry;
+import org.justnoone.jme.config.MagicConfigReloader;
+import org.justnoone.jme.rail.MagicRailRotationRegistry;
 import org.justnoone.jme.rail.MagicRailTiltRegistry;
+
 import org.justnoone.jme.rail.PlatformStopPositionRegistry;
 
 public final class MagicConfigReloader {
@@ -14,9 +17,11 @@ public final class MagicConfigReloader {
         JmeConfig.reload();
         RouteTypeOverrideConfig.reload();
         MagicRailTiltRegistry.reloadFromDisk();
+        MagicRailRotationRegistry.reloadFromDisk();
         AlternativePlatformRegistry.reloadFromDisk();
         DepotCancellationRegistry.reloadFromDisk();
         PlatformStopPositionRegistry.reloadFromDisk();
+
         return new ReloadResult(
                 JmeConfig.useMph(),
                 JmeConfig.dashboardRouteListMode().name(),

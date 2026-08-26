@@ -1,21 +1,30 @@
 package org.justnoone.jme.mixin;
 
 import org.justnoone.jme.client.data.SidingSpeedSliderFileStore;
+import org.justnoone.jme.client.screen.DepotCancellationSettingsScreen;
 import org.justnoone.jme.config.JmeConfig;
+import org.mtr.core.data.Depot;
 import org.mtr.core.data.Siding;
 import org.mtr.core.operation.UpdateDataRequest;
 import org.mtr.core.tool.Utilities;
+import org.mtr.mapping.holder.ClickableWidget;
+import org.mtr.mapping.holder.Screen;
 import org.mtr.mapping.holder.Text;
+import org.mtr.mapping.mapper.ButtonWidgetExtension;
 import org.mtr.mapping.mapper.CheckboxWidgetExtension;
+import org.mtr.mapping.mapper.ScreenExtension;
 import org.mtr.mapping.mapper.TextHelper;
 import org.mtr.mod.InitClient;
+import org.mtr.mod.client.IDrawing;
 import org.mtr.mod.client.MinecraftClientData;
+import org.mtr.mod.data.IGui;
 import org.mtr.mod.packet.PacketUpdateData;
 import org.mtr.mod.screen.SavedRailScreenBase;
 import org.mtr.mod.screen.SidingScreen;
 import org.mtr.mod.screen.WidgetShorterSlider;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
+import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Constant;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -24,10 +33,11 @@ import org.spongepowered.asm.mixin.injection.ModifyConstant;
 import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
+import java.lang.reflect.Method;
 import java.util.function.IntFunction;
 
 @Mixin(value = SidingScreen.class, remap = false)
-public abstract class SidingScreenMixin {
+public abstract class SidingScreenMixin implements IGui {
 
     /**
      * When the UI slider shows "No limit" (at 300 km/h), we actually store a high cap in the siding
@@ -50,6 +60,10 @@ public abstract class SidingScreenMixin {
     private CheckboxWidgetExtension buttonIsManual;
     @Shadow
     private WidgetShorterSlider sliderMaxManualSpeed;
+
+    @Unique
+    private ButtonWidgetExtension jme$cancellationButton;
+
     @Inject(method = "init2", at = @At("TAIL"))
     private void jme$moveMaxSpeedSlider(CallbackInfo ci) {
         final SavedRailScreenBase<?, ?> base = (SavedRailScreenBase<?, ?>) (Object) this;
@@ -73,6 +87,68 @@ public abstract class SidingScreenMixin {
         sliderDelayedVehicleReduceDwellTimePercentage.setY2(168);
         buttonEarlyVehicleIncreaseDwellTime.setY2(188);
         buttonIsManual.setY2(208);
+
+        jme$initCancellationButton();
+    }
+
+    @Unique
+    private void jme$initCancellationButton() {
+        if (jme$cancellationButton == null) {
+            jme$cancellationButton = new ButtonWidgetExtension(20, 228, 120, SQUARE_SIZE, TextHelper.literal("Cancellations"), button -> jme$openCancellationSettings());
+        } else {
+            IDrawing.setPositionAndWidth(jme$cancellationButton, 20, 228, 120);
+        }
+
+        jme$addChild(new ClickableWidget(jme$cancellationButton));
+        final boolean hasDepot = jme$resolveDepotId() != 0L;
+        jme$cancellationButton.visible = hasDepot;
+        jme$cancellationButton.active = hasDepot;
+    }
+
+    @Unique
+    private void jme$openCancellationSettings() {
+        final long depotId = jme$resolveDepotId();
+        if (depotId == 0L) {
+            return;
+        }
+        org.mtr.mapping.holder.MinecraftClient.getInstance().openScreen(new Screen(new DepotCancellationSettingsScreen((ScreenExtension) (Object) this, depotId)));
+    }
+
+    @Unique
+    private long jme$resolveDepotId() {
+        final SavedRailScreenBase<?, ?> base = (SavedRailScreenBase<?, ?>) (Object) this;
+        final Object savedRailBase = ((SavedRailScreenBaseAccessor) base).jme$getSavedRailBase();
+        if (!(savedRailBase instanceof Siding)) {
+            return 0L;
+        }
+        final Siding siding = (Siding) savedRailBase;
+        if (!(siding.area instanceof Depot)) {
+            return 0L;
+        }
+        return ((Depot) siding.area).getId();
+    }
+
+    @Unique
+    private void jme$addChild(ClickableWidget clickableWidget) {
+        try {
+            Method addChildMethod = null;
+            Class<?> targetClass = this.getClass();
+            while (targetClass != null && addChildMethod == null) {
+                for (final Method method : targetClass.getDeclaredMethods()) {
+                    if ("addChild".equals(method.getName()) && method.getParameterCount() == 1 && method.getParameterTypes()[0].isAssignableFrom(clickableWidget.getClass())) {
+                        addChildMethod = method;
+                        break;
+                    }
+                }
+                targetClass = targetClass.getSuperclass();
+            }
+
+            if (addChildMethod != null) {
+                addChildMethod.setAccessible(true);
+                addChildMethod.invoke(this, clickableWidget);
+            }
+        } catch (Exception ignored) {
+        }
     }
 
     @ModifyArg(

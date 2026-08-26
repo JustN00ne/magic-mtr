@@ -3,6 +3,13 @@
   "item.jme.magic_icon": "MAGIC Icon (Internal)",
   "item.jme.magic_rail_connector": "MAGIC Universal Rail Connector",
   "item.jme.magic_rail_connector_one_way": "MAGIC One-way Rail Connector",
+  "block.jme.magic_rail_node": "MAGIC Rail Node",
+  "item.jme.platform_painter": "Platform Painter",
+
+  "key.jme.manual_door_opening": "Manual Door Opening",
+  "category.jme": "MAGIC",
+
+  "block.jme.platform_overlay": "Platform Overlay",
 
   "block.jme.platform_german": "German Platform",
   "block.jme.platform_german_slab": "German Platform Slab",
@@ -18,6 +25,10 @@
   "block.jme.platform_swedish_slab": "Swedish Platform Slab",
   "block.jme.platform_dutch": "Dutch Platform",
   "block.jme.platform_dutch_slab": "Dutch Platform Slab",
+  "block.jme.platform_japanese_metro": "Japanese Metro Platform",
+  "block.jme.platform_japanese_metro_slab": "Japanese Metro Platform Slab",
+  "block.jme.platform_metro_generic": "Metro Generic Platform",
+  "block.jme.platform_metro_generic_slab": "Metro Generic Platform Slab",
 
   "block.jme.platform_tactile_b1": "Tactile Platform (Blue 1)",
   "block.jme.platform_tactile_b1_slab": "Tactile Platform Slab (Blue 1)",
@@ -31,6 +42,14 @@
   "block.jme.platform_tactile_y1_slab": "Tactile Platform Slab (Yellow 1)",
   "block.jme.platform_tactile_y2": "Tactile Platform (Yellow 2)",
   "block.jme.platform_tactile_y2_slab": "Tactile Platform Slab (Yellow 2)",
+
+  "block.jme.platform_wmta": "WMTA Platform",
+  "block.jme.platform_wmta_slab": "WMTA Platform Slab",
+  "block.jme.platform_wmta_off": "WMTA Platform (Off)",
+  "block.jme.platform_wmta_off_slab": "WMTA Platform Slab (Off)",
+  "block.jme.platform_wmta_on": "WMTA Platform (On)",
+  "block.jme.platform_wmta_on_slab": "WMTA Platform Slab (On)",
+
   "block.jme.train_detector": "Train Detector",
 
   "gui.jme.folder.rename": "Rename Folder",

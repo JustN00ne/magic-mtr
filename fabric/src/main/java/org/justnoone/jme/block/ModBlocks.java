@@ -2,6 +2,7 @@ package org.justnoone.jme.block;
 
 import org.justnoone.jme.Jme;
 import org.justnoone.jme.item.ModItemGroups;
+
 import org.mtr.mapping.holder.Block;
 import org.mtr.mapping.holder.Identifier;
 import org.mtr.mapping.mapper.BlockHelper;
@@ -15,6 +16,10 @@ public class ModBlocks {
 
     public static BlockRegistryObject TRAIN_DETECTOR;
     public static BlockEntityTypeRegistryObject<BlockTrainDetector.BlockEntity> TRAIN_DETECTOR_BLOCK_ENTITY;
+
+    public static BlockRegistryObject WMTA_ON_BLOCK;
+    public static BlockRegistryObject WMTA_ON_SLAB_BLOCK;
+    public static BlockEntityTypeRegistryObject<WmtaBlockEntity> WMTA_ON_BLOCK_ENTITY;
 
     public static void registerModBlocks(Registry registry) {
         registerPlatform(registry, "platform_german", false);
@@ -43,6 +48,33 @@ public class ModBlocks {
         registerPlatform(registry, "platform_tactile_y1_slab", true);
         registerPlatform(registry, "platform_tactile_y2", false);
         registerPlatform(registry, "platform_tactile_y2_slab", true);
+
+        registerPlatform(registry, "platform_japanese_metro", false);
+        registerPlatform(registry, "platform_japanese_metro_slab", true);
+        registerPlatform(registry, "platform_metro_generic", false);
+        registerPlatform(registry, "platform_metro_generic_slab", true);
+
+        registerPlatform(registry, "platform_wmta", false);
+        registerPlatform(registry, "platform_wmta_slab", true);
+        registerPlatform(registry, "platform_wmta_off", false);
+        registerPlatform(registry, "platform_wmta_off_slab", true);
+
+        WMTA_ON_BLOCK = registry.registerBlockWithBlockItem(
+                new Identifier(Jme.MOD_ID, "platform_wmta_on"),
+                () -> new Block(new BlockWmtaOn(BlockHelper.createBlockSettings(true, true).nonOpaque())),
+                ModItemGroups.JME_TAB
+        );
+        WMTA_ON_SLAB_BLOCK = registry.registerBlockWithBlockItem(
+                new Identifier(Jme.MOD_ID, "platform_wmta_on_slab"),
+                () -> new Block(new BlockWmtaSlabOn(BlockHelper.createBlockSettings(true, true).nonOpaque())),
+                ModItemGroups.JME_TAB
+        );
+        WMTA_ON_BLOCK_ENTITY = registry.registerBlockEntityType(
+                new Identifier(Jme.MOD_ID, "wmta_on"),
+                WmtaBlockEntity::new,
+                WMTA_ON_BLOCK::get,
+                WMTA_ON_SLAB_BLOCK::get
+        );
 
         TRAIN_DETECTOR = registry.registerBlockWithBlockItem(
                 new Identifier(Jme.MOD_ID, "train_detector"),

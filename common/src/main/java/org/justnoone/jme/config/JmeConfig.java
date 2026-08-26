@@ -427,7 +427,7 @@ public final class JmeConfig {
     }
 
     public static void setBlueMapCurveSampleIntervalMin(double interval) {
-        data.blueMapCurveSampleIntervalMin = clampPositiveDouble(interval, 0.4D);
+        data.blueMapCurveSampleIntervalMin = clampPositiveDouble(interval, 1.0D);
     }
 
     public static double blueMapCurveSampleIntervalMax() {
@@ -435,7 +435,7 @@ public final class JmeConfig {
     }
 
     public static void setBlueMapCurveSampleIntervalMax(double interval) {
-        data.blueMapCurveSampleIntervalMax = clampPositiveDouble(interval, 1.25D);
+        data.blueMapCurveSampleIntervalMax = clampPositiveDouble(interval, 4.0D);
     }
 
     public static TrackColorMode trackColorMode() {
@@ -709,10 +709,10 @@ public final class JmeConfig {
                 loaded.blueMapCurveSampleTargetPoints = clampCurveTargetPoints(root.get("blue_map_curve_sample_target_points").getAsInt());
             }
             if (root.has("blue_map_curve_sample_interval_min")) {
-                loaded.blueMapCurveSampleIntervalMin = clampPositiveDouble(root.get("blue_map_curve_sample_interval_min").getAsDouble(), 0.4D);
+                loaded.blueMapCurveSampleIntervalMin = clampPositiveDouble(root.get("blue_map_curve_sample_interval_min").getAsDouble(), 1.0D);
             }
             if (root.has("blue_map_curve_sample_interval_max")) {
-                loaded.blueMapCurveSampleIntervalMax = clampPositiveDouble(root.get("blue_map_curve_sample_interval_max").getAsDouble(), 1.25D);
+                loaded.blueMapCurveSampleIntervalMax = clampPositiveDouble(root.get("blue_map_curve_sample_interval_max").getAsDouble(), 4.0D);
             }
         } catch (Exception ignored) {
         }
@@ -829,7 +829,7 @@ public final class JmeConfig {
 
     private static int clampCurveTargetPoints(int points) {
         if (points <= 0) {
-            return 24;
+            return 12;
         }
         return Math.max(4, Math.min(256, points));
     }
@@ -1032,9 +1032,9 @@ public final class JmeConfig {
         private int blueMapBaseMarkerSetSorting = 110;
         private int blueMapSpeedMarkerSetSorting = 111;
         private double blueMapLineYBias = 0.05D;
-        private int blueMapCurveSampleTargetPoints = 24;
-        private double blueMapCurveSampleIntervalMin = 0.4D;
-        private double blueMapCurveSampleIntervalMax = 1.25D;
+        private int blueMapCurveSampleTargetPoints = 12;
+        private double blueMapCurveSampleIntervalMin = 1.0D;
+        private double blueMapCurveSampleIntervalMax = 4.0D;
     }
 
     public enum DashboardRouteListMode {

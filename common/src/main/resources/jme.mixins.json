@@ -26,7 +26,8 @@
     "VehiclePlatformRouteInfoAccessor",
     "WebserverResourcesMixin",
     "VehicleSpeedLimitMixin",
-    "VehicleExtraDataAccessor"
+    "VehicleExtraDataAccessor",
+    "VehicleExtraDataDoorInvoker"
   ],
   "injectors": {
     "defaultRequire": 1

@@ -16,14 +16,18 @@ public final class BrushRailProfile {
     public final int tiltStart;
     public final int tiltMiddle;
     public final int tiltEnd;
+    public final double rotationStart;
+    public final double rotationEnd;
 
-    public BrushRailProfile(int speedKmh, String style, Rail.Shape shape, int tiltStart, int tiltMiddle, int tiltEnd) {
+    public BrushRailProfile(int speedKmh, String style, Rail.Shape shape, int tiltStart, int tiltMiddle, int tiltEnd, double rotationStart, double rotationEnd) {
         this.speedKmh = MagicRailConstants.clampToStep(speedKmh);
         this.style = normalizeStyle(style);
         this.shape = shape == null ? MagicRailConstants.DEFAULT_SHAPE : shape;
         this.tiltStart = MagicRailConstants.clampTiltDegrees(tiltStart);
         this.tiltMiddle = MagicRailConstants.clampTiltDegrees(tiltMiddle);
         this.tiltEnd = MagicRailConstants.clampTiltDegrees(tiltEnd);
+        this.rotationStart = Math.max(MagicRailConstants.MIN_ROTATION_DEGREES, Math.min(MagicRailConstants.MAX_ROTATION_DEGREES, rotationStart));
+        this.rotationEnd = Math.max(MagicRailConstants.MIN_ROTATION_DEGREES, Math.min(MagicRailConstants.MAX_ROTATION_DEGREES, rotationEnd));
     }
 
     public static BrushRailProfile fromRail(Rail rail) {
@@ -33,28 +37,36 @@ public final class BrushRailProfile {
 
         final RailSchemaAccessor accessor = (RailSchemaAccessor) (Object) rail;
         final MagicRailTiltRegistry.TiltSettings tiltSettings = MagicRailTiltRegistry.getTiltAbsolute(rail.getHexId());
+        final MagicRailRotationRegistry.RotationSettings rotationSettings = MagicRailRotationRegistry.getRotation(rail.getHexId());
         final int copiedSpeed = resolveCopiedSpeed(rail);
         final String copiedStyle = resolveStyle(accessor);
         final Rail.Shape copiedShape = accessor.jme$getShape();
 
-        if (tiltSettings == null) {
-            return new BrushRailProfile(
-                    copiedSpeed,
-                    copiedStyle,
-                    copiedShape,
-                    MagicRailConstants.DEFAULT_TILT_DEGREES,
-                    MagicRailConstants.DEFAULT_TILT_DEGREES,
-                    MagicRailConstants.DEFAULT_TILT_DEGREES
-            );
+        int tStart = MagicRailConstants.DEFAULT_TILT_DEGREES;
+        int tMid = MagicRailConstants.DEFAULT_TILT_DEGREES;
+        int tEnd = MagicRailConstants.DEFAULT_TILT_DEGREES;
+        if (tiltSettings != null) {
+            tStart = tiltSettings.startDegrees;
+            tMid = tiltSettings.middleDegrees;
+            tEnd = tiltSettings.endDegrees;
+        }
+
+        double rStart = MagicRailConstants.DEFAULT_ROTATION_DEGREES;
+        double rEnd = MagicRailConstants.DEFAULT_ROTATION_DEGREES;
+        if (rotationSettings != null) {
+            rStart = rotationSettings.angleOffset1Degrees;
+            rEnd = rotationSettings.angleOffset2Degrees;
         }
 
         return new BrushRailProfile(
                 copiedSpeed,
                 copiedStyle,
                 copiedShape,
-                tiltSettings.startDegrees,
-                tiltSettings.middleDegrees,
-                tiltSettings.endDegrees
+                tStart,
+                tMid,
+                tEnd,
+                rStart,
+                rEnd
         );
     }
 
@@ -78,7 +90,9 @@ public final class BrushRailProfile {
                 MagicRailConstants.getShapeFromStack(stack),
                 MagicRailConstants.getStartTiltFromStack(stack),
                 MagicRailConstants.getMiddleTiltFromStack(stack),
-                MagicRailConstants.getEndTiltFromStack(stack)
+                MagicRailConstants.getEndTiltFromStack(stack),
+                MagicRailConstants.getStartRotationFromStack(stack),
+                MagicRailConstants.getEndRotationFromStack(stack)
         );
     }
 
@@ -93,6 +107,8 @@ public final class BrushRailProfile {
         MagicRailConstants.setStartTiltOnStack(stack, profile.tiltStart);
         MagicRailConstants.setMiddleTiltOnStack(stack, profile.tiltMiddle);
         MagicRailConstants.setEndTiltOnStack(stack, profile.tiltEnd);
+        MagicRailConstants.setStartRotationOnStack(stack, profile.rotationStart);
+        MagicRailConstants.setEndRotationOnStack(stack, profile.rotationEnd);
         stack.getOrCreateTag().putBoolean(TAG_HAS_PROFILE, true);
     }
 
@@ -155,6 +171,11 @@ public final class BrushRailProfile {
 
         updatedRail.copySignalColors(rail);
         MagicRailTiltRegistry.setTiltAbsolute(updatedRail.getHexId(), profile.tiltStart, profile.tiltMiddle, profile.tiltEnd);
+        if (profile.rotationStart != 0.0 || profile.rotationEnd != 0.0) {
+            MagicRailRotationRegistry.setRotation(updatedRail.getHexId(), profile.rotationStart, profile.rotationEnd);
+        } else {
+            MagicRailRotationRegistry.removeRotation(updatedRail.getHexId());
+        }
         return updatedRail;
     }
 

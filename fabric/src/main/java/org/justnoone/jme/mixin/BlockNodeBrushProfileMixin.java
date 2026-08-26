@@ -86,6 +86,8 @@ public class BlockNodeBrushProfileMixin {
         packet.writeVarInt(profile.tiltStart);
         packet.writeVarInt(profile.tiltMiddle);
         packet.writeVarInt(profile.tiltEnd);
+        packet.writeDouble(profile.rotationStart);
+        packet.writeDouble(profile.rotationEnd);
         MagicNetworkingCompat.sendToServer(MagicRailConstants.SET_BRUSH_PROFILE_PACKET_ID, packet);
     }
 
@@ -109,6 +111,8 @@ public class BlockNodeBrushProfileMixin {
         packet.writeVarInt(profile.tiltStart);
         packet.writeVarInt(profile.tiltMiddle);
         packet.writeVarInt(profile.tiltEnd);
+        packet.writeDouble(profile.rotationStart);
+        packet.writeDouble(profile.rotationEnd);
         MagicNetworkingCompat.sendToServer(MagicRailConstants.APPLY_BRUSH_PROFILE_PACKET_ID, packet);
     }
 }

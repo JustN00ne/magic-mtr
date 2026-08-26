@@ -1,0 +1,9 @@
+{
+  "multipart": [
+    {
+      "apply": {
+        "model": "jme:block/magic_rail_node"
+      }
+    }
+  ]
+}

@@ -320,6 +320,40 @@ public final class DashboardMapOverlayCacheStore {
         return ensureLoaded(dimension).vehiclesList;
     }
 
+    public static synchronized void mergeWaypoints(Iterable<WaypointSnapshot> waypoints) {
+        ensureContextUpToDate();
+        final String dimension = normalizeDimensionId("");
+        final DimensionCache cache = ensureLoaded(dimension);
+        if (waypoints == null) {
+            return;
+        }
+
+        boolean changed = false;
+        for (final WaypointSnapshot wp : waypoints) {
+            if (wp == null || wp.id.isEmpty()) {
+                continue;
+            }
+            final WaypointSnapshot existing = cache.waypointsById.get(wp.id);
+            if (existing == null || !existing.equals(wp)) {
+                cache.waypointsById.put(wp.id, wp);
+                changed = true;
+            }
+        }
+
+        if (changed) {
+            cache.waypointList.clear();
+            cache.waypointList.addAll(cache.waypointsById.values());
+            cache.dirtyForSave = true;
+            maybeScheduleSave(dimension, cache);
+        }
+    }
+
+    public static synchronized List<WaypointSnapshot> getWaypointsForRender() {
+        ensureContextUpToDate();
+        final String dimension = normalizeDimensionId("");
+        return ensureLoaded(dimension).waypointList;
+    }
+
     private static DimensionCache ensureLoaded(String dimension) {
         DimensionCache cache = CACHE_BY_DIMENSION.get(dimension);
         if (cache == null) {
@@ -347,9 +381,10 @@ public final class DashboardMapOverlayCacheStore {
         for (final VehicleSnapshot vehicleSnapshot : cache.vehiclesList) {
             vehiclesSnapshot.add(vehicleSnapshot.copy());
         }
+        final ArrayList<WaypointSnapshot> waypointsSnapshot = new ArrayList<>(cache.waypointList);
 
         final String contextKeySnapshot = contextKey;
-        SAVE_EXECUTOR.execute(() -> saveToDisk(contextKeySnapshot, dimension, railsSnapshot, vehiclesSnapshot));
+        SAVE_EXECUTOR.execute(() -> saveToDisk(contextKeySnapshot, dimension, railsSnapshot, vehiclesSnapshot, waypointsSnapshot));
     }
 
     private static void loadFromDisk(String dimension, DimensionCache cache) {
@@ -452,11 +487,36 @@ public final class DashboardMapOverlayCacheStore {
                     cache.vehiclesList.add(snapshot);
                 }
             }
+
+            if (root.has("waypoints") && root.get("waypoints").isJsonArray()) {
+                final JsonArray waypoints = root.getAsJsonArray("waypoints");
+                for (int i = 0; i < waypoints.size(); i++) {
+                    final JsonElement wpElement = waypoints.get(i);
+                    if (wpElement == null || !wpElement.isJsonObject()) {
+                        continue;
+                    }
+                    final JsonObject wpObj = wpElement.getAsJsonObject();
+                    final String id = wpObj.has("id") ? wpObj.get("id").getAsString() : "";
+                    if (id.isEmpty()) {
+                        continue;
+                    }
+                    final String name = wpObj.has("name") ? wpObj.get("name").getAsString() : "Waypoint";
+                    final int color = wpObj.has("color") ? wpObj.get("color").getAsInt() : 0xFFFFFF;
+                    final double x = wpObj.has("x") ? wpObj.get("x").getAsDouble() : 0;
+                    final double z = wpObj.has("z") ? wpObj.get("z").getAsDouble() : 0;
+                    if (!Double.isFinite(x) || !Double.isFinite(z)) {
+                        continue;
+                    }
+                    final WaypointSnapshot snapshot = new WaypointSnapshot(id, name, color, x, z);
+                    cache.waypointsById.put(id, snapshot);
+                    cache.waypointList.add(snapshot);
+                }
+            }
         } catch (Exception ignored) {
         }
     }
 
-    private static void saveToDisk(String contextKeySnapshot, String dimension, List<RailSnapshot> rails, List<VehicleSnapshot> vehicles) {
+    private static void saveToDisk(String contextKeySnapshot, String dimension, List<RailSnapshot> rails, List<VehicleSnapshot> vehicles, List<WaypointSnapshot> waypoints) {
         try {
             final JsonObject root = new JsonObject();
             root.addProperty("savedAt", System.currentTimeMillis());
@@ -507,6 +567,21 @@ public final class DashboardMapOverlayCacheStore {
             }
             root.add("vehicles", vehiclesArray);
 
+            final JsonArray waypointsArray = new JsonArray();
+            for (final WaypointSnapshot wp : waypoints) {
+                if (wp == null || wp.id.isEmpty()) {
+                    continue;
+                }
+                final JsonObject wpObject = new JsonObject();
+                wpObject.addProperty("id", wp.id);
+                wpObject.addProperty("name", wp.name);
+                wpObject.addProperty("color", wp.color);
+                wpObject.addProperty("x", wp.x);
+                wpObject.addProperty("z", wp.z);
+                waypointsArray.add(wpObject);
+            }
+            root.add("waypoints", waypointsArray);
+
             final Path path = getCachePath(contextKeySnapshot, dimension);
             Files.createDirectories(path.getParent());
             final byte[] rawJson = GSON.toJson(root).getBytes(StandardCharsets.UTF_8);
@@ -537,12 +612,24 @@ public final class DashboardMapOverlayCacheStore {
             return false;
         }
 
+        // Grace period: don't prune a rail until it has been absent from the live snapshot
+        // for at least this long.  This prevents "flash disappearance" when the player
+        // moves between areas and the live data briefly doesn't include the rail.
+        final long RAIL_PRUNE_GRACE_MILLIS = 10000;
+
         final HashSet<String> toRemove = new HashSet<>();
-        for (final String railId : cache.railsById.keySet()) {
+        for (final Map.Entry<String, RailSnapshot> entry : cache.railsById.entrySet()) {
+            final String railId = entry.getKey();
             if (railId == null || railId.isEmpty()) {
                 continue;
             }
             if (liveIds != null && liveIds.contains(railId)) {
+                continue;
+            }
+
+            // Don't prune rails that haven't been absent from live data long enough.
+            final Long lastSeen = cache.railLastSeenMillisById.get(railId);
+            if (lastSeen != null && nowMillis - lastSeen < RAIL_PRUNE_GRACE_MILLIS) {
                 continue;
             }
 
@@ -857,6 +944,36 @@ public final class DashboardMapOverlayCacheStore {
         }
     }
 
+    public static final class WaypointSnapshot {
+        public final String id;
+        public final String name;
+        public final int color;
+        public final double x;
+        public final double z;
+
+        public WaypointSnapshot(String id, String name, int color, double x, double z) {
+            this.id = id;
+            this.name = name;
+            this.color = color;
+            this.x = x;
+            this.z = z;
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            if (this == obj) return true;
+            if (!(obj instanceof WaypointSnapshot)) return false;
+            final WaypointSnapshot other = (WaypointSnapshot) obj;
+            return id.equals(other.id) && name.equals(other.name) && color == other.color
+                    && Double.compare(x, other.x) == 0 && Double.compare(z, other.z) == 0;
+        }
+
+        @Override
+        public int hashCode() {
+            return id.hashCode();
+        }
+    }
+
     private static final class DimensionCache {
         private boolean loaded;
         private boolean dirtyForSave;
@@ -871,6 +988,9 @@ public final class DashboardMapOverlayCacheStore {
 
         private final LinkedHashMap<Long, VehicleSnapshot> vehiclesById = new LinkedHashMap<>();
         private final ArrayList<VehicleSnapshot> vehiclesList = new ArrayList<>();
+
+        private final LinkedHashMap<String, WaypointSnapshot> waypointsById = new LinkedHashMap<>();
+        private final ArrayList<WaypointSnapshot> waypointList = new ArrayList<>();
     }
 
     private static List<double[]> buildRailPolyline(Rail rail) {

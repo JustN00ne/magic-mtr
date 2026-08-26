@@ -23,7 +23,8 @@ public final class MagicRailTiltClient {
     private static final double CURVE_SAMPLE_SPACING = 1.25;
     private static final int MIN_CURVE_SAMPLES = 8;
     private static final int MAX_CURVE_SAMPLES = 64;
-    private static final long CAMERA_SMOOTHING_KEY = 0x43414D455241544CL;
+    // Shared by the riding car, the riding player and the camera so all three roll in sync.
+    private static final long RIDING_CAR_SMOOTHING_KEY = 0x5249444E47434152L;
     private static final double SMOOTHING_ALPHA = 0.25;
     private static final long SMOOTHING_PRUNE_INTERVAL_MILLIS = 2000;
     private static final long SMOOTHING_ENTRY_TIMEOUT_MILLIS = 5000;
@@ -42,6 +43,8 @@ public final class MagicRailTiltClient {
     private static volatile long lastRailSamplePruneMillis;
     private static volatile Field jme$previousVehicleYawField;
     private static volatile boolean jme$previousVehicleYawFieldSearched;
+    private static volatile boolean ridingCarRollComputedThisFrame;
+    private static volatile double lastRidingCarRollDegrees;
 
     private MagicRailTiltClient() {
     }
@@ -55,17 +58,40 @@ public final class MagicRailTiltClient {
         return false;
     }
 
-    public static double getCameraTiltDegrees() {
+    /**
+     * Marks the start of a new render frame so the riding car roll is recomputed once per frame
+     * (instead of once per vehicle/camera consumer), keeping every consumer in sync.
+     */
+    public static void beginRenderFrame() {
+        ridingCarRollComputedThisFrame = false;
+    }
+
+    /**
+     * The smoothed roll of the car the local player is currently riding, recomputed at most once per
+     * render frame. Returns 0 when the player is not riding an MTR vehicle.
+     */
+    public static double getRidingCarRollDegrees() {
+        if (!isPlayerRidingMtrVehicle()) {
+            ridingCarRollComputedThisFrame = false;
+            lastRidingCarRollDegrees = 0;
+            return 0;
+        }
+        if (ridingCarRollComputedThisFrame) {
+            return lastRidingCarRollDegrees;
+        }
+        ridingCarRollComputedThisFrame = true;
+
         final MinecraftClient client = MinecraftClient.getInstance();
         final Entity cameraEntity = client.getCameraEntity();
         if (cameraEntity == null) {
-            return 0;
+            return lastRidingCarRollDegrees = 0;
         }
         final Vec3d cameraPos = cameraEntity.getPos();
         final Double ridingVehicleYaw = jme$getRidingVehicleYawRadians();
+        final double roll;
         if (ridingVehicleYaw != null) {
-            return getSmoothedSignedTiltDegreesAt(
-                    CAMERA_SMOOTHING_KEY,
+            roll = getSmoothedSignedTiltDegreesAt(
+                    RIDING_CAR_SMOOTHING_KEY,
                     cameraPos.x,
                     cameraPos.y,
                     cameraPos.z,
@@ -73,8 +99,17 @@ public final class MagicRailTiltClient {
                     Math.cos(ridingVehicleYaw)
             );
         } else {
-            return getSmoothedTiltDegreesAt(CAMERA_SMOOTHING_KEY, cameraPos.x, cameraPos.y, cameraPos.z);
+            roll = getSmoothedTiltDegreesAt(RIDING_CAR_SMOOTHING_KEY, cameraPos.x, cameraPos.y, cameraPos.z);
         }
+        return lastRidingCarRollDegrees = roll;
+    }
+
+    /**
+     * Roll to apply to the local camera. Gated by the riding check; the caller (GameRendererTiltMixin)
+     * additionally checks the accessibility config before applying any camera roll.
+     */
+    public static double getCameraTiltDegrees() {
+        return getRidingCarRollDegrees();
     }
 
     public static double getTiltDegreesAt(double x, double y, double z) {
@@ -156,6 +191,8 @@ public final class MagicRailTiltClient {
         lastPruneMillis = 0;
         lastFullScanMillis = 0;
         lastRailSamplePruneMillis = 0;
+        ridingCarRollComputedThisFrame = false;
+        lastRidingCarRollDegrees = 0;
         RECENT_RAILS.remove();
     }
 

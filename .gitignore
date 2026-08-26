@@ -12,3 +12,23 @@ dist_builds/
 
 # Local run logs
 run/logs/
+
+# Minecraft runtime data
+run/
+
+# Temporary files
+*.class
+*.bak
+vehicle_decompiled.txt
+Temporary models & textures/
+
+# Temp Java files (decompiled/test code)
+CheckAngle.java
+CheckBytecode.java
+DecompiledVehicle.java
+SystemMapServlet.java
+Vehicle.class
+Vehicle.java
+
+# AI directory
+.ai/

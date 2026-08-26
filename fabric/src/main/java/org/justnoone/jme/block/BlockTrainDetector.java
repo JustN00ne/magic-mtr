@@ -54,7 +54,7 @@ public class BlockTrainDetector extends BlockTrainPoweredSensorBase {
     private static final String KEY_USE_SECONDS_OFFSET = "jme_train_detector_use_seconds_offset";
     // Shared across all detectors for the same dimension. Keep a small value, but not every tick.
     // Refresh at ~1 tick; seconds mode relies on up-to-date rail progress.
-    private static final long OCCUPANCY_REFRESH_MILLIS = 50;
+    private static final long OCCUPANCY_REFRESH_MILLIS = 500;
     private static final Map<String, DetectorCache> cacheByDimension = new ConcurrentHashMap<>();
     private static final Map<String, Long> cacheBuiltAtMillisByDimension = new ConcurrentHashMap<>();
 
