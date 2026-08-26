@@ -1,5 +1,4 @@
-![MAGIC Mod banner](https://i.postimg.cc/nM8XH2jv/supawork-799e0570c46a4b45b0da71e073f0578c.gif) 
-
+![Banner](https://i.postimg.cc/HLJpff0R/image.png "Hi there!")
 # ✨ MAGIC Mod
 
 MAGIC Mod, which stands for "_MTR Addon for General Improvement and Customisation_", is an mod which expands the capabilities of MTR, adding many features like an **Rail position API**, **Various Platforms** and more!
