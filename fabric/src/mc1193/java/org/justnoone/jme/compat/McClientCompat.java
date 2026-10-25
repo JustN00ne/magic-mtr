@@ -1,0 +1,61 @@
+package org.justnoone.jme.compat;
+
+import net.fabricmc.fabric.api.client.rendering.v1.EntityRendererRegistry;
+import net.minecraft.client.render.VertexConsumer;
+import net.minecraft.client.render.VertexConsumerProvider;
+import net.minecraft.client.render.entity.EntityRenderer;
+import net.minecraft.client.render.entity.EntityRendererFactory;
+import net.minecraft.client.util.math.MatrixStack;
+import net.minecraft.util.Identifier;
+import net.minecraft.util.math.RotationAxis;
+import org.justnoone.jme.client.render.AxleCounterModel;
+import org.justnoone.jme.entity.AxleCounterEntity;
+import org.justnoone.jme.entity.ModEntities;
+
+/**
+ * Client-side Minecraft API calls that changed between the supported versions (this copy: 1.19.3+).
+ */
+public final class McClientCompat {
+
+    private McClientCompat() {
+    }
+
+    public static void registerAxleCounter() {
+        EntityRendererRegistry.register(ModEntities.AXLE_COUNTER, AxleCounterRenderer::new);
+    }
+
+    public static void rotateYawPitch(MatrixStack matrices, float yawDegrees, float pitchDegrees) {
+        matrices.multiply(RotationAxis.POSITIVE_Y.rotationDegrees(yawDegrees));
+        matrices.multiply(RotationAxis.POSITIVE_X.rotationDegrees(pitchDegrees));
+    }
+
+    public static void entityVertex(VertexConsumer consumer, MatrixStack.Entry entry, float x, float y, float z, float u, float v, int overlay, int light, float nx, float ny, float nz) {
+        consumer.vertex(entry.getPositionMatrix(), x, y, z).color(255, 255, 255, 255).texture(u, v).overlay(overlay).light(light).normal(entry.getNormalMatrix(), nx, ny, nz).next();
+    }
+
+    public static void lineVertex(VertexConsumer consumer, MatrixStack.Entry entry, float x, float y, float z, float red, float green, float blue, float alpha, float nx, float ny, float nz) {
+        consumer.vertex(entry.getPositionMatrix(), x, y, z).color(red, green, blue, alpha).normal(entry.getNormalMatrix(), nx, ny, nz).next();
+    }
+
+    /**
+     * Draws the counter with {@link AxleCounterModel}.
+     */
+    private static final class AxleCounterRenderer extends EntityRenderer<AxleCounterEntity> {
+
+        private AxleCounterRenderer(EntityRendererFactory.Context context) {
+            super(context);
+            shadowRadius = 0;
+        }
+
+        @Override
+        public void render(AxleCounterEntity entity, float yaw, float tickDelta, MatrixStack matrices, VertexConsumerProvider vertexConsumers, int light) {
+            AxleCounterModel.render(entity, tickDelta, matrices, vertexConsumers, light);
+            super.render(entity, yaw, tickDelta, matrices, vertexConsumers, light);
+        }
+
+        @Override
+        public Identifier getTexture(AxleCounterEntity entity) {
+            return AxleCounterModel.TEXTURE;
+        }
+    }
+}

@@ -1,0 +1,86 @@
+package org.justnoone.jme.fabric;
+
+import net.fabricmc.api.ModInitializer;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
+import net.fabricmc.loader.api.FabricLoader;
+import org.justnoone.jme.Jme;
+import org.justnoone.jme.block.CrossingLinkerHandler;
+import org.justnoone.jme.block.CrossingSignal;
+import org.justnoone.jme.entity.ModEntities;
+import org.justnoone.jme.block.ModBlocks;
+import org.justnoone.jme.item.ModItemGroups;
+import org.justnoone.jme.item.ModItems;
+import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
+import org.justnoone.jme.network.MagicRailNetworking;
+import org.justnoone.jme.network.MagicRouteStateSync;
+import org.justnoone.jme.config.MagicConfigReloader;
+import org.justnoone.jme.dashboard.MagicDashboardServer;
+import org.justnoone.jme.systemmap.SystemMapOverlayCacheStore;
+import org.mtr.mapping.registry.Registry;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
+public class JmeFabric implements ModInitializer {
+
+    private static final Logger LOGGER = LogManager.getLogger("MAGIC");
+
+    @Override
+    public void onInitialize() {
+        jme$logStartupBanner();
+        final Registry registry = new Registry();
+        ModItemGroups.registerModItemGroups(registry);
+        ModItems.registerModItems(registry);
+        ModBlocks.registerModBlocks(registry);
+        ModEntities.register();
+        CrossingSignal.registerSounds();
+        ModItemGroups.fillTabs();
+        Jme.init(registry);
+        registry.init();
+        MagicRailNetworking.registerServer();
+        MagicServerCommands.register();
+        CrossingLinkerHandler.register();
+
+        ServerLifecycleEvents.SERVER_STARTED.register(server -> {
+            final MagicConfigReloader.ReloadResult result = MagicConfigReloader.reloadAllFromDisk();
+            LOGGER.info("[MAGIC] Reloaded config on server start: {}", result.toDebugString());
+            SystemMapOverlayCacheStore.onServerStarted(server);
+            MagicDashboardServer.setTileProvider((x, z, zoom) -> org.justnoone.jme.dashboard.TileRenderer.getTile(server, x, z, zoom));
+            MagicDashboardServer.start();
+        });
+
+        // Clients render route types and alternative platforms from the server's state, not their local files.
+        ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> MagicRouteStateSync.sendTo(handler.player));
+
+        ServerLifecycleEvents.SERVER_STOPPING.register(server -> {
+            MagicDashboardServer.stop();
+            SystemMapOverlayCacheStore.onServerStopping();
+        });
+    }
+
+    private static void jme$logStartupBanner() {
+        final String version = FabricLoader.getInstance()
+                .getModContainer(Jme.MOD_ID)
+                .map(modContainer -> modContainer.getMetadata().getVersion().getFriendlyString())
+                .orElse("unknown");
+
+        final String banner = String.join("\n",
+                ":            .......           ",
+                ":        ###........###       ",
+                ":     #####.............#     ",
+                ":   #######...............##  ",
+                ":  #########       .......... ",
+                ":  #######    #..    ........ ",
+                ":  ######    #####    ....... ",
+                ":  ######  #######  ......... ",
+                ":  @@#####    #####    ....... ",
+                ":  @@@#####    ###    ####.#.. ",
+                ":  @@@@@#####       ########## ",
+                ":   @@@@@@#################### ",
+                ":     @@@@@@###############    ",
+                ":        @@@@@##########       ",
+                ":            @@@@###           ",
+                String.format(": %s - JustNoone - 2026 MIT", version)
+        );
+        LOGGER.info(banner);
+    }
+}

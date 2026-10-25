@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "id": "jme",
+  "version": "${version}",
+  "name": "MAGIC",
+  "description": "MTR Addon for General Improvement and Customization.",
+  "authors": [],
+  "contact": {},
+  "license": "MIT",
+  "icon": "assets/jme/icon.png",
+  "environment": "*",
+  "entrypoints": {
+    "client": [
+      "org.justnoone.jme.fabric.JmeClientFabric"
+    ],
+    "main": [
+      "org.justnoone.jme.fabric.JmeFabric"
+    ],
+    "modmenu": [
+      "org.justnoone.jme.client.modmenu.JmeModMenuApi"
+    ]
+  },
+  "mixins": [
+    "jme.mixins.json",
+    {
+      "config": "jme.client.mixins.json",
+      "environment": "client"
+    }
+  ],
+  "depends": {
+    "fabricloader": ">=${min_loader_version}",
+    "fabric": "*",
+    "mtr": "*",
+    "java": ">=${java_version}",
+    "minecraft": "${minecraft_version}"
+  },
+  "suggests": {
+    "cloth-config": "*",
+    "yet_another_config_lib_v3": "*",
+    "yet-another-config-lib": "*"
+  }
+}

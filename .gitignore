@@ -1,0 +1,54 @@
+.gradle
+.idea
+build
+./JMEM_INSTRUCTIONS.md
+
+# Local JDK downloads (IntelliJ / build scripts)
+.jdks/
+
+# build_mod.sh outputs
+build_logs/
+dist_builds/
+
+# Local run logs
+run/logs/
+
+# Minecraft runtime data
+run/
+
+# Third-party tool jars (not needed to build the mod)
+cfr-*.jar
+
+# Temporary files
+*.class
+*.bak
+vehicle_decompiled.txt
+Temporary models & textures/
+
+# Temp Java files (decompiled/test code)
+CheckAngle.java
+CheckBytecode.java
+DecompiledVehicle.java
+SystemMapServlet.java
+Vehicle.class
+Vehicle.java
+
+# AI directory
+.ai/
+.aider*
+.agents/
+.codex/
+.junie/
+.antigravitycli/
+.freebuff/
+
+# SSH keys / credentials (never commit)
+github
+github.pub
+*.pem
+*.key
+
+# Editor backup files
+*~
+*.swp
+*.tmp
