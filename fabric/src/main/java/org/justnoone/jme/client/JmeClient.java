@@ -15,6 +15,10 @@ import org.justnoone.jme.client.render.ObjBlockModel;
 import org.justnoone.jme.compat.McClientCompat;
 import org.justnoone.jme.item.CrossingLinkMode;
 import org.justnoone.jme.client.render.RenderCrossing;
+import org.justnoone.jme.client.render.RenderCrossingControllerLinks;
+import org.justnoone.jme.client.render.RenderCrossingGate;
+import org.justnoone.jme.client.screen.CrossingControllerScreen;
+import org.justnoone.jme.client.screen.CrossingGateScreen;
 import org.justnoone.jme.client.render.RenderObjBlock;
 import org.justnoone.jme.item.ModItems;
 import org.mtr.mapping.registry.Registry;
@@ -28,6 +32,7 @@ import org.justnoone.jme.network.MagicNetworkingCompat;
 import org.justnoone.jme.network.MagicRouteStateSync;
 import org.justnoone.jme.rail.AlternativePlatformRegistry;
 import org.justnoone.jme.rail.CronTimetableRegistry;
+import org.justnoone.jme.rail.RouteTimetableRegistry;
 import org.justnoone.jme.rail.DepotCancellationRegistry;
 import org.justnoone.jme.rail.MagicRailConstants;
 
@@ -44,6 +49,15 @@ public class JmeClient {
         }
         if (ModBlocks.CROSSING_LIGHTS_BLOCK != null) {
             BlockRenderLayerMap.INSTANCE.putBlock(ModBlocks.CROSSING_LIGHTS_BLOCK.get().data, RenderLayer.getCutout());
+        }
+        if (ModBlocks.RAILROAD_CROSSING_CONTROLLER_BLOCK != null) {
+            BlockRenderLayerMap.INSTANCE.putBlock(ModBlocks.RAILROAD_CROSSING_CONTROLLER_BLOCK.get().data, RenderLayer.getCutout());
+        }
+        if (ModBlocks.CROSSING_GATE_LEFT_BLOCK != null) {
+            BlockRenderLayerMap.INSTANCE.putBlock(ModBlocks.CROSSING_GATE_LEFT_BLOCK.get().data, RenderLayer.getCutout());
+        }
+        if (ModBlocks.CROSSING_GATE_RIGHT_BLOCK != null) {
+            BlockRenderLayerMap.INSTANCE.putBlock(ModBlocks.CROSSING_GATE_RIGHT_BLOCK.get().data, RenderLayer.getCutout());
         }
         if (ModBlocks.TRAIN_DETECTOR != null) {
             BlockRenderLayerMap.INSTANCE.putBlock(ModBlocks.TRAIN_DETECTOR.get().data, RenderLayer.getCutout());
@@ -67,6 +81,13 @@ public class JmeClient {
         }
         if (ModBlocks.CROSSING_CONTROLLER_BLOCK_ENTITY != null) {
             registryClient.registerBlockEntityRenderer(ModBlocks.CROSSING_CONTROLLER_BLOCK_ENTITY, RenderCrossing::new);
+        }
+        if (ModBlocks.RAILROAD_CROSSING_CONTROLLER_BLOCK_ENTITY != null) {
+            // Drawn from its JSON block model; the renderer only lists it for the MTR brush view of its connections.
+            registryClient.registerBlockEntityRenderer(ModBlocks.RAILROAD_CROSSING_CONTROLLER_BLOCK_ENTITY, RenderCrossingControllerLinks::new);
+        }
+        if (ModBlocks.CROSSING_GATE_BLOCK_ENTITY != null) {
+            registryClient.registerBlockEntityRenderer(ModBlocks.CROSSING_GATE_BLOCK_ENTITY, RenderCrossingGate::new);
         }
         if (ModBlocks.AXLE_COUNTER_BLOCK_ENTITY != null) {
             registryClient.registerBlockEntityRenderer(ModBlocks.AXLE_COUNTER_BLOCK_ENTITY, argument -> new RenderObjBlock<>(argument, ObjBlockModel.AXLE_COUNTER, 1, BlockAxleCounter.FACING, false));
@@ -105,8 +126,8 @@ public class JmeClient {
     }
 
     /**
-     * Axle counters on rails, the Crossing Linker's mode icons, its selection (sent by the server) and the linking /
-     * MTR brush connection rendering.
+     * Axle counters on rails, the Crossing Linker's mode icons, its selection (sent by the server), the linking / MTR
+     * brush connection rendering and the crossing screens opened with MTR's brush.
      */
     private static void registerCrossingLinking(RegistryClient registryClient) {
         McClientCompat.registerAxleCounter();
@@ -116,7 +137,15 @@ public class JmeClient {
         }
         MagicNetworkingCompat.registerClientReceiver(CrossingLinkerHandler.SESSION_PACKET_ID, (client, packetByteBuf) -> {
             final net.minecraft.util.math.BlockPos pos = packetByteBuf.readBoolean() ? net.minecraft.util.math.BlockPos.fromLong(packetByteBuf.readLong()) : null;
-            MinecraftClient.getInstance().execute(() -> ClientCrossingLinks.setSelectedController(pos));
+            final net.minecraft.util.math.Vec3d counter = packetByteBuf.isReadable() && packetByteBuf.readBoolean() ? new net.minecraft.util.math.Vec3d(packetByteBuf.readDouble(), packetByteBuf.readDouble(), packetByteBuf.readDouble()) : null;
+            MinecraftClient.getInstance().execute(() -> ClientCrossingLinks.setSelection(pos, counter));
+        });
+        CrossingLinkerHandler.setScreenOpener((pos, screen) -> {
+            if (screen == CrossingLinkerHandler.SCREEN_GATE) {
+                CrossingGateScreen.open(pos);
+            } else {
+                CrossingControllerScreen.open(pos, screen == CrossingLinkerHandler.SCREEN_LIGHTS ? CrossingControllerScreen.TAB_LIGHTS : CrossingControllerScreen.TAB_COMPONENTS);
+            }
         });
         ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> client.execute(ClientCrossingLinks::clear));
         CrossingLinkRenderer.register();
@@ -134,6 +163,7 @@ public class JmeClient {
                 AlternativePlatformRegistry.setPersistenceEnabled(!remoteServer);
                 DepotCancellationRegistry.setPersistenceEnabled(!remoteServer);
                 CronTimetableRegistry.setPersistenceEnabled(!remoteServer);
+                RouteTimetableRegistry.setPersistenceEnabled(!remoteServer);
                 apply.run();
             });
         });
@@ -143,10 +173,12 @@ public class JmeClient {
             AlternativePlatformRegistry.setPersistenceEnabled(true);
             DepotCancellationRegistry.setPersistenceEnabled(true);
             CronTimetableRegistry.setPersistenceEnabled(true);
+            RouteTimetableRegistry.setPersistenceEnabled(true);
             RouteTypeOverrideConfig.reload();
             AlternativePlatformRegistry.reloadFromDisk();
             DepotCancellationRegistry.reloadFromDisk();
             CronTimetableRegistry.reloadFromDisk();
+            RouteTimetableRegistry.reloadFromDisk();
         }));
     }
 }

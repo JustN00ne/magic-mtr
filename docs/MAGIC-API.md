@@ -38,6 +38,9 @@ None. The server is localhost-only.
 * [POST /api/depots](#post-apidepots)
 * [POST /api/platforms](#post-apiplatforms)
 * [GET /api/tiles/\{z\}/\{x\}/\{y\}.png](#get-apitileszxy-png)
+* [GET /api/livemap/lines](#get-apilivemaplines)
+* [GET /api/rail-routes](#get-apirail-routes)
+* [GET /api/map-style](#get-apimap-style)
 
 ---
 
@@ -477,6 +480,79 @@ Returns a map tile image.
 Binary PNG image (`image/png`).
 
 Cache headers: `Cache-Control: public, max-age=30, stale-while-revalidate=600`.
+
+---
+
+## GET `/api/livemap/lines`
+
+The visible routes with their stops in order and their track, plus the stations. Used by the Livemap.
+
+### Query Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `dimension` | string | No | Filter by dimension |
+
+### Response
+
+```json
+{
+  "cachedResponseTime": 1726200000000,
+  "lines": [
+    {
+      "id": "00000000000003e8",
+      "name": "S1 Pasing - Riem|S1",
+      "number": "S1",
+      "color": 1491443,
+      "transportMode": "TRAIN",
+      "circular": false,
+      "path": [[[-900.0, -200.0], [-896.1, -199.4]]],
+      "stops": [
+        { "platformId": "...", "stationId": "...", "name": "Pasing", "x": -900, "z": -200 }
+      ]
+    }
+  ],
+  "stations": [
+    { "id": "...", "name": "Pasing", "color": 0, "x": -900, "z": -200 }
+  ]
+}
+```
+
+### Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | string | Hex route ID (IDs are strings because 64-bit numbers lose precision in JavaScript) |
+| `color` | int | Route colour, `0xRRGGBB` |
+| `path` | array | The track the route's trains run on, from the path MTR generated for its depot: a list of polylines of `[x, z]` points about every 4 blocks. Empty until the depot has generated its path |
+| `stops` | array | The route's platforms in order, with station name and platform centre |
+
+---
+
+## GET `/api/rail-routes`
+
+For every rail on a route's generated path, the routes that run over it.
+
+### Response
+
+```json
+{
+  "cachedResponseTime": 1726200000000,
+  "rails": {
+    "00000001-0000000a-00000005-00000002-0000000b-00000006": ["00000000000003e8"]
+  }
+}
+```
+
+Rails no route runs over (sidings, depots, spare track) are not listed.
+
+---
+
+## GET `/api/map-style`
+
+The contents of `config/MAGIC/config/map-style.yaml` as JSON: `theme`, `background`, `defaultStyle` and `styles`
+(see the wiki page *MAGIC Map Style*). If the file has a mistake, the last working version is returned with an
+`error` field describing the problem.
 
 ---
 

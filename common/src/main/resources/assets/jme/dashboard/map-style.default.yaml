@@ -1,0 +1,294 @@
+# MAGIC map style
+# ===============
+# Colours and map styles for the MAGIC web dashboard (http://localhost:8088/) and the Livemap (/livemap).
+# Save the file and the open pages pick up the change within 15 seconds. To start again from the defaults,
+# delete this file: MAGIC writes a fresh copy on the next server start.
+#
+# The default colours follow the map key of OpenRailwayMap (https://openrailwaymap.app).
+#
+# Where the data comes from
+# -------------------------
+# Rails get their properties from map.yaml (railway, usage, electrified, voltage, frequency, gauge, maxspeed,
+# operator, operatorShort, ref, trafficMode, ... and any other property you add there yourself).
+# Every rail also has these, map.yaml or not:
+#   mtrSpeed   the rail's MTR speed limit in km/h
+#   maxspeed   map.yaml's maxspeed, or mtrSpeed when map.yaml doesn't set one
+#   onRoute    true when at least one MTR route runs over the rail (false for sidings, depots and spare track)
+#   defined    true when the rail matches an entry in map.yaml
+#
+# Styles
+# ------
+# Each entry under "styles" is a button in the style bar, in this order:
+#   id         short unique name (used in the page address)
+#   name       shown on the button and in the legend
+#   icon       tracks, speed, bolt, gauge, signal, building, pin or star (anything else shows the name's first letter)
+#   text       optional text drawn along the lines; {property} is replaced by the rail's value, eg "{maxspeed}"
+#   rules      the first rule whose "when" matches a rail styles it:
+#                when:   property: value             equal (text ignores upper/lower case)
+#                        property: [a, b, c]         any of these
+#                        property: {min: 1, max: 9}  number in this range (leave out either end)
+#                color   "#rrggbb"
+#                width   line width, 1 = normal
+#                dash    [on, off] for a dashed line
+#                text    text along the line for this rule (overrides the style's text)
+#                label   the rule's line in the legend (rules without a label are not listed)
+#                hidden  true to not draw these rails at all
+#   gradient   optional, for rails no rule matched: a colour scale over a number
+#                property, label (legend; {value} is the stop's number), stops: [[number, "#colour"], ...]
+#   default    color/width/label for rails nothing else matched
+#
+# Other settings
+# --------------
+#   theme          light, dark or system (follows the viewer's device)
+#   background     opacity (0 to 1) and saturation (0 = grey like OpenRailwayMap, 1 = Minecraft's colours) of the
+#                  world map under the rails
+#   defaultStyle   the style a page opens with
+
+theme: system
+background:
+  opacity: 0.55
+  saturation: 0
+defaultStyle: infrastructure
+
+styles:
+  - id: infrastructure
+    name: Infrastructure
+    icon: tracks
+    rules:
+      - when: {defined: false, onRoute: false}
+        color: "#000000"
+        width: 0.6
+        label: Siding, depot or spare track
+      - when: {defined: false}
+        color: "#ff8100"
+        width: 1.2
+        label: Line (no map.yaml entry)
+      - when: {usage: hsr}
+        color: "#ff0c00"
+        width: 1.5
+        label: High-speed line
+      - when: {railway: subway}
+        color: "#0300c3"
+        label: Subway
+      - when: {railway: light_rail}
+        color: "#00bd14"
+        label: Light rail
+      - when: {railway: tram}
+        color: "#d877b8"
+        width: 0.8
+        label: Tram
+      - when: {railway: monorail}
+        color: "#00bd8b"
+        label: Monorail
+      - when: {railway: funicular}
+        color: "#d87777"
+        label: Funicular
+      - when: {railway: miniature}
+        color: "#7d7094"
+        width: 0.7
+        label: Miniature railway
+      - when: {railway: narrow_gauge}
+        color: "#c0da00"
+        label: Narrow gauge
+      - when: {usage: main}
+        color: "#ff8100"
+        width: 1.2
+        label: Main line
+      - when: {usage: branch}
+        color: "#c4b600"
+        label: Branch line
+      - when: {usage: [industrial, spur]}
+        color: "#87491d"
+        width: 0.8
+        label: Industrial line / spur
+      - when: {usage: military}
+        color: "#764765"
+        label: Military
+      - when: {usage: tourism}
+        color: "#5b4d70"
+        label: Tourism / heritage
+    default:
+      color: "#000000"
+      width: 0.8
+      label: Other
+
+  - id: speed
+    name: Max speed
+    icon: speed
+    text: "{maxspeed}"
+    rules:
+      - when: {maxspeed: {max: 0}}
+        color: "#808080"
+        label: Unknown
+        text: ""
+    gradient:
+      property: maxspeed
+      label: "{value} km/h"
+      stops:
+        - [10, "#31123b"]
+        - [30, "#4558ca"]
+        - [50, "#4288f1"]
+        - [70, "#32b0ee"]
+        - [90, "#1ad4d1"]
+        - [110, "#10d990"]
+        - [130, "#18de53"]
+        - [160, "#6ae505"]
+        - [200, "#dbe335"]
+        - [250, "#fc9e2f"]
+        - [300, "#e64f0f"]
+        - [380, "#7b0503"]
+
+  - id: electrification
+    name: Electrification
+    icon: bolt
+    rules:
+      - when: {defined: false}
+        color: "#808080"
+        label: Unknown (no map.yaml entry)
+      - when: {electrified: ["none", "no", "false"]}
+        color: "#000000"
+        label: Not electrified
+      - when: {electrified: [deelectrified, abandoned]}
+        color: "#70584d"
+        label: De-electrified
+      - when: {electrified: construction}
+        color: "#000000"
+        dash: [2.5, 2.5]
+        label: Electrification under construction
+      - when: {electrified: proposed}
+        color: "#000000"
+        dash: [2, 4]
+        label: Electrification proposed
+      - when: {voltage: 25000, frequency: 60}
+        color: "#c00000"
+        text: "25kV 60Hz"
+        label: 25 kV 60 Hz ~
+      - when: {voltage: 25000, frequency: 50}
+        color: "#ff0000"
+        text: "25kV 50Hz"
+        label: 25 kV 50 Hz ~
+      - when: {voltage: 20000, frequency: 60}
+        color: "#ff9966"
+        text: "20kV 60Hz"
+        label: 20 kV 60 Hz ~
+      - when: {voltage: 20000, frequency: 50}
+        color: "#ffcc66"
+        text: "20kV 50Hz"
+        label: 20 kV 50 Hz ~
+      - when: {voltage: 15000, frequency: {min: 16.665, max: 16.675}}
+        color: "#00ff00"
+        text: "15kV 16,67Hz"
+        label: 15 kV 16.67 Hz ~
+      - when: {voltage: 15000, frequency: {min: 16.65, max: 16.75}}
+        color: "#00cb66"
+        text: "15kV 16,7Hz"
+        label: 15 kV 16.7 Hz ~
+      - when: {voltage: 12500, frequency: 60}
+        color: "#999900"
+        text: "12,5kV 60Hz"
+        label: 12.5 kV 60 Hz ~
+      - when: {voltage: 12000, frequency: 25}
+        color: "#cccc00"
+        text: "12kV 25Hz"
+        label: 12 kV 25 Hz ~
+      - when: {voltage: {min: 25001}}
+        color: "#ff9f19"
+        text: "{voltage}V ~"
+        label: Above 25 kV ~
+      - when: {voltage: {min: 15001, max: 24999}}
+        color: "#f1f100"
+        text: "{voltage}V ~"
+        label: 15 kV to 25 kV ~
+      - when: {voltage: {min: 4000, max: 14999}}
+        color: "#97ff2f"
+        text: "{voltage}V ~"
+        label: Below 15 kV ~
+      - when: {voltage: 3000}
+        color: "#0000ff"
+        text: "3kV ="
+        label: 3 kV =
+      - when: {voltage: {min: 1501, max: 3999}}
+        color: "#00b7cb"
+        text: "{voltage}V ="
+        label: 1.5 kV to 3 kV =
+      - when: {voltage: 1500}
+        color: "#0098cb"
+        text: "1,5kV ="
+        label: 1.5 kV =
+      - when: {voltage: {min: 1001, max: 1499}}
+        color: "#007acb"
+        text: "{voltage}V ="
+        label: 1 kV to 1.5 kV =
+      - when: {voltage: 1000}
+        color: "#5c1ccb"
+        text: "1kV ="
+        label: 1 kV =
+      - when: {voltage: {min: 751, max: 999}}
+        color: "#d033ff"
+        text: "{voltage}V ="
+        label: 750 V to 1 kV =
+      - when: {voltage: 750}
+        color: "#f930ff"
+        text: "750V ="
+        label: 750 V =
+      - when: {voltage: {min: 1, max: 749}}
+        color: "#ff79b8"
+        text: "{voltage}V ="
+        label: Below 750 V =
+    default:
+      color: "#808080"
+      label: Electrified, voltage unknown
+
+  - id: gauge
+    name: Track gauge
+    icon: gauge
+    text: "{gauge}"
+    rules:
+      - when: {defined: false}
+        color: "#808080"
+        label: Unknown (no map.yaml entry)
+        text: ""
+      - when: {railway: monorail}
+        color: "#c0c080"
+        label: Monorail
+        text: ""
+      - when: {gauge: {min: 3000}}
+        color: "#c0c0c0"
+        label: Other
+      - when: {gauge: {max: 62}}
+        color: "#c0c0c0"
+    gradient:
+      property: gauge
+      label: "{value} mm"
+      stops:
+        - [63, "#006060"]
+        - [184, "#00c0c0"]
+        - [381, "#80ffff"]
+        - [600, "#e0ffff"]
+        - [750, "#ffa0ff"]
+        - [800, "#ff00ff"]
+        - [914, "#a000ff"]
+        - [1000, "#6000ff"]
+        - [1067, "#0000e0"]
+        - [1372, "#000080"]
+        - [1435, "#000000"]
+        - [1520, "#c00000"]
+        - [1524, "#ff0000"]
+        - [1600, "#ffa000"]
+        - [1668, "#ffc000"]
+        - [2000, "#a0ff00"]
+
+# Add your own styles below. Any property from map.yaml works, including ones you invent. For example,
+# with "owner: Northern Rail" on some map.yaml entries:
+#
+#  - id: owner
+#    name: Owner
+#    icon: building
+#    text: "{owner}"
+#    rules:
+#      - when: {owner: Northern Rail}
+#        color: "#7b2d8e"
+#        label: Northern Rail
+#    default:
+#      color: "#9e9e9e"
+#      label: Other owners

@@ -72,7 +72,7 @@ public class TrackColorGradientEditorScreen extends ScreenExtension {
     }
 
     private static int jme$maxDisplaySpeed() {
-        return jme$displaySpeedFromKmh(400);
+        return jme$displaySpeedFromKmh(org.justnoone.jme.rail.MagicRailConstants.MAX_SPEED_KMH);
     }
 
     private static String jme$getSpeedUnitLabel() {
@@ -401,7 +401,7 @@ public class TrackColorGradientEditorScreen extends ScreenExtension {
                 if (stop == null) {
                     continue;
                 }
-                final int speed = Math.max(1, Math.min(400, stop.speedKmh));
+                final int speed = Math.max(1, Math.min(org.justnoone.jme.rail.MagicRailConstants.MAX_SPEED_KMH, stop.speedKmh));
                 final int argb = 0xFF000000 | (stop.colorArgb & 0xFFFFFF);
                 bySpeed.put(speed, argb);
             }

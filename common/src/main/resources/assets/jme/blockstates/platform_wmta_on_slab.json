@@ -1,0 +1,262 @@
+{
+  "multipart": [
+    {
+      "when": {
+        "blink": "false",
+        "type": "bottom",
+        "facing": "north"
+      },
+      "apply": {
+        "model": "jme:block/platform_wmta_off_slab_bottom"
+      }
+    },
+    {
+      "when": {
+        "blink": "false",
+        "type": "bottom",
+        "facing": "east"
+      },
+      "apply": {
+        "model": "jme:block/platform_wmta_off_slab_bottom",
+        "y": 90
+      }
+    },
+    {
+      "when": {
+        "blink": "false",
+        "type": "bottom",
+        "facing": "south"
+      },
+      "apply": {
+        "model": "jme:block/platform_wmta_off_slab_bottom",
+        "y": 180
+      }
+    },
+    {
+      "when": {
+        "blink": "false",
+        "type": "bottom",
+        "facing": "west"
+      },
+      "apply": {
+        "model": "jme:block/platform_wmta_off_slab_bottom",
+        "y": 270
+      }
+    },
+    {
+      "when": {
+        "blink": "false",
+        "type": "double",
+        "facing": "north"
+      },
+      "apply": {
+        "model": "jme:block/platform_wmta_off"
+      }
+    },
+    {
+      "when": {
+        "blink": "false",
+        "type": "double",
+        "facing": "east"
+      },
+      "apply": {
+        "model": "jme:block/platform_wmta_off",
+        "y": 90
+      }
+    },
+    {
+      "when": {
+        "blink": "false",
+        "type": "double",
+        "facing": "south"
+      },
+      "apply": {
+        "model": "jme:block/platform_wmta_off",
+        "y": 180
+      }
+    },
+    {
+      "when": {
+        "blink": "false",
+        "type": "double",
+        "facing": "west"
+      },
+      "apply": {
+        "model": "jme:block/platform_wmta_off",
+        "y": 270
+      }
+    },
+    {
+      "when": {
+        "blink": "false",
+        "type": "top",
+        "facing": "north"
+      },
+      "apply": {
+        "model": "jme:block/platform_wmta_off_slab_top"
+      }
+    },
+    {
+      "when": {
+        "blink": "false",
+        "type": "top",
+        "facing": "east"
+      },
+      "apply": {
+        "model": "jme:block/platform_wmta_off_slab_top",
+        "y": 90
+      }
+    },
+    {
+      "when": {
+        "blink": "false",
+        "type": "top",
+        "facing": "south"
+      },
+      "apply": {
+        "model": "jme:block/platform_wmta_off_slab_top",
+        "y": 180
+      }
+    },
+    {
+      "when": {
+        "blink": "false",
+        "type": "top",
+        "facing": "west"
+      },
+      "apply": {
+        "model": "jme:block/platform_wmta_off_slab_top",
+        "y": 270
+      }
+    },
+    {
+      "when": {
+        "blink": "true",
+        "type": "bottom",
+        "facing": "north"
+      },
+      "apply": {
+        "model": "jme:block/platform_wmta_on_slab_bottom"
+      }
+    },
+    {
+      "when": {
+        "blink": "true",
+        "type": "bottom",
+        "facing": "east"
+      },
+      "apply": {
+        "model": "jme:block/platform_wmta_on_slab_bottom",
+        "y": 90
+      }
+    },
+    {
+      "when": {
+        "blink": "true",
+        "type": "bottom",
+        "facing": "south"
+      },
+      "apply": {
+        "model": "jme:block/platform_wmta_on_slab_bottom",
+        "y": 180
+      }
+    },
+    {
+      "when": {
+        "blink": "true",
+        "type": "bottom",
+        "facing": "west"
+      },
+      "apply": {
+        "model": "jme:block/platform_wmta_on_slab_bottom",
+        "y": 270
+      }
+    },
+    {
+      "when": {
+        "blink": "true",
+        "type": "double",
+        "facing": "north"
+      },
+      "apply": {
+        "model": "jme:block/platform_wmta_on"
+      }
+    },
+    {
+      "when": {
+        "blink": "true",
+        "type": "double",
+        "facing": "east"
+      },
+      "apply": {
+        "model": "jme:block/platform_wmta_on",
+        "y": 90
+      }
+    },
+    {
+      "when": {
+        "blink": "true",
+        "type": "double",
+        "facing": "south"
+      },
+      "apply": {
+        "model": "jme:block/platform_wmta_on",
+        "y": 180
+      }
+    },
+    {
+      "when": {
+        "blink": "true",
+        "type": "double",
+        "facing": "west"
+      },
+      "apply": {
+        "model": "jme:block/platform_wmta_on",
+        "y": 270
+      }
+    },
+    {
+      "when": {
+        "blink": "true",
+        "type": "top",
+        "facing": "north"
+      },
+      "apply": {
+        "model": "jme:block/platform_wmta_on_slab_top"
+      }
+    },
+    {
+      "when": {
+        "blink": "true",
+        "type": "top",
+        "facing": "east"
+      },
+      "apply": {
+        "model": "jme:block/platform_wmta_on_slab_top",
+        "y": 90
+      }
+    },
+    {
+      "when": {
+        "blink": "true",
+        "type": "top",
+        "facing": "south"
+      },
+      "apply": {
+        "model": "jme:block/platform_wmta_on_slab_top",
+        "y": 180
+      }
+    },
+    {
+      "when": {
+        "blink": "true",
+        "type": "top",
+        "facing": "west"
+      },
+      "apply": {
+        "model": "jme:block/platform_wmta_on_slab_top",
+        "y": 270
+      }
+    }
+  ]
+}

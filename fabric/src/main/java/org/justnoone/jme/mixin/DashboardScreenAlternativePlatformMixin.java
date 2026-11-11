@@ -1,6 +1,5 @@
 package org.justnoone.jme.mixin;
 
-import org.justnoone.jme.client.AlternativePlatformClient;
 import org.justnoone.jme.client.DashboardRouteFolderStore;
 import org.justnoone.jme.client.DashboardRouteRenderState;
 import org.justnoone.jme.client.screen.AlternativePlatformMenuScreen;
@@ -13,11 +12,10 @@ import org.mtr.mapping.holder.Screen;
 import org.mtr.mapping.holder.Text;
 import org.mtr.mapping.mapper.ButtonWidgetExtension;
 import org.mtr.mapping.mapper.ScreenExtension;
-import org.mtr.mapping.mapper.TextFieldWidgetExtension;
 import org.mtr.mapping.mapper.TextHelper;
 import org.mtr.mod.client.IDrawing;
-import org.mtr.mod.client.MinecraftClientData;
 import org.mtr.mod.data.IGui;
+import org.mtr.mod.screen.DashboardList;
 import org.mtr.mod.screen.DashboardListItem;
 import org.mtr.mod.screen.DashboardScreen;
 import org.spongepowered.asm.mixin.Final;
@@ -29,13 +27,20 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import java.lang.reflect.Method;
+import java.util.List;
 
+/**
+ * An "Alternative platforms" button under the stop list while a route is being edited. It opens the alternatives of
+ * the selected stop, or of the route's first stop that has other platforms when no stop is selected.
+ */
 @Mixin(value = DashboardScreen.class, remap = false)
 public abstract class DashboardScreenAlternativePlatformMixin implements IGui {
 
     // MTR's left panel is 144 wide; its custom destination field spans x=2..142 on the row above the bottom buttons.
     @Unique
     private static final int JME_PANEL_WIDTH = 144;
+    @Unique
+    private static final int JME_ROW_HEIGHT = SQUARE_SIZE + 2;
 
     @Shadow
     private Route editingRoute;
@@ -45,47 +50,35 @@ public abstract class DashboardScreenAlternativePlatformMixin implements IGui {
 
     @Shadow
     @Final
-    private ButtonWidgetExtension buttonDoneEditingRouteDestination;
+    private DashboardList dashboardList;
 
     @Shadow
     @Final
-    private TextFieldWidgetExtension textFieldCustomDestination;
+    private ButtonWidgetExtension buttonDoneEditingRoute;
 
     @Unique
-    private ButtonWidgetExtension jme$buttonAlternativePlatform;
-    @Unique
-    private ButtonWidgetExtension jme$buttonAlternativeSelector;
-    @Unique
-    private boolean jme$alternativeSelectionMode;
+    private ButtonWidgetExtension jme$alternativesButton;
 
     @Inject(method = "<init>", at = @At("TAIL"), remap = false)
-    private void jme$createAlternativeButton(org.mtr.core.data.TransportMode transportMode, CallbackInfo ci) {
-        jme$buttonAlternativePlatform = new ButtonWidgetExtension(0, 0, 0, SQUARE_SIZE, TextHelper.literal("⎇"), button -> {
-            jme$alternativeSelectionMode = !jme$alternativeSelectionMode && jme$canEditAlternatives();
-            jme$updateAlternativeButtons();
-        });
-        jme$buttonAlternativeSelector = new ButtonWidgetExtension(0, 0, 0, SQUARE_SIZE, TextHelper.literal("≣"), button -> jme$openAlternativeSelector());
+    private void jme$createAlternativesButton(org.mtr.core.data.TransportMode transportMode, CallbackInfo ci) {
+        jme$alternativesButton = new ButtonWidgetExtension(0, 0, 0, SQUARE_SIZE, TextHelper.literal("Alternative platforms"), button -> jme$openAlternativesForSelection());
     }
 
     @Inject(method = "init2", at = @At("TAIL"), remap = false)
-    private void jme$initAlternativeButton(CallbackInfo ci) {
-        if (jme$buttonAlternativePlatform == null || jme$buttonAlternativeSelector == null) {
+    private void jme$initAlternativesButton(CallbackInfo ci) {
+        if (jme$alternativesButton == null) {
             return;
         }
-
         // init2 runs on first open and again after every resize, when Screen#clearAndInit has removed all children,
-        // so the buttons have to be added every time.
-        jme$addChild(new ClickableWidget(jme$buttonAlternativeSelector));
-        jme$addChild(new ClickableWidget(jme$buttonAlternativePlatform));
-        jme$updateAlternativeButtons();
+        // so the button has to be added every time.
+        jme$addChild(new ClickableWidget(jme$alternativesButton));
+        jme$updateAlternativesButton(true);
     }
 
     @Inject(method = "toggleButtons", at = @At("TAIL"), remap = false)
-    private void jme$toggleAlternativeButton(CallbackInfo ci) {
-        if (!((DashboardScreenAccessor) this).jme$isValidRoutePlatformIndex()) {
-            jme$alternativeSelectionMode = false;
-        }
-        jme$updateAlternativeButtons();
+    private void jme$toggleAlternativesButton(CallbackInfo ci) {
+        // MTR has just sized the list for the current mode: make room for the button below it.
+        jme$updateAlternativesButton(true);
         DashboardRouteRenderState.update(editingRoute, editingRoutePlatformIndex);
     }
 
@@ -111,21 +104,21 @@ public abstract class DashboardScreenAlternativePlatformMixin implements IGui {
             return;
         }
 
-        editingRoutePlatformIndex = resolvedIndex;
-        jme$openAlternativeSelector();
+        jme$openAlternatives(resolvedIndex);
         ci.cancel();
     }
 
     @Inject(method = "stopEditing", at = @At("TAIL"), remap = false)
-    private void jme$clearAlternativeSelectionMode(CallbackInfo ci) {
-        jme$alternativeSelectionMode = false;
-        jme$updateAlternativeButtons();
+    private void jme$hideAlternativesButton(CallbackInfo ci) {
+        jme$updateAlternativesButton(false);
         DashboardRouteRenderState.clear();
     }
 
     @Inject(method = "tick2", at = @At("TAIL"), remap = false)
     private void jme$syncRouteOverlayState(CallbackInfo ci) {
         DashboardRouteRenderState.update(editingRoute, editingRoutePlatformIndex);
+        // The count follows changes made in the alternatives screen.
+        jme$updateAlternativesButton(false);
     }
 
     @Inject(method = "onClose2", at = @At("TAIL"), remap = false)
@@ -133,87 +126,74 @@ public abstract class DashboardScreenAlternativePlatformMixin implements IGui {
         DashboardRouteRenderState.clear();
     }
 
-    @Inject(method = "onClickAddPlatformToRoute", at = @At("HEAD"), cancellable = true, remap = false)
-    private void jme$toggleAlternativePlatformOnMapClick(long platformId, CallbackInfo ci) {
-        if (!jme$alternativeSelectionMode) {
+    @Unique
+    private void jme$openAlternativesForSelection() {
+        if (!jme$isEditingRoute()) {
             return;
         }
-
-        // While picking alternatives, map clicks never add stops to the route.
-        ci.cancel();
-        if (!jme$canEditAlternatives()) {
-            jme$alternativeSelectionMode = false;
-            jme$updateAlternativeButtons();
+        if (((DashboardScreenAccessor) this).jme$isValidRoutePlatformIndex()) {
+            jme$openAlternatives(editingRoutePlatformIndex);
             return;
         }
-
-        final Platform primaryPlatform = editingRoute.getRoutePlatforms().get(editingRoutePlatformIndex).platform;
-        final Platform clickedPlatform = MinecraftClientData.getDashboardInstance().platformIdMap.get(platformId);
-        if (!AlternativePlatformRegistry.isCompatibleAlternative(primaryPlatform, clickedPlatform)) {
-            // Only platforms of the same station and transport mode can stand in for this stop.
-            return;
+        // No stop selected: start at the first stop where there is another platform to choose.
+        final List<RoutePlatformData> stops = editingRoute.getRoutePlatforms();
+        for (int i = 0; i < stops.size(); i++) {
+            if (!AlternativePlatformRegistry.getCompatiblePlatforms(stops.get(i).platform).isEmpty()) {
+                jme$openAlternatives(i);
+                return;
+            }
         }
-
-        final boolean enabled = !AlternativePlatformRegistry.getAlternatives(editingRoute.getId(), primaryPlatform.getId()).contains(platformId);
-        AlternativePlatformClient.setAlternative(editingRoute.getId(), primaryPlatform.getId(), platformId, enabled);
+        jme$openAlternatives(0);
     }
 
     @Unique
-    private void jme$openAlternativeSelector() {
-        if (!jme$canEditAlternatives()) {
+    private void jme$openAlternatives(int stopIndex) {
+        if (editingRoute == null || stopIndex < 0 || stopIndex >= editingRoute.getRoutePlatforms().size()) {
             return;
         }
-
-        jme$alternativeSelectionMode = false;
-        org.mtr.mapping.holder.MinecraftClient.getInstance().openScreen(new Screen(new AlternativePlatformMenuScreen((ScreenExtension) (Object) this, editingRoute, editingRoutePlatformIndex)));
+        org.mtr.mapping.holder.MinecraftClient.getInstance().openScreen(new Screen(new AlternativePlatformMenuScreen((ScreenExtension) (Object) this, editingRoute, stopIndex)));
     }
 
     /**
-     * Shows the two compact buttons next to MTR's custom destination field (only while a route stop is being edited)
-     * and narrows that field to make room, instead of drawing the buttons on top of it.
+     * Shows the button on its own row above the row MTR keeps above "Done" while a route is edited (the route's name
+     * and colour, or the selected stop's custom destination), with the number of alternatives of the selected stop.
+     *
+     * @param resizeList whether MTR has just sized the list, which then gets one row shorter
      */
     @Unique
-    private void jme$updateAlternativeButtons() {
-        if (jme$buttonAlternativePlatform == null || jme$buttonAlternativeSelector == null || buttonDoneEditingRouteDestination == null) {
+    private void jme$updateAlternativesButton(boolean resizeList) {
+        if (jme$alternativesButton == null || buttonDoneEditingRoute == null) {
             return;
         }
 
-        final boolean show = jme$canEditAlternatives() && jme$hasStationAlternatives();
-        final int rowY = buttonDoneEditingRouteDestination.getY2() - SQUARE_SIZE - 2;
-        final int buttonsX = JME_PANEL_WIDTH - SQUARE_SIZE * 2;
-        IDrawing.setPositionAndWidth(jme$buttonAlternativeSelector, buttonsX, rowY, SQUARE_SIZE);
-        IDrawing.setPositionAndWidth(jme$buttonAlternativePlatform, buttonsX + SQUARE_SIZE, rowY, SQUARE_SIZE);
-        if (textFieldCustomDestination != null) {
-            IDrawing.setPositionAndWidth(textFieldCustomDestination, 2, rowY, (show ? buttonsX - 2 : JME_PANEL_WIDTH - 2) - 2);
-        }
-
-        jme$buttonAlternativeSelector.visible = show;
-        jme$buttonAlternativeSelector.active = show;
-        jme$buttonAlternativePlatform.visible = show;
-        jme$buttonAlternativePlatform.active = show;
+        final boolean show = jme$isEditingRoute();
+        jme$alternativesButton.visible = show;
+        jme$alternativesButton.active = show;
         if (!show) {
-            jme$alternativeSelectionMode = false;
+            return;
         }
-        jme$buttonAlternativePlatform.setMessage2(Text.cast(TextHelper.literal(jme$alternativeSelectionMode ? "⎇*" : "⎇")));
+
+        if (resizeList && dashboardList != null) {
+            dashboardList.height = Math.max(SQUARE_SIZE * 2, dashboardList.height - JME_ROW_HEIGHT);
+        }
+        final boolean stopSelected = ((DashboardScreenAccessor) this).jme$isValidRoutePlatformIndex();
+        final int rowY = buttonDoneEditingRoute.getY2() - 2 * JME_ROW_HEIGHT;
+        IDrawing.setPositionAndWidth(jme$alternativesButton, 2, rowY, JME_PANEL_WIDTH - 4);
+
+        String label = "Alternative platforms";
+        if (stopSelected) {
+            final Platform platform = editingRoute.getRoutePlatforms().get(editingRoutePlatformIndex).platform;
+            final int count = platform == null ? 0 : AlternativePlatformRegistry.getAlternatives(editingRoute.getId(), platform.getId()).size();
+            label += count > 0 ? " (" + count + ")" : "...";
+        } else {
+            label += "...";
+        }
+        jme$alternativesButton.setMessage2(Text.cast(TextHelper.literal(label)));
     }
 
     @Unique
-    private boolean jme$canEditAlternatives() {
-        if (!AlternativePlatformRegistry.isEnabled() || editingRoute == null || editingRoute.getRoutePlatforms().isEmpty()) {
-            return false;
-        }
-        if (!((DashboardScreenAccessor) this).jme$isValidRoutePlatformIndex()) {
-            return false;
-        }
-        final RoutePlatformData routePlatformData = editingRoute.getRoutePlatforms().get(editingRoutePlatformIndex);
-        return routePlatformData != null && routePlatformData.platform != null && routePlatformData.platform.area != null;
-    }
-
-    @Unique
-    private boolean jme$hasStationAlternatives() {
-        final Platform primaryPlatform = editingRoute.getRoutePlatforms().get(editingRoutePlatformIndex).platform;
-        return !AlternativePlatformRegistry.getCompatiblePlatforms(primaryPlatform).isEmpty()
-                || !AlternativePlatformRegistry.getAlternatives(editingRoute.getId(), primaryPlatform.getId()).isEmpty();
+    private boolean jme$isEditingRoute() {
+        return AlternativePlatformRegistry.isEnabled() && editingRoute != null && !editingRoute.getRoutePlatforms().isEmpty();
     }
 
     @Unique

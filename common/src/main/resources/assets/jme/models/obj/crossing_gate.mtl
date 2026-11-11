@@ -1,0 +1,3 @@
+# Crossing gate material. map_Kd default.png makes MTR use the texture the renderer passes in (housing or arm).
+newmtl crossing_gate
+map_Kd default.png

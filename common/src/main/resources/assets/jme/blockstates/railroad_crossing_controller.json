@@ -1,0 +1,34 @@
+{
+  "variants": {
+    "facing=east,powered=false": {
+      "model": "jme:block/railroad_crossing_controller"
+    },
+    "facing=east,powered=true": {
+      "model": "jme:block/railroad_crossing_controller"
+    },
+    "facing=south,powered=false": {
+      "model": "jme:block/railroad_crossing_controller",
+      "y": 90
+    },
+    "facing=south,powered=true": {
+      "model": "jme:block/railroad_crossing_controller",
+      "y": 90
+    },
+    "facing=west,powered=false": {
+      "model": "jme:block/railroad_crossing_controller",
+      "y": 180
+    },
+    "facing=west,powered=true": {
+      "model": "jme:block/railroad_crossing_controller",
+      "y": 180
+    },
+    "facing=north,powered=false": {
+      "model": "jme:block/railroad_crossing_controller",
+      "y": 270
+    },
+    "facing=north,powered=true": {
+      "model": "jme:block/railroad_crossing_controller",
+      "y": 270
+    }
+  }
+}

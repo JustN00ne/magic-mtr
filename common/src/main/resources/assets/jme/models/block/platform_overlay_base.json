@@ -1,0 +1,23 @@
+{
+  "parent": "minecraft:block/block",
+  "ambientocclusion": false,
+  "textures": {
+    "overlay": "jme:block/platform_overlay_german",
+    "particle": "jme:block/platform_overlay_german"
+  },
+  "elements": [
+    {
+      "from": [0, 0, 0],
+      "to": [16, 1, 16],
+      "faces": {
+        "up": { "texture": "#overlay", "uv": [0, 0, 16, 16] },
+        "down": { "texture": "#overlay", "uv": [0, 0, 16, 16] },
+        "north": { "texture": "#overlay", "uv": [0, 15, 16, 16] },
+        "south": { "texture": "#overlay", "uv": [0, 15, 16, 16] },
+        "west": { "texture": "#overlay", "uv": [0, 15, 16, 16] },
+        "east": { "texture": "#overlay", "uv": [0, 15, 16, 16] }
+      }
+    }
+  ]
+}
+

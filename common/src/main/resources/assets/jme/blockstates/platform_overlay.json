@@ -1,0 +1,69 @@
+{
+  "variants": {
+    "style=german,facing=north": { "model": "jme:block/platform_overlay_german" },
+    "style=german,facing=east": { "model": "jme:block/platform_overlay_german", "y": 90 },
+    "style=german,facing=south": { "model": "jme:block/platform_overlay_german", "y": 180 },
+    "style=german,facing=west": { "model": "jme:block/platform_overlay_german", "y": 270 },
+
+    "style=polish,facing=north": { "model": "jme:block/platform_overlay_polish" },
+    "style=polish,facing=east": { "model": "jme:block/platform_overlay_polish", "y": 90 },
+    "style=polish,facing=south": { "model": "jme:block/platform_overlay_polish", "y": 180 },
+    "style=polish,facing=west": { "model": "jme:block/platform_overlay_polish", "y": 270 },
+
+    "style=portuguese,facing=north": { "model": "jme:block/platform_overlay_portuguese" },
+    "style=portuguese,facing=east": { "model": "jme:block/platform_overlay_portuguese", "y": 90 },
+    "style=portuguese,facing=south": { "model": "jme:block/platform_overlay_portuguese", "y": 180 },
+    "style=portuguese,facing=west": { "model": "jme:block/platform_overlay_portuguese", "y": 270 },
+
+    "style=blue_american,facing=north": { "model": "jme:block/platform_overlay_blue_american" },
+    "style=blue_american,facing=east": { "model": "jme:block/platform_overlay_blue_american", "y": 90 },
+    "style=blue_american,facing=south": { "model": "jme:block/platform_overlay_blue_american", "y": 180 },
+    "style=blue_american,facing=west": { "model": "jme:block/platform_overlay_blue_american", "y": 270 },
+
+    "style=swedish,facing=north": { "model": "jme:block/platform_overlay_swedish" },
+    "style=swedish,facing=east": { "model": "jme:block/platform_overlay_swedish", "y": 90 },
+    "style=swedish,facing=south": { "model": "jme:block/platform_overlay_swedish", "y": 180 },
+    "style=swedish,facing=west": { "model": "jme:block/platform_overlay_swedish", "y": 270 },
+
+    "style=czech,facing=north": { "model": "jme:block/platform_overlay_czech" },
+    "style=czech,facing=east": { "model": "jme:block/platform_overlay_czech", "y": 90 },
+    "style=czech,facing=south": { "model": "jme:block/platform_overlay_czech", "y": 180 },
+    "style=czech,facing=west": { "model": "jme:block/platform_overlay_czech", "y": 270 },
+
+    "style=dutch,facing=north": { "model": "jme:block/platform_overlay_dutch" },
+    "style=dutch,facing=east": { "model": "jme:block/platform_overlay_dutch", "y": 90 },
+    "style=dutch,facing=south": { "model": "jme:block/platform_overlay_dutch", "y": 180 },
+    "style=dutch,facing=west": { "model": "jme:block/platform_overlay_dutch", "y": 270 },
+
+    "style=tactile_b1,facing=north": { "model": "jme:block/platform_overlay_tactile_b1" },
+    "style=tactile_b1,facing=east": { "model": "jme:block/platform_overlay_tactile_b1", "y": 90 },
+    "style=tactile_b1,facing=south": { "model": "jme:block/platform_overlay_tactile_b1", "y": 180 },
+    "style=tactile_b1,facing=west": { "model": "jme:block/platform_overlay_tactile_b1", "y": 270 },
+
+    "style=tactile_b2,facing=north": { "model": "jme:block/platform_overlay_tactile_b2" },
+    "style=tactile_b2,facing=east": { "model": "jme:block/platform_overlay_tactile_b2", "y": 90 },
+    "style=tactile_b2,facing=south": { "model": "jme:block/platform_overlay_tactile_b2", "y": 180 },
+    "style=tactile_b2,facing=west": { "model": "jme:block/platform_overlay_tactile_b2", "y": 270 },
+
+    "style=tactile_w1,facing=north": { "model": "jme:block/platform_overlay_tactile_w1" },
+    "style=tactile_w1,facing=east": { "model": "jme:block/platform_overlay_tactile_w1", "y": 90 },
+    "style=tactile_w1,facing=south": { "model": "jme:block/platform_overlay_tactile_w1", "y": 180 },
+    "style=tactile_w1,facing=west": { "model": "jme:block/platform_overlay_tactile_w1", "y": 270 },
+
+    "style=tactile_w2,facing=north": { "model": "jme:block/platform_overlay_tactile_w2" },
+    "style=tactile_w2,facing=east": { "model": "jme:block/platform_overlay_tactile_w2", "y": 90 },
+    "style=tactile_w2,facing=south": { "model": "jme:block/platform_overlay_tactile_w2", "y": 180 },
+    "style=tactile_w2,facing=west": { "model": "jme:block/platform_overlay_tactile_w2", "y": 270 },
+
+    "style=tactile_y1,facing=north": { "model": "jme:block/platform_overlay_tactile_y1" },
+    "style=tactile_y1,facing=east": { "model": "jme:block/platform_overlay_tactile_y1", "y": 90 },
+    "style=tactile_y1,facing=south": { "model": "jme:block/platform_overlay_tactile_y1", "y": 180 },
+    "style=tactile_y1,facing=west": { "model": "jme:block/platform_overlay_tactile_y1", "y": 270 },
+
+    "style=tactile_y2,facing=north": { "model": "jme:block/platform_overlay_tactile_y2" },
+    "style=tactile_y2,facing=east": { "model": "jme:block/platform_overlay_tactile_y2", "y": 90 },
+    "style=tactile_y2,facing=south": { "model": "jme:block/platform_overlay_tactile_y2", "y": 180 },
+    "style=tactile_y2,facing=west": { "model": "jme:block/platform_overlay_tactile_y2", "y": 270 }
+  }
+}
+

@@ -18,7 +18,15 @@ public final class CrossingSignal {
     public static final IntegerProperty LAMP = IntegerProperty.of("lamp", 0, 2);
     static final int LAMP_OFF = 0;
     private static final Property<Integer> LAMP_PROPERTY = Property.cast(LAMP);
-    private static final int FLASH_INTERVAL_TICKS = 10;
+    /**
+     * The bell index of a level crossing or gate that makes no sound (eg crossings only used to link sections).
+     */
+    public static final int BELL_NONE = -1;
+    /**
+     * How long each lamp stays lit, per flash rate (slow, normal, fast), chosen in the level crossing's screen.
+     */
+    private static final int[] FLASH_INTERVALS_TICKS = {15, 10, 7};
+    public static final int DEFAULT_FLASH_RATE = 1;
     // A volume above 1 only extends the range (16 blocks per unit), so the bell is heard up to 24 blocks away.
     private static final float BELL_VOLUME = 1.5F;
     private static final float BELL_PITCH = 1.0F;
@@ -26,8 +34,8 @@ public final class CrossingSignal {
     private static final double STOP_SOUND_RANGE = 48;
 
     /**
-     * The bell sounds a level crossing can use ({@code assets/jme/sounds/*.ogg}), picked with sneak + right-click with
-     * MTR's brush. Each is played again every {@code intervalTicks} while the crossing is on: right after a single
+     * The bell sounds a level crossing can use ({@code assets/jme/sounds/*.ogg}), picked in the level crossing's screen
+     * (right-click it with MTR's brush). Each is played again every {@code intervalTicks} while the crossing is on: right after a single
      * ring has faded out, or at the end of a sound that is already a loop of rings.
      */
     private static final Bell[] BELLS = {
@@ -37,7 +45,14 @@ public final class CrossingSignal {
             new Bell("crossing_bell_4", 14, false),
             // British alarm: 4 tone cycles stretched to exactly 36 ticks, with a short faded overlap at the join.
             new Bell("crossing_bell_5", 36, true),
+            // Portuguese electronic bell, recorded at a level crossing in Lisbon: two groups of fast strikes, cut to
+            // exactly 36 ticks so the groups keep their rhythm when the sound is repeated.
+            new Bell("crossing_bell_6", 36, false),
     };
+    /**
+     * The names shown in the screens, by bell index; bells without a known origin are just numbered.
+     */
+    private static final String[] BELL_ORIGINS = {"", "", "", "", "British alarm", "Portuguese"};
 
     private int ticksOn;
 
@@ -54,24 +69,63 @@ public final class CrossingSignal {
         return BELLS.length;
     }
 
-    static int clampBell(int bell) {
-        return bell >= 0 && bell < BELLS.length ? bell : 0;
+    /**
+     * @return the bell, {@link #BELL_NONE} for no sound, or the first bell if it is out of range
+     */
+    public static int clampBell(int bell) {
+        return bell == BELL_NONE || bell >= 0 && bell < BELLS.length ? bell : 0;
+    }
+
+    public static String getBellName(int bell) {
+        if (bell == BELL_NONE) {
+            return "No sound";
+        }
+        final String origin = bell >= 0 && bell < BELL_ORIGINS.length ? BELL_ORIGINS[bell] : "";
+        return origin.isEmpty() ? "Bell " + (bell + 1) : "Bell " + (bell + 1) + " (" + origin + ")";
+    }
+
+    public static int getFlashRateCount() {
+        return FLASH_INTERVALS_TICKS.length;
+    }
+
+    public static int clampFlashRate(int flashRate) {
+        return flashRate >= 0 && flashRate < FLASH_INTERVALS_TICKS.length ? flashRate : DEFAULT_FLASH_RATE;
+    }
+
+    public static String getFlashRateName(int flashRate) {
+        switch (clampFlashRate(flashRate)) {
+            case 0:
+                return "Slow";
+            case 2:
+                return "Fast";
+            default:
+                return "Normal";
+        }
     }
 
     /**
      * Called every server tick: rings the bell while on and shows the lamp for this tick.
      */
     void tick(World world, BlockPos pos, BlockState state, boolean on, int bellIndex) {
-        final Bell bell = BELLS[clampBell(bellIndex)];
+        tick(world, pos, state, on, bellIndex, DEFAULT_FLASH_RATE);
+    }
+
+    /**
+     * @param bellIndex the bell, or {@link #BELL_NONE} to stay silent
+     * @param flashRate the index of the flash rate (slow, normal, fast)
+     */
+    void tick(World world, BlockPos pos, BlockState state, boolean on, int bellIndex, int flashRate) {
+        final int clampedBell = clampBell(bellIndex);
+        final Bell bell = clampedBell == BELL_NONE ? null : BELLS[clampedBell];
         final int lamp;
         if (on) {
-            if (ticksOn % bell.intervalTicks == 0) {
+            if (bell != null && ticksOn % bell.intervalTicks == 0) {
                 play(world, pos, bell);
             }
-            lamp = (ticksOn / FLASH_INTERVAL_TICKS) % 2 == 0 ? 1 : 2;
+            lamp = (ticksOn / FLASH_INTERVALS_TICKS[clampFlashRate(flashRate)]) % 2 == 0 ? 1 : 2;
             ticksOn++;
         } else {
-            if (ticksOn > 0 && bell.loop) {
+            if (ticksOn > 0 && bell != null && bell.loop) {
                 stop(world, pos, bell);
             }
             ticksOn = 0;
@@ -89,13 +143,23 @@ public final class CrossingSignal {
      * preview while the crossing is off) and restarts the ringing rhythm.
      */
     void changeBell(World world, BlockPos pos, int oldBell, int newBell) {
-        final Bell old = BELLS[clampBell(oldBell)];
-        if (old.loop) {
-            stop(world, pos, old);
+        final int clampedOld = clampBell(oldBell);
+        if (clampedOld != BELL_NONE && BELLS[clampedOld].loop) {
+            stop(world, pos, BELLS[clampedOld]);
         }
-        play(world, pos, BELLS[clampBell(newBell)]);
+        preview(world, pos, newBell);
         if (ticksOn > 0) {
             ticksOn = 1;
+        }
+    }
+
+    /**
+     * Rings a bell once at the block, so it can be heard before it is chosen.
+     */
+    static void preview(World world, BlockPos pos, int bell) {
+        final int clamped = clampBell(bell);
+        if (clamped != BELL_NONE) {
+            play(world, pos, BELLS[clamped]);
         }
     }
 

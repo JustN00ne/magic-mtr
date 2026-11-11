@@ -1,0 +1,24 @@
+modLoader="javafml"
+loaderVersion="[45,)"
+license="MIT"
+
+[[mods]]
+modId="jme"
+version="${version}"
+displayName="MAGIC"
+description="MTR Addon for General Improvement and Customization."
+logoFile="assets/jme/icon.png"
+
+[[dependencies.jme]]
+modId="forge"
+mandatory=true
+versionRange="[45,)"
+ordering="BEFORE"
+side="BOTH"
+
+[[dependencies.jme]]
+modId="minecraft"
+mandatory=true
+versionRange="[1.20.1,1.21)"
+ordering="BEFORE"
+side="BOTH"

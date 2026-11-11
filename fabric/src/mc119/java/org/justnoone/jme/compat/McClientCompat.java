@@ -29,6 +29,15 @@ public final class McClientCompat {
         matrices.multiply(Vec3f.POSITIVE_X.getDegreesQuaternion(pitchDegrees));
     }
 
+    /** Rotates by {@code degrees} (right-hand rule) around the given axis; the axis does not need to be normalized. */
+    public static void rotateAroundAxis(MatrixStack matrices, float axisX, float axisY, float axisZ, float degrees) {
+        final Vec3f axis = new Vec3f(axisX, axisY, axisZ);
+        if (!axis.normalize()) {
+            return;
+        }
+        matrices.multiply(axis.getDegreesQuaternion(degrees));
+    }
+
     public static void entityVertex(VertexConsumer consumer, MatrixStack.Entry entry, float x, float y, float z, float u, float v, int overlay, int light, float nx, float ny, float nz) {
         consumer.vertex(entry.getPositionMatrix(), x, y, z).color(255, 255, 255, 255).texture(u, v).overlay(overlay).light(light).normal(entry.getNormalMatrix(), nx, ny, nz).next();
     }

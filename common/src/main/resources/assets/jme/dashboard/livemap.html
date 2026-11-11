@@ -1,0 +1,1377 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>MAGIC Livemap</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://unpkg.com/maplibre-gl@4.1.1/dist/maplibre-gl.css" rel="stylesheet">
+<script src="https://unpkg.com/maplibre-gl@4.1.1/dist/maplibre-gl.js"></script>
+<script src="/assets/map-style.js"></script>
+<style>
+/* Design by JN: a dark transit map with lines drawn side by side where they share track, station capsules across
+   the lines, and a translucent panel (search, Stations / Delays / Routes) on the left. */
+:root{
+  --bg:#1a1a1a;
+  --panel:rgba(30,30,30,.72);
+  --panel-solid:#1e1e1e;
+  --panel-border:rgba(255,255,255,.08);
+  --hover:rgba(255,255,255,.06);
+  --text:#ffffff;
+  --text2:#b4b4b4;
+  --text3:#7a7a7a;
+  --divider:rgba(255,255,255,.1);
+  --station-fill:#2a2a2a;
+  --station-border:#bdbdbd;
+  --tick-label:#bdbdbd;
+  --ontime:#4ade80;
+  --late:#fb923c;
+  --verylate:#f87171;
+  --early:#60a5fa;
+  --canceled:#8a8a8a;
+  --tile-opacity:.16;
+  --shadow:0 8px 32px rgba(0,0,0,.35);
+  --radius:28px;
+}
+:root[data-theme="light"]{
+  --bg:#f3f3f1;
+  --panel:rgba(255,255,255,.78);
+  --panel-solid:#ffffff;
+  --panel-border:rgba(0,0,0,.08);
+  --hover:rgba(0,0,0,.05);
+  --text:#151515;
+  --text2:#555555;
+  --text3:#8c8c8c;
+  --divider:rgba(0,0,0,.1);
+  --station-fill:#ffffff;
+  --station-border:#444444;
+  --tick-label:#555555;
+  --ontime:#16a34a;
+  --late:#ea580c;
+  --verylate:#dc2626;
+  --early:#2563eb;
+  --canceled:#8a8a8a;
+  --tile-opacity:.3;
+  --shadow:0 8px 32px rgba(0,0,0,.12);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:Inter,system-ui,-apple-system,"Segoe UI",sans-serif}
+#map{position:absolute;inset:0}
+button,input{font:inherit;color:inherit;background:none;border:0}
+button{cursor:pointer}
+.glass{background:var(--panel);border:1px solid var(--panel-border);box-shadow:var(--shadow);backdrop-filter:blur(22px) saturate(1.2);-webkit-backdrop-filter:blur(22px) saturate(1.2)}
+
+/* Search */
+.search{position:absolute;top:20px;left:20px;width:400px;height:66px;border-radius:var(--radius);z-index:6;display:flex;align-items:center;gap:14px;padding:0 22px 0 26px}
+.search svg{flex:none;color:var(--text)}
+.search input{flex:1;min-width:0;height:100%;font-size:17px;outline:none}
+.search input::placeholder{color:var(--text3)}
+.livebit{display:flex;align-items:center;gap:7px;font-size:13px;font-weight:600;color:var(--text2);font-variant-numeric:tabular-nums;flex:none}
+.livebit i{width:7px;height:7px;border-radius:50%;background:var(--ontime);animation:pulse 1.6s infinite}
+.livebit.off i{background:var(--text3);animation:none}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+.clear{display:none;width:28px;height:28px;border-radius:50%;place-items:center;color:var(--text2)}
+.search.has-text .clear{display:grid}
+.search.has-text .livebit{display:none}
+
+/* Side panel */
+.side{position:absolute;top:106px;left:20px;bottom:20px;width:400px;border-radius:var(--radius);z-index:5;display:flex;flex-direction:column;overflow:hidden}
+.tabs{display:flex;border-bottom:1px solid var(--divider);flex:none}
+.tabs button{flex:1;height:64px;font-size:16px;font-weight:500;color:var(--text2);position:relative}
+.tabs button:hover{color:var(--text)}
+.tabs button.on{color:var(--text)}
+.tabs button.on::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:2px;background:var(--text)}
+.content{flex:1;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin}
+.notice{margin:12px 16px 0;padding:10px 12px;border-radius:12px;background:rgba(251,146,60,.14);color:var(--late);font-size:12.5px;line-height:1.4}
+.summary{padding:14px 22px 6px;font-size:13px;color:var(--text2);display:flex;flex-wrap:wrap;gap:6px 14px}
+.summary b{color:var(--text)}
+.legend-inline{display:flex;flex-wrap:wrap;gap:4px 12px;padding:0 22px 8px;font-size:11.5px;color:var(--text3)}
+.legend-inline span{display:inline-flex;align-items:center;gap:5px}
+.dot{width:8px;height:8px;border-radius:50%;display:inline-block;flex:none}
+.empty{padding:22px;color:var(--text3);font-size:14px}
+
+/* Rows */
+.row{position:relative;display:flex;gap:16px;padding:18px 18px 18px 26px;cursor:pointer;min-height:96px;align-items:center}
+.row::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--stripe,transparent)}
+.row:hover{background:var(--hover)}
+.row + .row{border-top:1px solid transparent}
+.nm{flex:none;width:128px;min-width:0}
+.nm .main{font-size:23px;font-weight:600;line-height:1.12;letter-spacing:-.01em;overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.nm .main.m{font-size:19px}
+.nm .main.l{font-size:16px}
+.nm .sub{font-size:14px;font-weight:500;color:var(--text);margin-top:2px;opacity:.9;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.info{flex:1;min-width:0}
+.meta{display:flex;gap:12px;font-size:13px;color:var(--text2);margin-bottom:8px;white-space:nowrap;overflow:hidden}
+.meta .pct{font-weight:600}
+.pills{display:flex;gap:8px;overflow:hidden;-webkit-mask-image:linear-gradient(90deg,#000 82%,transparent);mask-image:linear-gradient(90deg,#000 82%,transparent)}
+.pills.wrap{flex-wrap:wrap;-webkit-mask-image:none;mask-image:none}
+.pill{flex:none;display:inline-flex;align-items:center;height:26px;padding:0 14px;border-radius:13px;font-size:13px;font-weight:600;white-space:nowrap;max-width:180px;overflow:hidden;text-overflow:ellipsis}
+button.pill:hover{filter:brightness(1.08)}
+.trow{display:flex;align-items:center;gap:12px;padding:12px 22px;cursor:pointer}
+.trow:hover{background:var(--hover)}
+.trow .grow{flex:1;min-width:0}
+.trow .dest{font-weight:600;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.trow .small{font-size:12.5px;color:var(--text2);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.delay{font-weight:600;font-size:13px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.group-title{font-size:11.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--text3);font-weight:600;padding:16px 22px 6px}
+
+/* Detail views */
+.dhead{display:flex;gap:12px;align-items:flex-start;padding:18px 18px 14px 14px;border-bottom:1px solid var(--divider);flex:none}
+.back{width:36px;height:36px;border-radius:50%;display:grid;place-items:center;flex:none;color:var(--text2)}
+.back:hover{background:var(--hover);color:var(--text)}
+.dhead .titles{flex:1;min-width:0;padding-top:2px}
+.dhead h2{font-size:24px;font-weight:600;line-height:1.15;letter-spacing:-.01em;word-break:break-word}
+.dhead .sub{font-size:14px;color:var(--text2);margin-top:3px}
+.dhead .pills{margin-top:10px}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);border-bottom:1px solid var(--divider)}
+.stat{padding:12px 16px}
+.stat + .stat{border-left:1px solid var(--divider)}
+.stat .k{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);font-weight:600}
+.stat .v{font-size:16px;font-weight:600;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums}
+.stops{list-style:none;padding:4px 22px 16px}
+.stop{display:flex;align-items:center;gap:14px;min-height:36px;font-size:14.5px;font-weight:500;cursor:pointer}
+.stop .rail{position:relative;width:16px;align-self:stretch;flex:none}
+.stop .rail::before{content:"";position:absolute;left:5px;width:6px;top:0;bottom:0;background:var(--lc)}
+.stop:first-child .rail::before{top:50%}
+.stop:last-child .rail::before{bottom:50%}
+.stop .rail::after{content:"";position:absolute;left:0;top:50%;width:16px;height:16px;margin-top:-8px;border-radius:5px;background:var(--station-fill);border:2.5px solid var(--station-border)}
+.stop.past{color:var(--text3)}
+.stop.past .rail::before,.stop.past .rail::after{opacity:.35}
+.stop.next{font-weight:700}
+.stop.next .rail::after{border-color:var(--lc);box-shadow:0 0 0 4px color-mix(in srgb,var(--lc) 30%,transparent)}
+.stop .tag{margin-left:auto;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--lc)}
+.stop:hover .name{text-decoration:underline}
+.actions{display:flex;gap:8px;padding:12px 16px;border-top:1px solid var(--divider);flex:none}
+.btn{flex:1;height:40px;border-radius:20px;background:var(--hover);font-size:13.5px;font-weight:600}
+.btn:hover{filter:brightness(1.2)}
+.btn.on{background:var(--text);color:var(--bg)}
+
+/* Right controls */
+.rc{position:absolute;right:20px;top:20px;z-index:6;display:flex;flex-direction:column;gap:14px;align-items:flex-end}
+.sq{width:66px;height:66px;border-radius:22px;display:grid;place-items:center}
+.sq:hover,.zoom button:hover{background:var(--hover)}
+.zoom{width:66px;border-radius:22px;display:flex;flex-direction:column;overflow:hidden}
+.zoom button{height:66px;display:grid;place-items:center}
+.zoom button + button{border-top:1px solid var(--divider)}
+.menu{position:absolute;top:80px;right:0;width:260px;max-height:calc(100vh - 120px);overflow-y:auto;border-radius:20px;padding:8px;display:none;background:var(--panel-solid)}
+.menu.open{display:block}
+.menu .hd{font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--text3);font-weight:600;padding:10px 12px 4px}
+.menu button,.menu label{display:flex;align-items:center;gap:10px;width:100%;padding:9px 12px;border-radius:12px;font-size:14px;color:var(--text2);text-align:left;cursor:pointer}
+.menu button svg{width:18px;height:18px;flex:none}
+.menu button:hover,.menu label:hover{background:var(--hover);color:var(--text)}
+.menu button.on{color:var(--text);font-weight:600;background:var(--hover)}
+.menu input{accent-color:var(--text)}
+.menu hr{border:0;border-top:1px solid var(--divider);margin:6px 4px}
+.style-legend{position:absolute;right:100px;bottom:20px;z-index:5;border-radius:20px;padding:12px 16px;font-size:12px;color:var(--text2);max-height:45vh;overflow-y:auto;display:none}
+.style-legend.show{display:block}
+.style-legend .ttl{font-weight:600;color:var(--text);margin-bottom:6px}
+.style-legend .r{display:flex;align-items:center;gap:8px;line-height:1.7}
+
+/* Map markers (stations, labels, trains) drawn over the map */
+#overlay{position:absolute;inset:0;pointer-events:none;overflow:hidden;z-index:2}
+.mk{position:absolute;left:0;top:0;will-change:transform}
+.cap{border-radius:999px;background:var(--station-fill);border:3px solid var(--station-border);pointer-events:auto;cursor:pointer;box-shadow:0 0 0 2px var(--bg)}
+.hub{border-radius:9px;background:var(--station-fill);border:3px solid var(--station-border);pointer-events:auto;cursor:pointer;box-shadow:0 0 0 2px var(--bg)}
+.cap.sel,.hub.sel{border-color:var(--text);box-shadow:0 0 0 2px var(--bg),0 0 0 7px color-mix(in srgb,var(--text) 22%,transparent)}
+.tick{background:var(--tc);border-radius:2px;pointer-events:auto;cursor:pointer}
+.lbl{white-space:nowrap;font-weight:600;color:var(--text);text-shadow:0 0 3px var(--bg),0 0 6px var(--bg),0 0 10px var(--bg);pointer-events:auto;cursor:pointer;line-height:1.1}
+.lbl .s{display:block;font-weight:500;font-size:.68em;margin-top:1px}
+.lbl.big{font-size:21px}
+.lbl.mid{font-size:16px}
+.lbl.small{font-size:11.5px;font-weight:500;color:var(--tick-label);max-width:110px;overflow:hidden;text-overflow:ellipsis}
+.dim{opacity:.15}
+.train{pointer-events:auto;cursor:pointer}
+.train .pill{position:relative;height:20px;padding:0 8px;font-size:11px;font-weight:700;border-radius:10px;box-shadow:0 0 0 2px var(--bg);transform:translate(-50%,-50%);display:flex;overflow:visible;transition:transform .15s}
+.train .sd{position:absolute;right:-3px;top:-3px;width:9px;height:9px;border-radius:50%;box-shadow:0 0 0 2px var(--bg)}
+.train.sel .pill{transform:translate(-50%,-50%) scale(1.3);box-shadow:0 0 0 2px var(--bg),0 0 0 6px color-mix(in srgb,var(--lc) 45%,transparent)}
+.train.idle .pill{background:var(--canceled)!important;width:12px;height:12px;padding:0}
+.train.idle .sd{display:none}
+.train.canceled .pill{background:var(--canceled)!important;color:#fff!important;text-decoration:line-through}
+.train.dim{opacity:.18;pointer-events:none}
+.train .kmh{display:none;margin-left:5px;font-weight:600;opacity:.85;font-variant-numeric:tabular-nums}
+body.show-speed .train .kmh{display:inline}
+.train .dir{position:absolute;left:0;top:0;width:0;height:0;border-left:6px solid var(--lc);border-top:4.5px solid transparent;border-bottom:4.5px solid transparent;display:none;filter:drop-shadow(0 0 1.5px var(--bg))}
+body.real-track .train .dir.on{display:block}
+.train.idle .dir,.train.canceled .dir,.train.idle .kmh,.train.canceled .kmh{display:none!important}
+
+.maplibregl-ctrl-attrib{display:none}
+
+@media (max-width:760px){
+  .search{left:12px;right:90px;width:auto;top:12px;height:56px;padding:0 16px 0 18px}
+  .rc{right:12px;top:12px}
+  .sq{width:56px;height:56px;border-radius:20px}
+  .zoom{display:none}
+  .menu{top:68px}
+  .side{top:auto;left:0;right:0;bottom:0;width:auto;height:46vh;border-radius:24px 24px 0 0}
+  .nm{width:104px}
+  .nm .main{font-size:19px}
+  .nm .main.m{font-size:16px}
+  .nm .main.l{font-size:14px}
+  .row{min-height:80px;padding:14px 14px 14px 22px}
+  .style-legend{right:12px;bottom:calc(46vh + 12px)}
+}
+</style>
+</head>
+<body>
+<div id="map"></div>
+<div id="overlay"></div>
+
+<div class="glass search" id="searchBox">
+  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="10.5" cy="10.5" r="7"/><path d="m20.5 20.5-5-5"/></svg>
+  <input id="search" type="search" autocomplete="off" data-i18n-placeholder="searchPlaceholder" placeholder="Search for anything">
+  <button class="clear" id="clearSearch" data-i18n-title="close" aria-label="Close">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>
+  </button>
+  <div class="livebit off" id="liveBit" data-i18n-title="connecting"><i></i><span id="clock">--:--</span></div>
+</div>
+
+<aside class="glass side" id="side">
+  <div class="tabs" id="tabs" role="tablist">
+    <button data-tab="stations" data-i18n="tabStations" role="tab">Stations</button>
+    <button data-tab="delays" data-i18n="tabDelays" role="tab">Delays</button>
+    <button data-tab="routes" data-i18n="tabRoutes" role="tab">Routes</button>
+  </div>
+  <div id="view" style="display:flex;flex-direction:column;flex:1;min-height:0"></div>
+</aside>
+
+<div class="rc">
+  <div style="position:relative">
+    <button class="glass sq" id="layersBtn" data-i18n-title="mapStyle" aria-label="Map style" aria-haspopup="true">
+      <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="m12 3 9 4.5-9 4.5-9-4.5z"/><path d="m3 12 9 4.5 9-4.5"/><path d="m3 16.5 9 4.5 9-4.5"/></svg>
+    </button>
+    <div class="glass menu" id="menu"></div>
+  </div>
+  <div class="glass zoom">
+    <button id="zoomIn" aria-label="Zoom in"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 4v16M4 12h16"/></svg></button>
+    <button id="zoomOut" aria-label="Zoom out"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 12h16"/></svg></button>
+  </div>
+</div>
+
+<div class="glass style-legend" id="styleLegend"></div>
+<script>
+(function(){
+'use strict';
+
+var BPD = 64;                 /* blocks per degree, same projection as the dashboard; z grows south */
+var VEHICLE_POLL_MS = 1000;
+var BLEND_MS = 600;          /* a new snapshot's correction is eased in over this time */
+var LINES_POLL_MS = 60000;
+var MERGE_BLOCKS = 7;         /* track closer than this (and parallel) counts as the same corridor */
+var CELL = 8;
+
+var params = new URLSearchParams(location.search);
+var dimension = params.get('dimension');
+function api(path){ return dimension ? path + (path.indexOf('?') < 0 ? '?' : '&') + 'dimension=' + encodeURIComponent(dimension) : path; }
+
+/* ── helpers ── */
+function ll(x, z){ return [x / BPD, -z / BPD]; }
+function esc(s){ return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+/* MTR keeps translations as "Name|名字": the first part is the main name, the second is shown smaller. */
+function nameParts(s){
+  var p = String(s == null ? '' : s).split('|').map(function(x){ return x.trim(); }).filter(Boolean);
+  return { main: p[0] || '', sub: p[1] || '' };
+}
+function clean(s){ return nameParts(s).main; }
+function hex(c){ return '#' + ((Number(c) >>> 0) & 0xFFFFFF).toString(16).padStart(6, '0'); }
+function channels(c){ c = Number(c) & 0xFFFFFF; return [(c >> 16) & 255, (c >> 8) & 255, c & 255]; }
+function mixHex(c, target, k){ var a = channels(c), b = channels(target); return '#' + a.map(function(v, i){ return Math.round(v + (b[i] - v) * k).toString(16).padStart(2, '0'); }).join(''); }
+function lum(c){ var a = channels(c); return (0.299 * a[0] + 0.587 * a[1] + 0.114 * a[2]) / 255; }
+/* Pill text: a dark shade of the line colour, or a light one on dark colours (as in JN's design). */
+function pillStyle(c){
+  var bg = hex(c), fg = lum(c) > 0.42 ? mixHex(c, 0x000000, 0.62) : mixHex(c, 0xffffff, 0.72);
+  return 'background:' + bg + ';color:' + fg;
+}
+function store(k, v){ try { if (v == null) localStorage.removeItem('magic.livemap.' + k); else localStorage.setItem('magic.livemap.' + k, v); } catch (e) {} }
+function load(k){ try { return localStorage.getItem('magic.livemap.' + k); } catch (e) { return null; } }
+function cssVar(n){ return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); }
+function dist(ax, az, bx, bz){ var dx = ax - bx, dz = az - bz; return Math.sqrt(dx * dx + dz * dz); }
+function fc(features){ return { type: 'FeatureCollection', features: features }; }
+var $ = function(id){ return document.getElementById(id); };
+
+var LANGS = [
+  ['en', 'English'], ['fr', 'Français'], ['nl', 'Nederlands'], ['pt-PT', 'Português (Portugal)'], ['pl', 'Polski'],
+  ['cs', 'Čeština'], ['ru', 'Русский'], ['zh', '中文（简体）'], ['ko', '한국어'], ['ja', '日本語'], ['es', 'Español']
+];
+var I18N = {
+  en: {
+    connecting: 'connecting…', live: 'Live', offline: 'No connection',
+    trains: { one: '{n} train', other: '{n} trains' }, late: { other: '{n} delayed' },
+    allLines: 'All lines', mapStyle: 'Map style', liveLines: 'Live lines', theme: 'Light/dark theme', openDashboard: 'Open dashboard', language: 'Language',
+    onTime: 'On time', early: '{n} min early', earlyLegend: 'Early', canceled: 'Cancelled', outOfService: 'Out of service',
+    toFirstStop: 'On its way to the first stop or the depot', noStops: 'No known stops.', next: 'Next', nextStop: 'Next: {name}', nextStopTitle: 'Next stop',
+    noTrains: 'No trains right now.', status: 'Status', speed: 'Speed', route: 'Stops', follow: 'Follow train', following: 'Following train',
+    viewLine: 'View line', close: 'Close', headingHere: 'Heading to this station', trainsCol: 'Trains', delayedCol: 'Delayed', stopsCol: 'Stops',
+    inService: 'Trains in service', stopsTitle: 'Stops',
+    vehiclesOff: 'Trains are turned off on the server. Turn on "Show Vehicles" for the system map in the MAGIC settings.'
+  },
+  fr: {
+    connecting: 'connexion…', live: 'En direct', offline: 'Pas de connexion',
+    trains: { one: '{n} train', other: '{n} trains' }, late: { other: '{n} en retard' },
+    allLines: 'Toutes les lignes', mapStyle: 'Style de carte', liveLines: 'Lignes en direct', theme: 'Thème clair/sombre', openDashboard: 'Ouvrir le tableau de bord', language: 'Langue',
+    onTime: "À l'heure", early: "{n} min d'avance", earlyLegend: 'En avance', canceled: 'Supprimé', outOfService: 'Hors service',
+    toFirstStop: 'En route vers son premier arrêt ou le dépôt', noStops: 'Aucun arrêt connu.', next: 'Prochain', nextStop: 'Prochain arrêt : {name}', nextStopTitle: 'Prochain arrêt',
+    noTrains: 'Aucun train pour le moment.', status: 'État', speed: 'Vitesse', route: 'Parcours', follow: 'Suivre le train', following: 'Train suivi',
+    viewLine: 'Voir la ligne', close: 'Fermer', headingHere: 'En route vers cette gare', trainsCol: 'Trains', delayedCol: 'En retard', stopsCol: 'Arrêts',
+    inService: 'Trains en service', stopsTitle: 'Arrêts',
+    vehiclesOff: 'Les trains sont désactivés sur le serveur. Activez « Show Vehicles » pour le plan du réseau dans les réglages de MAGIC.'
+  },
+  nl: {
+    connecting: 'verbinden…', live: 'Live', offline: 'Geen verbinding',
+    trains: { one: '{n} trein', other: '{n} treinen' }, late: { other: '{n} vertraagd' },
+    allLines: 'Alle lijnen', mapStyle: 'Kaartstijl', liveLines: 'Live lijnen', theme: 'Licht/donker thema', openDashboard: 'Dashboard openen', language: 'Taal',
+    onTime: 'Op tijd', early: '{n} min te vroeg', earlyLegend: 'Te vroeg', canceled: 'Rijdt niet', outOfService: 'Buiten dienst',
+    toFirstStop: 'Onderweg naar de eerste halte of het depot', noStops: 'Geen haltes bekend.', next: 'Volgende', nextStop: 'Volgende: {name}', nextStopTitle: 'Volgende halte',
+    noTrains: 'Op dit moment geen treinen.', status: 'Status', speed: 'Snelheid', route: 'Haltes', follow: 'Trein volgen', following: 'Trein wordt gevolgd',
+    viewLine: 'Lijn bekijken', close: 'Sluiten', headingHere: 'Onderweg naar dit station', trainsCol: 'Treinen', delayedCol: 'Vertraagd', stopsCol: 'Haltes',
+    inService: 'Treinen in dienst', stopsTitle: 'Haltes',
+    vehiclesOff: 'Treinen staan uit op de server. Zet "Show Vehicles" voor de netkaart aan in de MAGIC-instellingen.'
+  },
+  'pt-PT': {
+    connecting: 'a ligar…', live: 'Ao vivo', offline: 'Sem ligação',
+    trains: { one: '{n} comboio', other: '{n} comboios' }, late: { other: '{n} com atraso' },
+    allLines: 'Todas as linhas', mapStyle: 'Estilo do mapa', liveLines: 'Linhas ao vivo', theme: 'Tema claro/escuro', openDashboard: 'Abrir o painel', language: 'Idioma',
+    onTime: 'Pontual', early: '{n} min adiantado', earlyLegend: 'Adiantado', canceled: 'Suprimido', outOfService: 'Fora de serviço',
+    toFirstStop: 'A caminho da primeira paragem ou do depósito', noStops: 'Sem paragens conhecidas.', next: 'Próxima', nextStop: 'Próxima: {name}', nextStopTitle: 'Próxima paragem',
+    noTrains: 'Nenhum comboio de momento.', status: 'Estado', speed: 'Velocidade', route: 'Percurso', follow: 'Seguir comboio', following: 'A seguir o comboio',
+    viewLine: 'Ver linha', close: 'Fechar', headingHere: 'A caminho desta estação', trainsCol: 'Comboios', delayedCol: 'Com atraso', stopsCol: 'Paragens',
+    inService: 'Comboios em serviço', stopsTitle: 'Paragens',
+    vehiclesOff: 'Os comboios estão desativados no servidor. Ative "Show Vehicles" do mapa do sistema nas definições do MAGIC.'
+  },
+  pl: {
+    connecting: 'łączenie…', live: 'Na żywo', offline: 'Brak połączenia',
+    trains: { one: '{n} pociąg', few: '{n} pociągi', many: '{n} pociągów', other: '{n} pociągu' },
+    late: { one: '{n} opóźniony', few: '{n} opóźnione', many: '{n} opóźnionych', other: '{n} opóźnionego' },
+    allLines: 'Wszystkie linie', mapStyle: 'Styl mapy', liveLines: 'Linie na żywo', theme: 'Motyw jasny/ciemny', openDashboard: 'Otwórz panel', language: 'Język',
+    onTime: 'Punktualnie', early: '{n} min przed czasem', earlyLegend: 'Przed czasem', canceled: 'Odwołany', outOfService: 'Poza kursem',
+    toFirstStop: 'W drodze do pierwszego przystanku lub zajezdni', noStops: 'Brak znanych przystanków.', next: 'Następny', nextStop: 'Następny: {name}', nextStopTitle: 'Następny przystanek',
+    noTrains: 'Obecnie brak pociągów.', status: 'Status', speed: 'Prędkość', route: 'Trasa', follow: 'Śledź pociąg', following: 'Śledzenie pociągu',
+    viewLine: 'Pokaż linię', close: 'Zamknij', headingHere: 'W drodze do tej stacji', trainsCol: 'Pociągi', delayedCol: 'Opóźnione', stopsCol: 'Przystanki',
+    inService: 'Pociągi w kursie', stopsTitle: 'Przystanki',
+    vehiclesOff: 'Pociągi są wyłączone na serwerze. Włącz „Show Vehicles” dla mapy systemu w ustawieniach MAGIC.'
+  },
+  cs: {
+    connecting: 'připojování…', live: 'Živě', offline: 'Bez připojení',
+    trains: { one: '{n} vlak', few: '{n} vlaky', many: '{n} vlaku', other: '{n} vlaků' },
+    late: { one: '{n} zpožděný', few: '{n} zpožděné', many: '{n} zpožděného', other: '{n} zpožděných' },
+    allLines: 'Všechny linky', mapStyle: 'Styl mapy', liveLines: 'Linky živě', theme: 'Světlý/tmavý motiv', openDashboard: 'Otevřít panel', language: 'Jazyk',
+    onTime: 'Včas', early: '{n} min napřed', earlyLegend: 'Napřed', canceled: 'Zrušen', outOfService: 'Mimo provoz',
+    toFirstStop: 'Na cestě do první zastávky nebo do depa', noStops: 'Žádné známé zastávky.', next: 'Další', nextStop: 'Další: {name}', nextStopTitle: 'Další zastávka',
+    noTrains: 'Momentálně žádné vlaky.', status: 'Stav', speed: 'Rychlost', route: 'Trasa', follow: 'Sledovat vlak', following: 'Sleduji vlak',
+    viewLine: 'Zobrazit linku', close: 'Zavřít', headingHere: 'Na cestě do této stanice', trainsCol: 'Vlaky', delayedCol: 'Zpožděné', stopsCol: 'Zastávky',
+    inService: 'Vlaky v provozu', stopsTitle: 'Zastávky',
+    vehiclesOff: 'Vlaky jsou na serveru vypnuté. Zapněte „Show Vehicles“ pro mapu sítě v nastavení MAGIC.'
+  },
+  ru: {
+    connecting: 'подключение…', live: 'Онлайн', offline: 'Нет связи',
+    trains: { one: '{n} поезд', few: '{n} поезда', many: '{n} поездов', other: '{n} поезда' },
+    late: { one: '{n} опаздывает', other: '{n} опаздывают' },
+    allLines: 'Все линии', mapStyle: 'Стиль карты', liveLines: 'Линии онлайн', theme: 'Светлая/тёмная тема', openDashboard: 'Открыть панель', language: 'Язык',
+    onTime: 'По расписанию', early: 'Раньше на {n} мин', earlyLegend: 'Раньше графика', canceled: 'Отменён', outOfService: 'Не в рейсе',
+    toFirstStop: 'Следует к первой остановке или в депо', noStops: 'Остановки неизвестны.', next: 'Следующая', nextStop: 'Следующая: {name}', nextStopTitle: 'Следующая остановка',
+    noTrains: 'Сейчас поездов нет.', status: 'Статус', speed: 'Скорость', route: 'Остановки', follow: 'Следить за поездом', following: 'Слежение за поездом',
+    viewLine: 'Показать линию', close: 'Закрыть', headingHere: 'Следуют к этой станции', trainsCol: 'Поезда', delayedCol: 'Опаздывают', stopsCol: 'Остановки',
+    inService: 'Поезда на линии', stopsTitle: 'Остановки',
+    vehiclesOff: 'Поезда отключены на сервере. Включите «Show Vehicles» для схемы сети в настройках MAGIC.'
+  },
+  zh: {
+    connecting: '连接中…', live: '实时', offline: '无连接',
+    trains: { other: '{n} 列列车' }, late: { other: '{n} 列晚点' },
+    allLines: '全部线路', mapStyle: '地图样式', liveLines: '实时线路', theme: '浅色/深色主题', openDashboard: '打开控制面板', language: '语言',
+    onTime: '准点', early: '提前 {n} 分钟', earlyLegend: '提前', canceled: '已取消', outOfService: '非运营',
+    toFirstStop: '正驶往首站或车辆段', noStops: '暂无已知车站。', next: '下一站', nextStop: '下一站：{name}', nextStopTitle: '下一站',
+    noTrains: '目前没有列车。', status: '状态', speed: '速度', route: '停靠站', follow: '跟随列车', following: '正在跟随列车',
+    viewLine: '查看线路', close: '关闭', headingHere: '驶往本站的列车', trainsCol: '列车', delayedCol: '晚点', stopsCol: '车站',
+    inService: '运营中的列车', stopsTitle: '车站',
+    vehiclesOff: '服务器已关闭列车显示。请在 MAGIC 设置中为系统地图开启“Show Vehicles”。'
+  },
+  ko: {
+    connecting: '연결 중…', live: '실시간', offline: '연결 없음',
+    trains: { other: '열차 {n}대' }, late: { other: '지연 {n}대' },
+    allLines: '전체 노선', mapStyle: '지도 스타일', liveLines: '실시간 노선', theme: '라이트/다크 테마', openDashboard: '대시보드 열기', language: '언어',
+    onTime: '정시', early: '{n}분 일찍', earlyLegend: '일찍 도착', canceled: '운행 취소', outOfService: '회송',
+    toFirstStop: '첫 정차역 또는 차량기지로 가는 중', noStops: '알려진 정차역이 없습니다.', next: '다음', nextStop: '다음: {name}', nextStopTitle: '다음 역',
+    noTrains: '현재 운행 중인 열차가 없습니다.', status: '상태', speed: '속도', route: '정차역', follow: '열차 따라가기', following: '열차 따라가는 중',
+    viewLine: '노선 보기', close: '닫기', headingHere: '이 역으로 오는 열차', trainsCol: '열차', delayedCol: '지연', stopsCol: '정차역',
+    inService: '운행 중인 열차', stopsTitle: '정차역',
+    vehiclesOff: '서버에서 열차 표시가 꺼져 있습니다. MAGIC 설정에서 시스템 지도의 "Show Vehicles"를 켜세요.'
+  },
+  ja: {
+    connecting: '接続中…', live: 'ライブ', offline: '接続なし',
+    trains: { other: '列車 {n} 本' }, late: { other: '遅延 {n} 本' },
+    allLines: 'すべての路線', mapStyle: '地図スタイル', liveLines: 'ライブ路線', theme: 'ライト/ダークテーマ', openDashboard: 'ダッシュボードを開く', language: '言語',
+    onTime: '定刻', early: '{n}分早着', earlyLegend: '早着', canceled: '運休', outOfService: '回送',
+    toFirstStop: '始発駅または車両基地へ移動中', noStops: '停車駅の情報がありません。', next: '次', nextStop: '次は {name}', nextStopTitle: '次の停車駅',
+    noTrains: '現在運行中の列車はありません。', status: '状況', speed: '速度', route: '停車駅', follow: '列車を追跡', following: '列車を追跡中',
+    viewLine: '路線を表示', close: '閉じる', headingHere: 'この駅に向かう列車', trainsCol: '列車', delayedCol: '遅延', stopsCol: '停車駅',
+    inService: '運行中の列車', stopsTitle: '停車駅',
+    vehiclesOff: 'サーバーで列車の表示がオフになっています。MAGIC の設定でシステムマップの「Show Vehicles」をオンにしてください。'
+  },
+  es: {
+    connecting: 'conectando…', live: 'En directo', offline: 'Sin conexión',
+    trains: { one: '{n} tren', other: '{n} trenes' }, late: { other: '{n} con retraso' },
+    allLines: 'Todas las líneas', mapStyle: 'Estilo del mapa', liveLines: 'Líneas en directo', theme: 'Tema claro/oscuro', openDashboard: 'Abrir el panel', language: 'Idioma',
+    onTime: 'Puntual', early: '{n} min adelantado', earlyLegend: 'Adelantado', canceled: 'Cancelado', outOfService: 'Fuera de servicio',
+    toFirstStop: 'De camino a su primera parada o a la cochera', noStops: 'No hay paradas conocidas.', next: 'Próxima', nextStop: 'Próxima: {name}', nextStopTitle: 'Próxima parada',
+    noTrains: 'No hay trenes en este momento.', status: 'Estado', speed: 'Velocidad', route: 'Recorrido', follow: 'Seguir el tren', following: 'Siguiendo el tren',
+    viewLine: 'Ver línea', close: 'Cerrar', headingHere: 'De camino a esta estación', trainsCol: 'Trenes', delayedCol: 'Con retraso', stopsCol: 'Paradas',
+    inService: 'Trenes en servicio', stopsTitle: 'Paradas',
+    vehiclesOff: 'Los trenes están desactivados en el servidor. Activa «Show Vehicles» del mapa del sistema en los ajustes de MAGIC.'
+  }
+};
+
+
+/* Texts added with JN's design. */
+var I18N_EXTRA = {
+  en: { searchPlaceholder: 'Search for anything', tabStations: 'Stations', tabDelays: 'Delays', tabRoutes: 'Routes',
+        routesCount: { one: '{n} route', other: '{n} routes' }, onTimePct: '{p}% on time', back: 'Back', noResults: 'No results',
+        onTimeSummary: '{a} of {b} trains on time', worldMap: 'World map', appearance: 'Theme', themeDark: 'Dark', themeLight: 'Light', themeSystem: 'System', speedOnTrains: 'Speed on trains', speedLimit: 'limit {n} km/h' },
+  fr: { searchPlaceholder: "Rechercher n'importe quoi", tabStations: 'Gares', tabDelays: 'Retards', tabRoutes: 'Lignes',
+        routesCount: { one: '{n} ligne', other: '{n} lignes' }, onTimePct: "{p} % à l'heure", back: 'Retour', noResults: 'Aucun résultat',
+        onTimeSummary: "{a} trains sur {b} à l'heure", worldMap: 'Carte du monde', appearance: 'Thème', themeDark: 'Sombre', themeLight: 'Clair', themeSystem: 'Système', speedOnTrains: 'Vitesse sur les trains', speedLimit: 'limite {n} km/h' },
+  nl: { searchPlaceholder: 'Zoek naar alles', tabStations: 'Stations', tabDelays: 'Vertragingen', tabRoutes: 'Lijnen',
+        routesCount: { one: '{n} lijn', other: '{n} lijnen' }, onTimePct: '{p}% op tijd', back: 'Terug', noResults: 'Geen resultaten',
+        onTimeSummary: '{a} van {b} treinen op tijd', worldMap: 'Wereldkaart', appearance: 'Thema', themeDark: 'Donker', themeLight: 'Licht', themeSystem: 'Systeem', speedOnTrains: 'Snelheid bij treinen', speedLimit: 'max. {n} km/u' },
+  'pt-PT': { searchPlaceholder: 'Pesquisar qualquer coisa', tabStations: 'Estações', tabDelays: 'Atrasos', tabRoutes: 'Linhas',
+        routesCount: { one: '{n} linha', other: '{n} linhas' }, onTimePct: '{p}% pontuais', back: 'Voltar', noResults: 'Sem resultados',
+        onTimeSummary: '{a} de {b} comboios pontuais', worldMap: 'Mapa do mundo', appearance: 'Tema', themeDark: 'Escuro', themeLight: 'Claro', themeSystem: 'Sistema', speedOnTrains: 'Velocidade nos comboios', speedLimit: 'limite {n} km/h' },
+  pl: { searchPlaceholder: 'Szukaj czegokolwiek', tabStations: 'Stacje', tabDelays: 'Opóźnienia', tabRoutes: 'Linie',
+        routesCount: { one: '{n} linia', few: '{n} linie', many: '{n} linii', other: '{n} linii' }, onTimePct: '{p}% punktualnie', back: 'Wstecz', noResults: 'Brak wyników',
+        onTimeSummary: '{a} z {b} pociągów punktualnie', worldMap: 'Mapa świata', appearance: 'Motyw', themeDark: 'Ciemny', themeLight: 'Jasny', themeSystem: 'Systemowy', speedOnTrains: 'Prędkość przy pociągach', speedLimit: 'limit {n} km/h' },
+  cs: { searchPlaceholder: 'Hledat cokoli', tabStations: 'Stanice', tabDelays: 'Zpoždění', tabRoutes: 'Linky',
+        routesCount: { one: '{n} linka', few: '{n} linky', many: '{n} linky', other: '{n} linek' }, onTimePct: '{p} % včas', back: 'Zpět', noResults: 'Žádné výsledky',
+        onTimeSummary: '{a} z {b} vlaků včas', worldMap: 'Mapa světa', appearance: 'Motiv', themeDark: 'Tmavý', themeLight: 'Světlý', themeSystem: 'Systém', speedOnTrains: 'Rychlost u vlaků', speedLimit: 'limit {n} km/h' },
+  ru: { searchPlaceholder: 'Искать что угодно', tabStations: 'Станции', tabDelays: 'Задержки', tabRoutes: 'Линии',
+        routesCount: { one: '{n} линия', few: '{n} линии', many: '{n} линий', other: '{n} линии' }, onTimePct: '{p}% по расписанию', back: 'Назад', noResults: 'Ничего не найдено',
+        onTimeSummary: '{a} из {b} поездов по расписанию', worldMap: 'Карта мира', appearance: 'Тема', themeDark: 'Тёмная', themeLight: 'Светлая', themeSystem: 'Системная', speedOnTrains: 'Скорость у поездов', speedLimit: 'огранич. {n} км/ч' },
+  zh: { searchPlaceholder: '搜索任何内容', tabStations: '车站', tabDelays: '晚点', tabRoutes: '线路',
+        routesCount: { other: '{n} 条线路' }, onTimePct: '准点率 {p}%', back: '返回', noResults: '无结果',
+        onTimeSummary: '{b} 列中 {a} 列准点', worldMap: '世界地图', appearance: '主题', themeDark: '深色', themeLight: '浅色', themeSystem: '跟随系统', speedOnTrains: '在列车上显示速度', speedLimit: '限速 {n} km/h' },
+  ko: { searchPlaceholder: '무엇이든 검색', tabStations: '역', tabDelays: '지연', tabRoutes: '노선',
+        routesCount: { other: '노선 {n}개' }, onTimePct: '정시율 {p}%', back: '뒤로', noResults: '결과 없음',
+        onTimeSummary: '열차 {b}대 중 {a}대 정시', worldMap: '월드 지도', appearance: '테마', themeDark: '다크', themeLight: '라이트', themeSystem: '시스템', speedOnTrains: '열차에 속도 표시', speedLimit: '제한 {n} km/h' },
+  ja: { searchPlaceholder: '何でも検索', tabStations: '駅', tabDelays: '遅延', tabRoutes: '路線',
+        routesCount: { other: '{n} 路線' }, onTimePct: '定時率 {p}%', back: '戻る', noResults: '結果なし',
+        onTimeSummary: '{b} 本中 {a} 本が定刻', worldMap: 'ワールドマップ', appearance: 'テーマ', themeDark: 'ダーク', themeLight: 'ライト', themeSystem: 'システム', speedOnTrains: '列車に速度を表示', speedLimit: '制限 {n} km/h' },
+  es: { searchPlaceholder: 'Buscar cualquier cosa', tabStations: 'Estaciones', tabDelays: 'Retrasos', tabRoutes: 'Líneas',
+        routesCount: { one: '{n} línea', other: '{n} líneas' }, onTimePct: '{p}% puntuales', back: 'Volver', noResults: 'Sin resultados',
+        onTimeSummary: '{a} de {b} trenes puntuales', worldMap: 'Mapa del mundo', appearance: 'Tema', themeDark: 'Oscuro', themeLight: 'Claro', themeSystem: 'Sistema', speedOnTrains: 'Velocidad en los trenes', speedLimit: 'límite {n} km/h' }
+};
+Object.keys(I18N_EXTRA).forEach(function(code){ Object.keys(I18N_EXTRA[code]).forEach(function(k){ I18N[code][k] = I18N_EXTRA[code][k]; }); });
+
+var lang = I18N[load('lang')] ? load('lang') : 'en';
+function fill(text, vars){ return String(text).replace(/\{(\w+)\}/g, function(_, k){ return vars && vars[k] != null ? vars[k] : ''; }); }
+function tx(key, vars){ var text = (I18N[lang] && I18N[lang][key] != null) ? I18N[lang][key] : I18N.en[key]; return fill(text, vars); }
+/* Plural with the language's own rules (Polish, Czech and Russian have few/many forms). */
+function tn(key, n){
+  var forms = (I18N[lang] && I18N[lang][key]) || I18N.en[key], cat = 'other';
+  try { cat = new Intl.PluralRules(lang).select(n); } catch (e) {}
+  return fill(forms[cat] || forms.other, { n: n });
+}
+function applyStaticTexts(){
+  document.documentElement.lang = lang;
+  Array.prototype.forEach.call(document.querySelectorAll('[data-i18n]'), function(el){ el.textContent = tx(el.getAttribute('data-i18n')); });
+  Array.prototype.forEach.call(document.querySelectorAll('[data-i18n-title]'), function(el){ el.title = tx(el.getAttribute('data-i18n-title')); el.setAttribute('aria-label', el.title); });
+  Array.prototype.forEach.call(document.querySelectorAll('[data-i18n-placeholder]'), function(el){ el.placeholder = tx(el.getAttribute('data-i18n-placeholder')); });
+}
+
+/* ── theme (JN's design is dark; light and system are options) ── */
+var theme = load('theme') || 'dark';
+function isDark(){ return theme === 'system' ? matchMedia('(prefers-color-scheme: dark)').matches : theme !== 'light'; }
+function applyTheme(){
+  document.documentElement.setAttribute('data-theme', isDark() ? 'dark' : 'light');
+  if (!map || !map.getLayer('bg')) return;
+  map.setPaintProperty('bg', 'background-color', cssVar('--bg'));
+  map.setPaintProperty('world', 'raster-opacity', parseFloat(cssVar('--tile-opacity')) || 0.16);
+  drawNet();
+  rebuildStationMarkers();
+  if (infraStyle) drawInfra();
+}
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function(){ if (theme === 'system') applyTheme(); });
+
+/* ── clock ── */
+function tick(){ var d = new Date(); $('clock').textContent = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); }
+tick(); setInterval(tick, 5000);
+
+/* ── line width and the gap between side-by-side lines, by zoom (px) ── */
+var WIDTH_STOPS = [[2, 2.5], [4, 4], [6, 6.5], [8, 9], [10, 11]];
+function widthAt(z){
+  if (z <= WIDTH_STOPS[0][0]) return WIDTH_STOPS[0][1];
+  for (var i = 1; i < WIDTH_STOPS.length; i++) {
+    if (z <= WIDTH_STOPS[i][0]) { var a = WIDTH_STOPS[i - 1], b = WIDTH_STOPS[i]; return a[1] + (b[1] - a[1]) * (z - a[0]) / (b[0] - a[0]); }
+  }
+  return WIDTH_STOPS[WIDTH_STOPS.length - 1][1];
+}
+function spacingAt(z){ return widthAt(z) + 1.5; }
+function zoomExpr(fn){
+  var e = ['interpolate', ['linear'], ['zoom']];
+  WIDTH_STOPS.forEach(function(s){ e.push(s[0], fn(s[1] + 1.5, s[1])); });
+  return e;
+}
+
+/* ── state ── */
+var map, linesData = [], stationsData = [], groups = {}, groupOrder = [], routeGroup = {};
+var masters = [], grid = {}, stationModels = [], stationById = {};
+var trains = {}, lastSnapshotTime = null, lastSnapshotAt = 0, fitted = false;
+var tab = load('tab') || 'stations', detail = null, query = '', follow = false;
+var liveOk = false, noticeKey = null, showWorld = load('world') !== '0', showSpeed = load('speed') === '1';
+var MS = window.MagicMapStyle, styleCfg = { styles: [] }, infraStyle = null, infraData = null;
+
+/* ── map ── */
+map = new maplibregl.Map({
+  container: 'map', center: [0, 0], zoom: 3, maxZoom: 11, attributionControl: false, dragRotate: false,
+  style: { version: 8, glyphs: 'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf', sources: {},
+    layers: [{ id: 'bg', type: 'background', paint: { 'background-color': '#1a1a1a' } }] }
+});
+map.touchZoomRotate.disableRotation();
+
+map.on('load', function(){
+  map.addSource('world', { type: 'raster', tiles: [location.origin + api('/api/tiles/{z}/{x}/{y}.png')], tileSize: 256, maxzoom: 8 });
+  map.addLayer({ id: 'world', type: 'raster', source: 'world', layout: { visibility: showWorld ? 'visible' : 'none' },
+    paint: { 'raster-opacity': 0.16, 'raster-saturation': -1 } });
+  map.addSource('net', { type: 'geojson', data: fc([]) });
+  map.addLayer({ id: 'net-line', type: 'line', source: 'net',
+    layout: { 'line-join': 'round', 'line-cap': 'round' },
+    paint: { 'line-color': ['get', 'mc'], 'line-opacity': ['get', 'op'],
+      'line-width': zoomExpr(function(sp, w){ return w; }),
+      'line-offset': zoomExpr(function(sp){ return ['*', ['get', 'k'], sp]; }) } });
+  map.on('click', function(e){
+    if (e.originalEvent && e.originalEvent.target && e.originalEvent.target.closest && e.originalEvent.target.closest('.mk')) return;
+    if (detail) { setDetail(null); }
+  });
+  map.on('dragstart', function(){ if (follow) { follow = false; renderView(); } });
+  map.on('move', function(){ stationsDirty = true; });
+  applyTheme();
+  loadLines();
+  setInterval(loadLines, LINES_POLL_MS);
+  loadStyles();
+  setInterval(loadStyles, LINES_POLL_MS);
+  pollVehicles();
+  setInterval(pollVehicles, VEHICLE_POLL_MS);
+  requestAnimationFrame(animate);
+});
+
+/* ── network: routes grouped into lines, and lines bundled side by side where they share track ── */
+/* Line colour on the map: on the dark theme, near-black lines are lightened so they stay visible. */
+function mapColor(c){ return isDark() && lum(c) < 0.22 ? mixHex(c, 0xffffff, 0.38) : hex(c); }
+function lineKey(l){ return hex(l.color) + '|' + clean(l.name) + '|' + clean(l.number); }
+
+function cellOf(x, z){ return Math.floor(x / CELL) + ',' + Math.floor(z / CELL); }
+function addToGrid(m){
+  var minX = Math.floor(Math.min(m.a[0], m.b[0]) / CELL), maxX = Math.floor(Math.max(m.a[0], m.b[0]) / CELL);
+  var minZ = Math.floor(Math.min(m.a[1], m.b[1]) / CELL), maxZ = Math.floor(Math.max(m.a[1], m.b[1]) / CELL);
+  for (var cx = minX; cx <= maxX; cx++) for (var cz = minZ; cz <= maxZ; cz++) {
+    var k = cx + ',' + cz;
+    (grid[k] || (grid[k] = [])).push(m);
+  }
+}
+function mastersNear(x, z, radiusCells){
+  var cx = Math.floor(x / CELL), cz = Math.floor(z / CELL), out = [], seen = {};
+  for (var i = -radiusCells; i <= radiusCells; i++) for (var j = -radiusCells; j <= radiusCells; j++) {
+    (grid[(cx + i) + ',' + (cz + j)] || []).forEach(function(m){ if (!seen[m.id]) { seen[m.id] = true; out.push(m); } });
+  }
+  return out;
+}
+function angleDiff(a, b){ var d = Math.abs(a - b) % Math.PI; return Math.min(d, Math.PI - d); }
+/* Closest point of a master segment to (x, z): [x, z, distance]. */
+function projectOn(m, x, z){
+  var dx = m.b[0] - m.a[0], dz = m.b[1] - m.a[1], len2 = dx * dx + dz * dz;
+  var t = len2 ? Math.max(0, Math.min(1, ((x - m.a[0]) * dx + (z - m.a[1]) * dz) / len2)) : 0;
+  var px = m.a[0] + dx * t, pz = m.a[1] + dz * t;
+  return [px, pz, dist(px, pz, x, z)];
+}
+function nearestMaster(x, z, wantGroups, radiusCells){
+  var best = null, bestD = Infinity, bestP = null;
+  mastersNear(x, z, radiusCells || 2).forEach(function(m){
+    if (wantGroups && !wantGroups.some(function(g){ return m.lines[g]; })) return;
+    var p = projectOn(m, x, z);
+    if (p[2] < bestD) { bestD = p[2]; best = m; bestP = p; }
+  });
+  return best ? { m: best, x: bestP[0], z: bestP[1], d: bestD } : null;
+}
+
+function buildNetwork(){
+  groups = {}; groupOrder = []; routeGroup = {}; masters = []; grid = {};
+  linesData.forEach(function(l){
+    var key = lineKey(l), g = groups[key];
+    if (!g) {
+      var np = nameParts(l.name);
+      g = groups[key] = { key: key, name: np.main || clean(l.number) || '?', sub: np.sub, number: clean(l.number), color: l.color, routes: [], stops: [] };
+      groupOrder.push(key);
+    }
+    g.routes.push(l);
+    if ((l.stops || []).length > g.stops.length) g.stops = l.stops;
+    routeGroup[String(l.id).toLowerCase()] = key;
+  });
+  groupOrder.sort(function(a, b){
+    var ga = groups[a], gb = groups[b];
+    return (ga.number || ga.name).localeCompare(gb.number || gb.name, undefined, { numeric: true });
+  });
+
+  /* Masters: one per stretch of track; every line running along it (either direction, either track of a double
+     track) is registered on it, so it can be drawn at its own offset. */
+  var seqs = [];
+  groupOrder.forEach(function(gk, gi){
+    groups[gk].routes.forEach(function(route, ri){
+      var seq = [];
+      (route.path || []).forEach(function(poly){
+        for (var i = 0; i + 1 < poly.length; i++) {
+          var a = poly[i], b = poly[i + 1], dx = b[0] - a[0], dz = b[1] - a[1];
+          if (dx * dx + dz * dz < 0.25) continue;
+          var mx = (a[0] + b[0]) / 2, mz = (a[1] + b[1]) / 2, th = Math.atan2(dz, dx), best = null, bestD = Infinity;
+          mastersNear(mx, mz, 1).forEach(function(m){
+            if (angleDiff(th, m.th) > 0.45) return;
+            var p = projectOn(m, mx, mz);
+            if (p[2] > MERGE_BLOCKS) return;
+            m.lines[gk] = true;
+            if (p[2] < bestD) { bestD = p[2]; best = m; }
+          });
+          if (!best) {
+            best = { id: masters.length, a: [a[0], a[1]], b: [b[0], b[1]], th: th, lines: {} };
+            best.lines[gk] = true;
+            masters.push(best);
+            addToGrid(best);
+          }
+          seq.push({ m: best, same: Math.cos(th - best.th) > 0, brk: i === 0 });
+        }
+      });
+      seqs.push({ gk: gk, first: ri === 0, seq: seq });
+    });
+  });
+  masters.forEach(function(m){ m.bundle = groupOrder.filter(function(gk){ return m.lines[gk]; }); });
+
+  /* Draw each line once per master, in runs that keep the same neighbours (and so the same offset). */
+  var feats = [], drawn = {};
+  seqs.forEach(function(rs){
+    var gk = rs.gk, done = drawn[gk] || (drawn[gk] = {}), run = null;
+    function flush(){
+      if (run && run.pts.length > 1 && (rs.first || run.count >= 3)) {
+        var pts = run.same ? run.pts : run.pts.slice().reverse();
+        feats.push({ type: 'Feature', properties: { gk: gk, color: hex(groups[gk].color), k: run.k, op: 1 },
+          geometry: { type: 'LineString', coordinates: pts.map(function(p){ return ll(p[0], p[1]); }) } });
+      }
+      run = null;
+    }
+    rs.seq.forEach(function(s){
+      var m = s.m;
+      if (done[m.id]) { flush(); return; }
+      done[m.id] = true;
+      var k = m.bundle.indexOf(gk) - (m.bundle.length - 1) / 2;
+      var sig = m.bundle.join('/') + (s.same ? '+' : '-');
+      var p0 = s.same ? m.a : m.b, p1 = s.same ? m.b : m.a;
+      if (!run || run.sig !== sig || s.brk || dist(run.last[0], run.last[1], p0[0], p0[1]) > 6) {
+        flush();
+        run = { sig: sig, k: k, same: s.same, pts: [p0], count: 0 };
+      }
+      run.pts.push(p1);
+      run.last = p1;
+      run.count++;
+    });
+    flush();
+  });
+  netFeatures = feats;
+  buildStations();
+}
+var netFeatures = [];
+
+/* Stations: the lines stopping there, and where to draw them on the bundle. */
+function buildStations(){
+  stationModels = []; stationById = {};
+  stationsData.forEach(function(st){
+    var id = String(st.id).toLowerCase(), gks = {}, sx = 0, sz = 0, n = 0;
+    linesData.forEach(function(l){
+      (l.stops || []).forEach(function(s){
+        if (String(s.stationId).toLowerCase() !== id) return;
+        gks[routeGroup[String(l.id).toLowerCase()]] = true;
+        sx += s.x; sz += s.z; n++;
+      });
+    });
+    var list = groupOrder.filter(function(gk){ return gks[gk]; });
+    var np = nameParts(st.name);
+    var model = { id: id, name: np.main, sub: np.sub, full: String(st.name || ''), color: st.color, groups: list, x: n ? sx / n : st.x, z: n ? sz / n : st.z, anchor: null };
+    if (list.length) {
+      var near = nearestMaster(model.x, model.z, list, 3);
+      if (near && near.d < 40) {
+        var ks = list.filter(function(gk){ return near.m.lines[gk]; }).map(function(gk){ return near.m.bundle.indexOf(gk) - (near.m.bundle.length - 1) / 2; });
+        var crossing = list.some(function(gk){ return !near.m.lines[gk]; });
+        model.anchor = { m: near.m, x: near.x, z: near.z, kmin: Math.min.apply(null, ks), kmax: Math.max.apply(null, ks) };
+        model.kind = list.length === 1 ? 'tick' : crossing || list.length >= 4 ? 'hub' : 'cap';
+      }
+    }
+    stationModels.push(model);
+    stationById[id] = model;
+  });
+  stationModels.sort(function(a, b){ return b.groups.length - a.groups.length || a.name.localeCompare(b.name); });
+  rebuildStationMarkers();
+}
+
+/* ── data ── */
+function loadLines(){
+  fetch(api('/api/livemap/lines')).then(function(r){ return r.json(); }).then(function(data){
+    linesData = (data.lines || []).map(function(l){ l.id = String(l.id).toLowerCase(); return l; });
+    stationsData = data.stations || [];
+    buildNetwork();
+    drawNet();
+    Object.keys(trains).forEach(function(id){ styleTrain(trains[id]); });
+    if (!fitted && linesData.length) { fitted = true; fitAll(); }
+    renderView();
+  }).catch(function(){});
+}
+
+function drawNet(){
+  if (!map.getSource('net')) return;
+  var focus = detail && detail.type === 'line' ? detail.id : null;
+  netFeatures.forEach(function(f){
+    f.properties.op = !focus || f.properties.gk === focus ? 1 : 0.15;
+    f.properties.mc = mapColor(groups[f.properties.gk].color);
+  });
+  map.getSource('net').setData(fc(netFeatures));
+  map.setLayoutProperty('net-line', 'visibility', infraStyle ? 'none' : 'visible');
+}
+
+function fitAll(){
+  var x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
+  masters.forEach(function(m){ [m.a, m.b].forEach(function(p){ x0 = Math.min(x0, p[0]); x1 = Math.max(x1, p[0]); z0 = Math.min(z0, p[1]); z1 = Math.max(z1, p[1]); }); });
+  if (!isFinite(x0)) stationModels.forEach(function(s){ x0 = Math.min(x0, s.x); x1 = Math.max(x1, s.x); z0 = Math.min(z0, s.z); z1 = Math.max(z1, s.z); });
+  if (!isFinite(x0)) return;
+  map.fitBounds([ll(x0, z1), ll(x1, z0)], { padding: panelPadding(60), maxZoom: 7, duration: 0 });
+}
+function panelPadding(p){
+  if (innerWidth <= 760) return { top: 90, bottom: innerHeight * 0.46 + 20, left: p, right: p };
+  return { top: p, bottom: p, left: 440 + p, right: 100 + p };
+}
+
+function pollVehicles(){
+  fetch(api('/api/rails?mode=vehicles')).then(function(r){ return r.json(); }).then(function(data){
+    setLive(true);
+    noticeKey = data.jmeShowVehicles === false ? 'vehiclesOff' : null;
+    if (data.cachedResponseTime === lastSnapshotTime) return;
+    var now = performance.now();
+    var dur = lastSnapshotAt ? Math.min(5000, Math.max(800, now - lastSnapshotAt)) : 0;
+    lastSnapshotTime = data.cachedResponseTime;
+    lastSnapshotAt = now;
+    applySnapshot(data.vehicles || [], now, dur, data.cachedResponseTime);
+  }).catch(function(){ setLive(false); });
+}
+function setLive(ok){
+  liveOk = ok;
+  $('liveBit').className = 'livebit' + (ok ? '' : ' off');
+  $('liveBit').title = ok ? tx('live') : tx('offline');
+}
+
+/* ── trains ── */
+function delayInfo(v){
+  if (v.canceled || v.cancelled) return { cls: 'canceled', color: 'var(--canceled)', text: tx('canceled') };
+  var m = Math.round((v.deviationMillis || 0) / 60000);
+  if (m <= -1) return { cls: 'early', color: 'var(--early)', text: tx('early', { n: Math.abs(m) }) };
+  if (m < 1) return { cls: 'ontime', color: 'var(--ontime)', text: tx('onTime') };
+  if (m < 5) return { cls: 'late', color: 'var(--late)', text: '+' + m + ' min' };
+  return { cls: 'verylate', color: 'var(--verylate)', text: '+' + m + ' min' };
+}
+function isOnTime(v){ return (v.deviationMillis || 0) < 60000; }
+function trainGroup(v){ return routeGroup[String(v.routeId).toLowerCase()] || null; }
+/* Canceled entries are named "Canceled" by the server, so they take their route's line. A train with no route yet
+   (leaving the depot) has no line: it shows as out of service. */
+function trainLine(v){
+  var g = groups[trainGroup(v)], canceled = !!(v.canceled || v.cancelled);
+  if (!canceled && clean(v.lineName)) return { inService: true, label: clean(v.lineNumber) || shortName(clean(v.lineName)), name: clean(v.lineName), color: v.lineColor != null ? v.lineColor : g ? g.color : 0x888888 };
+  if (g) return { inService: true, label: g.number || shortName(g.name), name: g.name, color: g.color };
+  return { inService: false, label: canceled ? '×' : '', name: canceled ? tx('canceled') : tx('outOfService'), color: null };
+}
+function shortName(s){ var w = String(s || '?').split(/\s+/)[0]; return w.length > 5 ? w.slice(0, 5) : w; }
+function running(){ return Object.keys(trains).map(function(id){ return trains[id]; }).filter(function(t){ return !(t.v.canceled || t.v.cancelled) && trainLine(t.v).inService; }); }
+
+function applySnapshot(list, now, dur, serverTime){
+  var seen = {};
+  list.forEach(function(v){
+    if (!v || !v.position || v.id == null) return;
+    var id = String(v.id), t = trains[id], target = [v.position.x, v.position.z];
+    var track = Array.isArray(v.track) && v.track.length > 1 ? v.track : null;
+    var speed = Math.abs(v.speed || 0), accel = 0;
+    seen[id] = true;
+    if (!t) t = trains[id] = { id: id, from: target, to: target, cur: target, t0: now, dur: 0, el: makeTrain(id), bAt: 0 };
+    else {
+      var jump = dist(target[0], target[1], t.cur[0], t.cur[1]) > 400;
+      t.from = jump ? target : t.cur; t.to = target; t.t0 = now; t.dur = jump ? 0 : dur;
+      /* Ease from where the train is drawn to where the new snapshot puts it. */
+      t.bFrom = t.cur; t.bAt = jump ? 0 : now;
+      var dt = serverTime && t.serverTime ? serverTime - t.serverTime : 0;
+      if (dt > 0 && dt < 10000 && t.v) accel = (speed - Math.abs(t.v.speed || 0)) / dt;
+    }
+    t.track = track; t.trackLen = track ? trackLength(track) : 0; t.speed = speed; t.accel = accel; t.serverTime = serverTime;
+    t.v = v;
+    styleTrain(t);
+  });
+  Object.keys(trains).forEach(function(id){
+    if (seen[id]) return;
+    trains[id].el.remove();
+    delete trains[id];
+    if (detail && detail.type === 'train' && detail.id === id) setDetail(null);
+  });
+  updateTrainClasses();
+  renderView();
+}
+
+function makeTrain(id){
+  var el = document.createElement('div');
+  el.className = 'mk train';
+  el.innerHTML = '<i class="dir"></i><div class="pill"><span class="l"></span><span class="kmh"></span><i class="sd"></i></div>';
+  el.onclick = function(e){ e.stopPropagation(); setDetail({ type: 'train', id: id }); };
+  $('overlay').appendChild(el);
+  return el;
+}
+function styleTrain(t){
+  var info = trainLine(t.v), d = delayInfo(t.v), pill = t.el.querySelector('.pill');
+  pill.setAttribute('style', info.color == null ? '' : pillStyle(info.color));
+  t.el.style.setProperty('--lc', info.color == null ? 'var(--canceled)' : hex(info.color));
+  t.el.querySelector('.l').textContent = info.label;
+  t.el.querySelector('.kmh').textContent = kmh(t.v.speed);
+  t.el.querySelector('.sd').style.background = d.color;
+  t.dirEl = t.dirEl || t.el.querySelector('.dir');
+  t.el.title = (info.inService ? info.name + ' → ' + clean(t.v.destination) + ' · ' + d.text : info.name) + ' · ' + kmh(t.v.speed) + ' km/h';
+  t.el.classList.toggle('canceled', d.cls === 'canceled');
+  t.el.classList.toggle('idle', !info.inService && d.cls !== 'canceled');
+}
+function updateTrainClasses(){
+  var focus = detail && detail.type === 'line' ? detail.id : null;
+  Object.keys(trains).forEach(function(id){
+    var t = trains[id];
+    t.el.classList.toggle('dim', !!focus && trainGroup(t.v) !== focus);
+    t.el.classList.toggle('sel', !!detail && detail.type === 'train' && detail.id === id);
+  });
+}
+
+/* ── station markers and labels (HTML over the map) ── */
+var stationsDirty = true;
+function rebuildStationMarkers(){
+  Array.prototype.forEach.call(document.querySelectorAll('#overlay .st'), function(el){ el.remove(); });
+  stationModels.forEach(function(s){
+    if (!s.anchor) return;
+    var mk = document.createElement('div');
+    mk.className = 'mk st ' + (s.kind === 'tick' ? 'tick' : s.kind);
+    var lbl = document.createElement('div');
+    lbl.className = 'mk st lbl ' + (s.kind === 'hub' ? 'big' : s.kind === 'cap' ? 'mid' : 'small');
+    lbl.innerHTML = esc(s.name) + (s.sub && s.kind !== 'tick' ? '<span class="s">' + esc(s.sub) + '</span>' : '');
+    if (s.kind === 'tick') mk.style.setProperty('--tc', mapColor(groups[s.groups[0]].color));
+    var open = function(e){ e.stopPropagation(); setDetail({ type: 'station', id: s.id }); };
+    mk.onclick = open; lbl.onclick = open;
+    $('overlay').appendChild(mk);
+    $('overlay').appendChild(lbl);
+    s.mk = mk; s.lbl = lbl; s.lw = 0;
+  });
+  stationsDirty = true;
+}
+
+function screenDir(m){
+  var a = map.project(ll(m.a[0], m.a[1])), b = map.project(ll(m.b[0], m.b[1]));
+  var dx = b.x - a.x, dy = b.y - a.y, len = Math.sqrt(dx * dx + dy * dy) || 1;
+  return { dx: dx / len, dy: dy / len, nx: -dy / len, ny: dx / len };
+}
+
+function placeStations(){
+  var z = map.getZoom(), sp = spacingAt(z), w = widthAt(z), placed = [];
+  var focus = detail && detail.type === 'line' ? detail.id : null;
+  var selId = detail && detail.type === 'station' ? detail.id : null;
+  var W = innerWidth, H = innerHeight;
+  var items = stationModels.filter(function(s){ return s.anchor; }).map(function(s){
+    var a = s.anchor, p = map.project(ll(a.x, a.z)), d = screenDir(a.m);
+    var kc = (a.kmin + a.kmax) / 2, cx = p.x + d.nx * kc * sp, cy = p.y + d.ny * kc * sp;
+    return { s: s, p: p, d: d, cx: cx, cy: cy, prio: (s.id === selId ? 10 : 0) + (s.kind === 'hub' ? 3 : s.kind === 'cap' ? 2 : 1) };
+  });
+  items.sort(function(a, b){ return b.prio - a.prio; });
+  items.forEach(function(it){
+    var s = it.s, d = it.d, a = s.anchor, mk = s.mk, lbl = s.lbl;
+    var off = it.cx < -200 || it.cy < -200 || it.cx > W + 200 || it.cy > H + 200;
+    var dimmed = !!focus && s.groups.indexOf(focus) < 0;
+    mk.classList.toggle('dim', dimmed); lbl.classList.toggle('dim', dimmed);
+    mk.classList.toggle('sel', s.id === selId);
+    var angle = Math.atan2(d.ny, d.nx) * 180 / Math.PI;
+    var showMarker = !off && (s.kind !== 'tick' || z >= 4);
+    mk.style.display = showMarker ? '' : 'none';
+    if (showMarker) {
+      if (s.kind === 'tick') {
+        var k = a.kmin, side = k >= 0 ? 1 : -1, len = Math.max(6, w + 3);
+        var tx0 = it.p.x + d.nx * (k * sp + side * (w / 2 + len / 2 - 1)), ty0 = it.p.y + d.ny * (k * sp + side * (w / 2 + len / 2 - 1));
+        mk.style.width = len + 'px'; mk.style.height = Math.max(2.5, w * 0.55) + 'px';
+        mk.style.transform = 'translate(' + tx0.toFixed(1) + 'px,' + ty0.toFixed(1) + 'px) translate(-50%,-50%) rotate(' + angle.toFixed(1) + 'deg)';
+      } else {
+        var across = (a.kmax - a.kmin) * sp + w + 9, along = Math.max(w + 7, 13);
+        if (s.kind === 'hub') { var sz = Math.max(across, 14 + w * 2.6); across = sz; along = sz; }
+        mk.style.width = across + 'px'; mk.style.height = along + 'px';
+        mk.style.transform = 'translate(' + it.cx.toFixed(1) + 'px,' + it.cy.toFixed(1) + 'px) translate(-50%,-50%) rotate(' + (s.kind === 'hub' ? angle + 45 : angle).toFixed(1) + 'deg)';
+      }
+    }
+    /* Labels: big stations beside the bundle, small ones along the line; hidden where they would overlap. */
+    var showLabel = !off && (s.kind === 'hub' || (s.kind === 'cap' && z >= 3) || (s.kind === 'tick' && z >= 5.5) || s.id === selId);
+    if (showLabel) {
+      if (!s.lw) { lbl.style.display = ''; s.lw = lbl.offsetWidth; s.lh = lbl.offsetHeight; }
+      var rect, transform;
+      if (s.kind === 'tick') {
+        var rot = Math.atan2(d.dy, d.dx) * 180 / Math.PI;
+        if (rot > 90) rot -= 180; else if (rot < -90) rot += 180;
+        var sideT = a.kmin >= 0 ? -1 : 1, gap = w / 2 + 5 + s.lh / 2;
+        var lx = it.p.x + d.nx * (a.kmin * sp + sideT * gap), ly = it.p.y + d.ny * (a.kmin * sp + sideT * gap);
+        transform = 'translate(' + lx.toFixed(1) + 'px,' + ly.toFixed(1) + 'px) translate(-50%,-50%) rotate(' + rot.toFixed(1) + 'deg)';
+        var r = Math.max(s.lw, s.lh) / 2;
+        rect = [lx - r, ly - r * 0.6, lx + r, ly + r * 0.6];
+      } else {
+        var half = s.kind === 'hub' ? Math.max((a.kmax - a.kmin) * sp + w + 9, 14 + w * 2.6) * 0.75 : ((a.kmax - a.kmin) * sp + w + 9) / 2;
+        var u = labelSide(s, it, half, z);
+        var g2 = labelGeometry(it.cx, it.cy, u, half, s.lw, s.lh);
+        transform = g2.transform;
+        rect = g2.rect;
+      }
+      var clash = placed.some(function(q){ return rect[0] < q[2] + 4 && rect[2] + 4 > q[0] && rect[1] < q[3] + 2 && rect[3] + 2 > q[1]; });
+      if (clash && s.id !== selId) showLabel = false;
+      else { placed.push(rect); lbl.style.transform = transform; }
+    }
+    lbl.style.display = showLabel ? '' : 'none';
+  });
+}
+
+/* Where a big station's label goes: beside the bundle, else left, right, below or above - the first side
+   that covers no line. The lines around a station only move relative to it when the zoom changes, so the choice
+   is kept until then. */
+function labelGeometry(cx, cy, u, half, lw, lh){
+  var bx = cx + u[0] * (half + 12), by = cy + u[1] * (half + 12), rect, transform;
+  if (Math.abs(u[0]) >= 0.3) {
+    var left = u[0] > 0 ? bx : bx - lw;
+    rect = [left, by - lh / 2, left + lw, by + lh / 2];
+    transform = 'translate(' + bx.toFixed(1) + 'px,' + by.toFixed(1) + 'px) translate(' + (u[0] > 0 ? '0' : '-100%') + ',-50%)';
+  } else {
+    var top = u[1] > 0 ? by : by - lh;
+    rect = [bx - lw / 2, top, bx + lw / 2, top + lh];
+    transform = 'translate(' + bx.toFixed(1) + 'px,' + by.toFixed(1) + 'px) translate(-50%,' + (u[1] > 0 ? '0' : '-100%') + ')';
+  }
+  return { rect: rect, transform: transform };
+}
+function labelSide(s, it, half, z){
+  var zb = Math.round(z * 4);
+  if (s.side && s.side.zb === zb && s.side.lw === s.lw) return s.side.u;
+  /* Screen points of the track near the station, relative to its centre. */
+  var c = map.project(ll(s.anchor.x, s.anchor.z)), e = map.project(ll(s.anchor.x + 64, s.anchor.z));
+  var pxPerBlock = Math.max(0.01, Math.abs(e.x - c.x) / 64);
+  var reach = Math.min(600, (Math.max(s.lw, s.lh) + half + 40) / pxPerBlock);
+  var pts = [];
+  mastersNear(s.anchor.x, s.anchor.z, Math.ceil(reach / CELL)).forEach(function(m){
+    [m.a, m.b, [(m.a[0] + m.b[0]) / 2, (m.a[1] + m.b[1]) / 2]].forEach(function(q){
+      pts.push([(q[0] - s.anchor.x) * pxPerBlock + c.x - it.cx, (q[1] - s.anchor.z) * pxPerBlock + c.y - it.cy]);
+    });
+  });
+  var d = it.d, nx = d.nx, ny = d.ny;
+  if (nx < 0 || (Math.abs(nx) < 0.3 && ny < 0)) { nx = -nx; ny = -ny; }
+  var candidates = [[nx, ny], [-nx, -ny], [1, 0], [-1, 0], [0, 1], [0, -1]];
+  var best = candidates[0], bestHits = Infinity, pad = widthAt(z) / 2 + 4;
+  candidates.some(function(u){
+    var r = labelGeometry(0, 0, u, half, s.lw, s.lh).rect, hits = 0;
+    pts.forEach(function(q){ if (q[0] > r[0] - pad && q[0] < r[2] + pad && q[1] > r[1] - pad && q[1] < r[3] + pad) hits++; });
+    if (hits < bestHits) { bestHits = hits; best = u; }
+    return hits === 0;
+  });
+  s.side = { zb: zb, lw: s.lw, u: best };
+  return best;
+}
+
+/* ── following the track between snapshots: the server sends the track ahead of each train, which then moves along
+   it at its speed (with its acceleration, stopping where a braking train stops) instead of cutting corners ── */
+function trackLength(track){
+  var l = 0;
+  for (var i = 1; i < track.length; i++) l += dist(track[i - 1][0], track[i - 1][1], track[i][0], track[i][1]);
+  return l;
+}
+function alongTrack(track, d){
+  for (var i = 1; i < track.length; i++) {
+    var a = track[i - 1], b = track[i], seg = dist(a[0], a[1], b[0], b[1]);
+    if (d <= seg || i === track.length - 1) {
+      var f = seg > 0 ? Math.max(0, Math.min(1, d / seg)) : 0;
+      return { p: [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f], dir: seg > 0 ? [(b[0] - a[0]) / seg, (b[1] - a[1]) / seg] : null };
+    }
+    d -= seg;
+  }
+  return { p: track[0], dir: null };
+}
+function travelled(t, ms){
+  var v = t.speed, a = t.accel;
+  if (a < 0 && v + a * ms < 0) ms = v / -a;
+  return Math.max(0, Math.min(t.trackLen, v * ms + a * ms * ms / 2));
+}
+/* World position and direction of travel of a train now. */
+function trainPosition(t, now){
+  if (!t.track) {
+    var f = t.dur > 0 ? Math.min(1, (now - t.t0) / t.dur) : 1;
+    return { p: [t.from[0] + (t.to[0] - t.from[0]) * f, t.from[1] + (t.to[1] - t.from[1]) * f], dir: null };
+  }
+  var at = alongTrack(t.track, travelled(t, now - t.t0));
+  var k = t.bAt ? (now - t.bAt) / BLEND_MS : 1;
+  if (k < 1 && t.bFrom) at.p = [t.bFrom[0] + (at.p[0] - t.bFrom[0]) * k, t.bFrom[1] + (at.p[1] - t.bFrom[1]) * k];
+  return at;
+}
+function realTrack(){ return !!infraStyle; }
+function kmh(speed){ return Math.round(Math.abs(speed || 0) * 3600); }
+
+/* Train position: on the real track when the map shows it, otherwise on its own line's offset in the bundle. */
+function trainScreenPos(t){
+  var p = map.project(ll(t.cur[0], t.cur[1])), gk = trainGroup(t.v);
+  if (!gk || realTrack()) return p;
+  var near = nearestMaster(t.cur[0], t.cur[1], [gk], 1);
+  if (!near || near.d > 12) return p;
+  var k = near.m.bundle.indexOf(gk) - (near.m.bundle.length - 1) / 2;
+  if (!k) return map.project(ll(near.x, near.z));
+  var d = screenDir(near.m), sp = spacingAt(map.getZoom()), q = map.project(ll(near.x, near.z));
+  return { x: q.x + d.nx * k * sp, y: q.y + d.ny * k * sp };
+}
+
+/* A small arrow just ahead of the marker, pointing the way the train runs (real track only). */
+function placeArrow(t, dir, p){
+  var el = t.dirEl, moving = t.speed * 3600 >= 1;
+  el.classList.toggle('on', !!dir && moving);
+  if (!dir || !moving) return;
+  var q = map.project(ll(t.cur[0] + dir[0] * 8, t.cur[1] + dir[1] * 8)), dx = q.x - p.x, dy = q.y - p.y, len = Math.sqrt(dx * dx + dy * dy) || 1;
+  var r = t.el.querySelector('.pill').offsetWidth / 2 + 7;
+  el.style.transform = 'translate(' + (dx / len * r).toFixed(1) + 'px,' + (dy / len * r).toFixed(1) + 'px) translate(-3px,-4.5px) rotate(' + (Math.atan2(dy, dx) * 180 / Math.PI).toFixed(1) + 'deg)';
+}
+
+function animate(now){
+  var ids = Object.keys(trains);
+  var real = realTrack();
+  for (var i = 0; i < ids.length; i++) {
+    var t = trains[ids[i]];
+    var at = trainPosition(t, now);
+    t.cur = at.p;
+    var p = trainScreenPos(t);
+    t.el.style.transform = 'translate(' + p.x.toFixed(1) + 'px,' + p.y.toFixed(1) + 'px)';
+    if (real) placeArrow(t, at.dir, p);
+  }
+  if (follow && detail && detail.type === 'train' && trains[detail.id]) {
+    var c = trains[detail.id].cur;
+    map.jumpTo({ center: ll(c[0], c[1]) });
+  }
+  if (stationsDirty) { stationsDirty = false; placeStations(); }
+  requestAnimationFrame(animate);
+}
+
+/* ── panel ── */
+function setTab(name){
+  tab = name; store('tab', name);
+  detail = null; follow = false;
+  afterDetailChange();
+}
+function setDetail(d){
+  detail = d; follow = false;
+  if (d && d.type === 'station' && stationById[d.id] && stationById[d.id].anchor) {
+    var a = stationById[d.id].anchor;
+    map.easeTo({ center: ll(a.x, a.z), zoom: Math.max(map.getZoom(), 5.5), padding: panelPadding(0) });
+  }
+  if (d && d.type === 'line') fitGroup(d.id);
+  afterDetailChange();
+}
+function afterDetailChange(){
+  drawNet();
+  updateTrainClasses();
+  stationsDirty = true;
+  renderView();
+  var c = document.querySelector('#view .content');
+  if (c) c.scrollTop = 0;
+}
+function fitGroup(gk){
+  var x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
+  masters.forEach(function(m){ if (!m.lines[gk]) return; [m.a, m.b].forEach(function(p){ x0 = Math.min(x0, p[0]); x1 = Math.max(x1, p[0]); z0 = Math.min(z0, p[1]); z1 = Math.max(z1, p[1]); }); });
+  if (isFinite(x0)) map.fitBounds([ll(x0, z1), ll(x1, z0)], { padding: panelPadding(50), maxZoom: 7 });
+}
+
+function pctHtml(list){
+  if (!list.length) return '';
+  var on = list.filter(function(t){ return isOnTime(t.v); }).length, p = Math.round(100 * on / list.length);
+  return '<span class="pct" style="color:hsl(' + Math.round(20 + p * 1.3) + ' 80% ' + (isDark() ? 62 : 36) + '%)">' + esc(tx('onTimePct', { p: p })) + '</span>';
+}
+function groupPill(gk, asButton){
+  var g = groups[gk];
+  if (!g) return '';
+  return '<' + (asButton ? 'button' : 'span') + ' class="pill" style="' + pillStyle(g.color) + '"' + (asButton ? ' data-line="' + esc(gk) + '"' : '') + ' title="' + esc(g.name) + '">' + esc(groupLabel(g)) + '</' + (asButton ? 'button' : 'span') + '>';
+}
+function groupLabel(g){ return g.number && g.name.toLowerCase().indexOf(g.number.toLowerCase()) < 0 ? g.number + ' ' + g.name : g.name; }
+function trainsOf(gks){ return running().filter(function(t){ return gks.indexOf(trainGroup(t.v)) >= 0; }); }
+function stripe(s){ return s.color ? hex(s.color) : s.groups[0] ? hex(groups[s.groups[0]].color) : 'transparent'; }
+
+/* Long single words would break mid-word at full size, so long names get smaller type. */
+function nameSizeClass(name){
+  var longest = String(name).split(/\s+/).reduce(function(m, w){ return Math.max(m, w.length); }, 0);
+  return longest > 11 ? ' l' : longest > 8 ? ' m' : '';
+}
+function stationRow(s){
+  return '<div class="row" data-station="' + esc(s.id) + '" style="--stripe:' + stripe(s) + '">' +
+    '<div class="nm"><div class="main' + nameSizeClass(s.name) + '">' + esc(s.name) + '</div>' + (s.sub ? '<div class="sub">' + esc(s.sub) + '</div>' : '') + '</div>' +
+    '<div class="info"><div class="meta"><span>' + esc(tn('routesCount', s.groups.length)) + '</span>' + pctHtml(trainsOf(s.groups)) + '</div>' +
+    '<div class="pills">' + s.groups.map(function(gk){ return groupPill(gk); }).join('') + '</div></div></div>';
+}
+function routeRow(gk){
+  var g = groups[gk], st = g.stops || [], list = trainsOf([gk]);
+  return '<div class="row" data-line="' + esc(gk) + '" style="--stripe:' + hex(g.color) + '">' +
+    '<div class="info"><div class="pills wrap" style="margin-bottom:8px">' + groupPill(gk) + '</div>' +
+    '<div class="meta"><span>' + esc(st.length ? clean(st[0].name) + ' ↔ ' + clean(st[st.length - 1].name) : '') + '</span></div>' +
+    '<div class="meta" style="margin:0"><span>' + esc(tn('trains', list.length)) + '</span>' + pctHtml(list) + '</div></div></div>';
+}
+function trainRow(t){
+  var v = t.v, d = delayInfo(v), info = trainLine(v);
+  var badge = info.color == null ? '<span class="pill" style="background:var(--canceled);color:#fff">—</span>' : '<span class="pill" style="' + pillStyle(info.color) + '">' + esc(info.label) + '</span>';
+  return '<div class="trow" data-train="' + esc(t.id) + '">' + badge +
+    '<div class="grow"><div class="dest">' + esc(clean(v.destination) || info.name) + '</div>' +
+    '<div class="small">' + (v.nextStation ? esc(tx('nextStop', { name: clean(v.nextStation) })) + ' · ' : '') + kmh(v.speed) + ' km/h</div></div>' +
+    '<span class="delay" style="color:' + d.color + '">' + esc(d.text) + '</span></div>';
+}
+function noticeHtml(){ return noticeKey ? '<div class="notice">' + esc(tx(noticeKey)) + '</div>' : ''; }
+
+function nextStopIndex(stops, v, pos){
+  var name = clean(v.nextStation), best = -1, bestD = Infinity;
+  if (!name) return -1;
+  stops.forEach(function(s, i){
+    if (clean(s.name) !== name) return;
+    var dd = dist(s.x, s.z, pos[0], pos[1]);
+    if (dd < bestD) { bestD = dd; best = i; }
+  });
+  return best;
+}
+function stopsHtml(stops, color, nextIdx){
+  if (!stops || !stops.length) return '<div class="empty">' + esc(tx('noStops')) + '</div>';
+  return '<ul class="stops" style="--lc:' + hex(color) + '">' + stops.map(function(s, i){
+    var cls = nextIdx < 0 ? '' : i < nextIdx ? ' past' : i === nextIdx ? ' next' : '';
+    return '<li class="stop' + cls + '" data-station="' + esc(String(s.stationId).toLowerCase()) + '"><span class="rail"></span><span class="name">' + esc(clean(s.name)) + '</span>' +
+      (i === nextIdx ? '<span class="tag">' + esc(tx('next')) + '</span>' : '') + '</li>';
+  }).join('') + '</ul>';
+}
+var backSvg = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>';
+function backBtn(){ return '<button class="back" data-back aria-label="' + esc(tx('back')) + '" title="' + esc(tx('back')) + '">' + backSvg + '</button>'; }
+
+function renderView(){
+  var view = $('view'), html = '';
+  Array.prototype.forEach.call(document.querySelectorAll('#tabs button'), function(b){
+    var on = !query && !detail ? b.getAttribute('data-tab') === tab : b.getAttribute('data-tab') === tab;
+    b.classList.toggle('on', on);
+    b.setAttribute('aria-selected', on);
+  });
+  if (query) html = searchHtml();
+  else if (detail) html = detailHtml();
+  else html = listHtml();
+  var old = view.querySelector('.content'), scroll = old ? old.scrollTop : 0;
+  view.innerHTML = html;
+  var neu = view.querySelector('.content');
+  if (neu) neu.scrollTop = scroll;
+  bindView(view);
+}
+
+function listHtml(){
+  var h = '<div class="content">' + noticeHtml();
+  if (tab === 'stations') {
+    var list = stationModels.filter(function(s){ return s.groups.length; });
+    h += list.length ? list.map(stationRow).join('') : '<div class="empty">' + esc(tx('noResults')) + '</div>';
+  } else if (tab === 'delays') {
+    var all = running(), on = all.filter(function(t){ return isOnTime(t.v); }).length;
+    h += '<div class="summary"><span>' + esc(tx('onTimeSummary', { a: on, b: all.length })) + '</span></div>';
+    h += '<div class="legend-inline"><span><i class="dot" style="background:var(--ontime)"></i>' + esc(tx('onTime')) + '</span><span><i class="dot" style="background:var(--late)"></i>+1–4 min</span><span><i class="dot" style="background:var(--verylate)"></i>+5 min</span><span><i class="dot" style="background:var(--early)"></i>' + esc(tx('earlyLegend')) + '</span><span><i class="dot" style="background:var(--canceled)"></i>' + esc(tx('canceled')) + '</span></div>';
+    var sorted = Object.keys(trains).map(function(id){ return trains[id]; }).filter(function(t){ return trainLine(t.v).inService || t.v.canceled || t.v.cancelled; })
+      .sort(function(a, b){
+        var ca = a.v.canceled || a.v.cancelled ? 1 : 0, cb = b.v.canceled || b.v.cancelled ? 1 : 0;
+        return cb - ca || (b.v.deviationMillis || 0) - (a.v.deviationMillis || 0);
+      });
+    h += sorted.length ? sorted.map(trainRow).join('') : '<div class="empty">' + esc(tx('noTrains')) + '</div>';
+  } else {
+    h += groupOrder.length ? groupOrder.map(routeRow).join('') : '<div class="empty">' + esc(tx('noResults')) + '</div>';
+  }
+  return h + '</div>';
+}
+
+function detailHtml(){
+  var h = '';
+  if (detail.type === 'station') {
+    var s = stationById[detail.id];
+    if (!s) { detail = null; return listHtml(); }
+    var incoming = running().filter(function(t){ return clean(t.v.nextStation) === s.name; })
+      .sort(function(a, b){ return dist(a.to[0], a.to[1], s.x, s.z) - dist(b.to[0], b.to[1], s.x, s.z); });
+    h += '<div class="dhead">' + backBtn() + '<div class="titles"><h2>' + esc(s.name) + '</h2>' + (s.sub ? '<div class="sub">' + esc(s.sub) + '</div>' : '') +
+      '<div class="pills wrap">' + s.groups.map(function(gk){ return groupPill(gk, true); }).join('') + '</div></div></div>';
+    h += '<div class="content">' + noticeHtml() + '<div class="summary"><span>' + esc(tn('routesCount', s.groups.length)) + '</span>' + pctHtml(trainsOf(s.groups)) + '</div>' +
+      '<div class="group-title">' + esc(tx('headingHere')) + '</div>' + (incoming.length ? incoming.map(trainRow).join('') : '<div class="empty">' + esc(tx('noTrains')) + '</div>') + '</div>';
+  } else if (detail.type === 'line') {
+    var g = groups[detail.id];
+    if (!g) { detail = null; return listHtml(); }
+    var onLine = trainsOf([detail.id]), late = onLine.filter(function(t){ return !isOnTime(t.v); }).length, st = g.stops || [];
+    h += '<div class="dhead">' + backBtn() + '<div class="titles"><div class="pills wrap" style="margin:2px 0 8px">' + groupPill(detail.id) + '</div>' +
+      '<div class="sub">' + esc(st.length ? clean(st[0].name) + ' ↔ ' + clean(st[st.length - 1].name) : '') + '</div></div></div>';
+    h += '<div class="stats"><div class="stat"><div class="k">' + esc(tx('trainsCol')) + '</div><div class="v">' + onLine.length + '</div></div>' +
+      '<div class="stat"><div class="k">' + esc(tx('delayedCol')) + '</div><div class="v" style="color:' + (late ? 'var(--late)' : 'var(--ontime)') + '">' + late + '</div></div>' +
+      '<div class="stat"><div class="k">' + esc(tx('stopsCol')) + '</div><div class="v">' + st.length + '</div></div></div>';
+    h += '<div class="content">' + noticeHtml() + '<div class="group-title">' + esc(tx('inService')) + '</div>' +
+      (onLine.length ? onLine.map(trainRow).join('') : '<div class="empty">' + esc(tx('noTrains')) + '</div>') +
+      '<div class="group-title">' + esc(tx('stopsTitle')) + '</div>' + stopsHtml(st, g.color, -1) + '</div>';
+  } else {
+    var t = trains[detail.id];
+    if (!t) { detail = null; return listHtml(); }
+    var v = t.v, d = delayInfo(v), info = trainLine(v), route = linesData.filter(function(l){ return l.id === String(v.routeId).toLowerCase(); })[0];
+    var stops = route ? route.stops : [], idx = nextStopIndex(stops, v, t.to), gk = trainGroup(v);
+    var badge = info.color == null ? '<span class="pill" style="background:var(--canceled);color:#fff">—</span>' : '<span class="pill" style="' + pillStyle(info.color) + '">' + esc(info.label) + '</span>';
+    h += '<div class="dhead">' + backBtn() + '<div class="titles"><div class="pills wrap" style="margin:2px 0 8px">' + badge + '</div>' +
+      '<h2>' + (info.inService ? '→ ' + esc(clean(v.destination) || '—') : esc(info.name)) + '</h2>' +
+      '<div class="sub">' + esc(info.inService ? info.name : tx('toFirstStop')) + '</div></div></div>';
+    h += '<div class="stats"><div class="stat"><div class="k">' + esc(tx('status')) + '</div><div class="v" style="color:' + d.color + '">' + esc(d.text) + '</div></div>' +
+      '<div class="stat"><div class="k">' + esc(tx('nextStopTitle')) + '</div><div class="v" title="' + esc(clean(v.nextStation)) + '">' + esc(clean(v.nextStation) || '—') + '</div></div>' +
+      '<div class="stat"><div class="k">' + esc(tx('speed')) + '</div><div class="v">' + kmh(v.speed) + ' km/h</div>' +
+      (v.speedLimitKmh > 0 ? '<div class="k">' + esc(tx('speedLimit', { n: v.speedLimitKmh })) + '</div>' : '') + '</div></div>';
+    h += '<div class="content">' + noticeHtml() + '<div class="group-title">' + esc(tx('route')) + '</div>' + stopsHtml(stops, info.color == null ? 0x888888 : info.color, idx) + '</div>';
+    h += '<div class="actions"><button class="btn' + (follow ? ' on' : '') + '" data-follow>' + esc(follow ? tx('following') : tx('follow')) + '</button>' +
+      (gk ? '<button class="btn" data-line="' + esc(gk) + '">' + esc(tx('viewLine')) + '</button>' : '') + '</div>';
+  }
+  return h;
+}
+
+function searchHtml(){
+  var q = query.toLowerCase(), h = '<div class="content">';
+  var st = stationModels.filter(function(s){ return s.groups.length && s.full.toLowerCase().indexOf(q) >= 0; });
+  var ln = groupOrder.filter(function(gk){ var g = groups[gk]; return (g.name + ' ' + g.sub + ' ' + g.number).toLowerCase().indexOf(q) >= 0; });
+  var tr = running().filter(function(t){ return (String(t.v.lineName || '') + ' ' + String(t.v.lineNumber || '') + ' ' + String(t.v.destination || '')).toLowerCase().indexOf(q) >= 0; });
+  if (st.length) h += '<div class="group-title">' + esc(tx('tabStations')) + '</div>' + st.slice(0, 30).map(stationRow).join('');
+  if (ln.length) h += '<div class="group-title">' + esc(tx('tabRoutes')) + '</div>' + ln.slice(0, 30).map(routeRow).join('');
+  if (tr.length) h += '<div class="group-title">' + esc(tx('trainsCol')) + '</div>' + tr.slice(0, 30).map(trainRow).join('');
+  if (!st.length && !ln.length && !tr.length) h += '<div class="empty">' + esc(tx('noResults')) + '</div>';
+  return h + '</div>';
+}
+
+function clearSearch(){ query = ''; $('search').value = ''; $('searchBox').classList.remove('has-text'); }
+function bindView(view){
+  Array.prototype.forEach.call(view.querySelectorAll('[data-station]'), function(el){
+    el.onclick = function(e){ e.stopPropagation(); clearSearch(); setDetail({ type: 'station', id: el.getAttribute('data-station') }); };
+  });
+  Array.prototype.forEach.call(view.querySelectorAll('[data-line]'), function(el){
+    el.onclick = function(e){ e.stopPropagation(); clearSearch(); setDetail({ type: 'line', id: el.getAttribute('data-line') }); };
+  });
+  Array.prototype.forEach.call(view.querySelectorAll('[data-train]'), function(el){
+    el.onclick = function(e){
+      e.stopPropagation(); clearSearch();
+      var t = trains[el.getAttribute('data-train')];
+      setDetail({ type: 'train', id: el.getAttribute('data-train') });
+      if (t) map.easeTo({ center: ll(t.cur[0], t.cur[1]), zoom: Math.max(map.getZoom(), 6), padding: panelPadding(0) });
+    };
+  });
+  var back = view.querySelector('[data-back]');
+  if (back) back.onclick = function(){ setDetail(null); };
+  var fb = view.querySelector('[data-follow]');
+  if (fb) fb.onclick = function(){ follow = !follow; if (follow && map.getZoom() < 6) map.setZoom(6); renderView(); };
+}
+
+/* ── search, tabs, zoom ── */
+$('search').addEventListener('input', function(e){
+  query = e.target.value.trim();
+  $('searchBox').classList.toggle('has-text', !!e.target.value);
+  renderView();
+});
+$('search').addEventListener('keydown', function(e){ if (e.key === 'Escape') { clearSearch(); renderView(); } });
+$('clearSearch').onclick = function(){ clearSearch(); renderView(); $('search').focus(); };
+Array.prototype.forEach.call(document.querySelectorAll('#tabs button'), function(b){ b.onclick = function(){ clearSearch(); setTab(b.getAttribute('data-tab')); }; });
+$('zoomIn').onclick = function(){ map.zoomIn(); };
+$('zoomOut').onclick = function(){ map.zoomOut(); };
+document.addEventListener('keydown', function(e){
+  if (e.key === '/' && document.activeElement !== $('search')) { e.preventDefault(); $('search').focus(); }
+});
+
+/* ── layers menu: map style, world map, theme, language ── */
+function renderMenu(){
+  var h = '<div class="hd">' + esc(tx('mapStyle')) + '</div>';
+  h += '<button class="' + (infraStyle ? '' : 'on') + '" data-style=""><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 20 20 4M4 14 14 4M10 20 20 10"/></svg>' + esc(tx('liveLines')) + '</button>';
+  (styleCfg.styles || []).forEach(function(s){
+    h += '<button class="' + (infraStyle && infraStyle.id === s.id ? 'on' : '') + '" data-style="' + esc(s.id) + '">' + (MS ? MS.icon(s.icon, s.name || s.id) : '') + esc(s.name || s.id) + '</button>';
+  });
+  h += '<label><input type="checkbox" id="worldToggle"' + (showWorld ? ' checked' : '') + '>' + esc(tx('worldMap')) + '</label>';
+  h += '<label><input type="checkbox" id="speedToggle"' + (showSpeed ? ' checked' : '') + '>' + esc(tx('speedOnTrains')) + '</label>';
+  h += '<hr><div class="hd">' + esc(tx('appearance')) + '</div>';
+  [['dark', 'themeDark'], ['light', 'themeLight'], ['system', 'themeSystem']].forEach(function(o){
+    h += '<button class="' + (theme === o[0] ? 'on' : '') + '" data-theme="' + o[0] + '">' + esc(tx(o[1])) + '</button>';
+  });
+  h += '<hr><div class="hd">' + esc(tx('language')) + '</div>';
+  LANGS.forEach(function(l){ h += '<button class="' + (l[0] === lang ? 'on' : '') + '" data-lang="' + l[0] + '" lang="' + l[0] + '">' + esc(l[1]) + '</button>'; });
+  var menu = $('menu');
+  menu.innerHTML = h;
+  Array.prototype.forEach.call(menu.querySelectorAll('[data-style]'), function(b){ b.onclick = function(){ setInfraStyle(b.getAttribute('data-style')); }; });
+  Array.prototype.forEach.call(menu.querySelectorAll('[data-theme]'), function(b){ b.onclick = function(){ theme = b.getAttribute('data-theme'); store('theme', theme); applyTheme(); renderMenu(); }; });
+  Array.prototype.forEach.call(menu.querySelectorAll('[data-lang]'), function(b){ b.onclick = function(){ setLang(b.getAttribute('data-lang')); }; });
+  $('speedToggle').onchange = function(e){
+    showSpeed = e.target.checked; store('speed', showSpeed ? '1' : '0');
+    applyTrainDisplay();
+  };
+  $('worldToggle').onchange = function(e){
+    showWorld = e.target.checked; store('world', showWorld ? '1' : '0');
+    if (map.getLayer('world')) map.setLayoutProperty('world', 'visibility', showWorld ? 'visible' : 'none');
+  };
+}
+$('layersBtn').onclick = function(e){ e.stopPropagation(); renderMenu(); $('menu').classList.toggle('open'); };
+document.addEventListener('click', function(e){ if (!e.target.closest('#menu') && !e.target.closest('#layersBtn')) $('menu').classList.remove('open'); });
+
+function setLang(code){
+  if (!I18N[code]) return;
+  lang = code; store('lang', code);
+  applyStaticTexts();
+  setLive(liveOk);
+  renderMenu();
+  renderStyleLegend();
+  Object.keys(trains).forEach(function(id){ styleTrain(trains[id]); });
+  renderView();
+}
+
+/* ── map styles from map-style.yaml (same as the dashboard): colour the track itself, trains stay on top ── */
+function loadStyles(){
+  if (!MS) return;
+  MS.fetchJson(api('/api/map-style')).then(function(cfg){
+    styleCfg = cfg || { styles: [] };
+    var wanted = infraStyle ? infraStyle.id : load('style');
+    infraStyle = wanted ? MS.findStyle(styleCfg, wanted) : null;
+    if (infraStyle) loadInfra(); else drawInfra();
+  }).catch(function(){});
+}
+function loadInfra(){
+  Promise.all([
+    MS.fetchJson(api('/api/rails?mode=rails')),
+    MS.fetchJson(api('/api/railways')).catch(function(){ return { railways: [] }; }),
+    MS.fetchJson(api('/api/rail-routes')).catch(function(){ return { rails: {} }; })
+  ]).then(function(res){
+    var rails = (res[0] && res[0].rails) || [], railRoutes = res[2].rails || {};
+    infraData = { rails: rails, railRoutes: railRoutes, defs: MS.matchDefinitions(rails, res[1].railways || [], railRoutes) };
+    drawInfra();
+  }).catch(function(){});
+}
+function applyTrainDisplay(){
+  document.body.classList.toggle('show-speed', showSpeed);
+  document.body.classList.toggle('real-track', realTrack());
+}
+function drawInfra(){
+  applyTrainDisplay();
+  if (!map.getLayer('net-line')) return;
+  drawNet();
+  if (!infraStyle) { if (MS) MS.removeRailLayers(map, 'infra-'); renderStyleLegend(); return; }
+  if (!map.getSource('infra')) map.addSource('infra', { type: 'geojson', data: fc([]) });
+  MS.addRailLayers(map, 'infra', infraStyle, { prefix: 'infra-', casing: cssVar('--bg'), casingOpacity: 0.9, textColor: cssVar('--text2'), textHalo: cssVar('--bg') });
+  if (infraData) map.getSource('infra').setData(MS.railFeatures(infraData.rails, infraData.defs, infraData.railRoutes, infraStyle, ll));
+  renderStyleLegend();
+}
+function setInfraStyle(id){
+  infraStyle = id && MS ? MS.findStyle(styleCfg, id) : null;
+  store('style', infraStyle ? infraStyle.id : null);
+  renderMenu();
+  if (infraStyle && !infraData) loadInfra(); else drawInfra();
+}
+function renderStyleLegend(){
+  var el = $('styleLegend');
+  if (!infraStyle || !MS) { el.classList.remove('show'); return; }
+  el.innerHTML = '<div class="ttl">' + esc(infraStyle.name || infraStyle.id) + '</div>' + MS.legend(infraStyle).map(function(it){
+    return '<div class="r">' + MS.legendSwatch(it) + '<span>' + esc(it.label) + '</span></div>';
+  }).join('');
+  el.classList.add('show');
+}
+
+window.addEventListener('resize', function(){ stationsDirty = true; });
+applyStaticTexts();
+applyTheme();
+applyTrainDisplay();
+setLive(false);
+renderView();
+})();
+</script>
+</body>
+</html>

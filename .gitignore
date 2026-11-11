@@ -52,3 +52,18 @@ github.pub
 *~
 *.swp
 *.tmp
+
+# Third-party mods and source copies used only as references
+Tianjin-Metro-*.jar
+Minecraft-Transit-Railway-master/
+Transport-Simulation-Core-master/
+
+# Game logs
+logs/
+logs for JCM.txt
+
+# Reference screenshots (not part of the mod)
+mudar.PNG
+ref_made_by_JN.png
+mapa_teste.png
+map_current_state.png

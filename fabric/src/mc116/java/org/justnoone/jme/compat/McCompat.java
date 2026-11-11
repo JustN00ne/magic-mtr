@@ -1,5 +1,6 @@
 package org.justnoone.jme.compat;
 
+import net.minecraft.block.BlockState;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.EntityType;
 import net.minecraft.item.ItemStack;
@@ -10,6 +11,7 @@ import net.minecraft.util.Identifier;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.ChunkPos;
 import net.minecraft.util.registry.Registry;
+import net.minecraft.world.BlockView;
 
 /**
  * Minecraft API calls that changed between the supported versions (this copy: 1.16.x).
@@ -45,5 +47,14 @@ public final class McCompat {
 
     public static NbtCompound getOrCreateNbt(ItemStack stack) {
         return stack.getOrCreateTag();
+    }
+
+    public static int getMapColor(BlockState state, BlockView world, BlockPos pos) {
+        return state.getTopMaterialColor(world, pos).color;
+    }
+
+    public static int getBottomY(ServerWorld world) {
+        // 1.16 worlds always start at y = 0.
+        return 0;
     }
 }

@@ -39,6 +39,11 @@ public class AxleCounterEntity extends AxleCounterEntityBase {
     private String railId = "";
     private double railProgress;
     private boolean facingForward = true;
+    /**
+     * Which trains the counter detects: {@code 0} both ways, {@code 1} only trains running towards increasing
+     * {@link #railProgress}, {@code -1} only the opposite way. Set with MTR's brush.
+     */
+    private int detectionDirection;
     private boolean detecting;
     private int missingRailChecks;
     /**
@@ -140,7 +145,7 @@ public class AxleCounterEntity extends AxleCounterEntityBase {
         }
 
         if (tick % DETECT_TICKS == 0) {
-            detecting = rail != null && BlockAxleCounter.isRailPointOccupied(simulator, rail, railProgress);
+            detecting = rail != null && BlockAxleCounter.isRailPointOccupied(simulator, rail, railProgress, detectionDirection);
         }
     }
 
@@ -161,6 +166,30 @@ public class AxleCounterEntity extends AxleCounterEntityBase {
 
     public boolean isDetecting() {
         return detecting;
+    }
+
+    /**
+     * @return {@code 0} if the counter detects trains running either way, {@code 1} or {@code -1} if it only detects
+     * trains running towards increasing or decreasing rail progress
+     */
+    public int getDetectionDirection() {
+        return detectionDirection;
+    }
+
+    /**
+     * Cycles both ways, one way, the other way (right-click with MTR's brush).
+     *
+     * @return a description of the new setting for the player
+     */
+    public String cycleDetectionDirection() {
+        detectionDirection = detectionDirection == 0 ? 1 : detectionDirection > 0 ? -1 : 0;
+        if (detectionDirection == 0) {
+            return "both directions";
+        }
+        final Simulator simulator = BlockAxleCounter.getSimulator(new org.mtr.mapping.holder.World(getEntityWorld()));
+        final Rail rail = simulator == null ? null : RailAttachment.getRail(simulator, railId);
+        final String heading = rail == null ? null : RailAttachment.compassHeading(rail, railProgress, detectionDirection);
+        return heading == null ? (detectionDirection > 0 ? "one direction only" : "the other direction only") : "trains heading " + heading + " only";
     }
 
     public String getRailId() {
@@ -227,6 +256,7 @@ public class AxleCounterEntity extends AxleCounterEntityBase {
         railId = nbt.getString("jme_rail_id");
         railProgress = nbt.getDouble("jme_rail_progress");
         facingForward = !nbt.contains("jme_facing_forward") || nbt.getBoolean("jme_facing_forward");
+        detectionDirection = Integer.signum(nbt.getInt("jme_detection_direction"));
         controllers.clear();
         for (final long controller : nbt.getLongArray("jme_controllers")) {
             controllers.add(controller);
@@ -238,6 +268,7 @@ public class AxleCounterEntity extends AxleCounterEntityBase {
         nbt.putString("jme_rail_id", railId);
         nbt.putDouble("jme_rail_progress", railProgress);
         nbt.putBoolean("jme_facing_forward", facingForward);
+        nbt.putInt("jme_detection_direction", detectionDirection);
         nbt.putLongArray("jme_controllers", controllers.stream().mapToLong(Long::longValue).toArray());
     }
 }

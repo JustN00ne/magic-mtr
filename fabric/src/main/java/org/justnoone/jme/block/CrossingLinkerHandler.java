@@ -29,29 +29,44 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * Crossing Linker interactions (server authoritative). The crossing controller is always selected first: with the
- * linker in Start Node, End Node or Object Linking mode, right-click a crossing controller (a level crossing, or a legacy
- * controller) to select it, then right-click an axle counter on a rail (start / end node modes) or a crossing object
- * (object mode) to link it to the controller. Linking a counter or object that is already linked the same way unlinks
- * it. Right-clicking the selected controller again cancels; sneak + right-click cycles the modes and never changes a
+ * Crossing Linker interactions (server authoritative). With the linker in Start Node or End Node mode, right-click a
+ * crossing controller (a level crossing, or a legacy controller) and then an axle counter on a rail, or the counter
+ * first and then the controller, to link the counter to the controller: counters can be any distance away and a
+ * controller can have several of each. In Object Linking mode, right-click the controller and then a crossing object
+ * (a level crossing or crossing gate). Linking a counter or object that is already linked the same way unlinks it.
+ * Right-clicking the selected block again cancels; sneak + right-click cycles the modes and never changes a
  * connection. The selection ({@link Session}) lives on the server and is sent to the player's client, which draws the
  * outlines and preview line.
  * <p>
- * Also handles sneak + right-click on a level crossing with MTR's brush, which picks its bell sound.
+ * Also opens the crossing screens: right-click a level crossing or legacy controller with MTR's brush for the
+ * controller's screen (sneak + right-click a level crossing for its own lights settings), or a crossing gate for its
+ * settings.
  */
 public final class CrossingLinkerHandler {
 
     public static final org.mtr.mapping.holder.Identifier SESSION_PACKET_ID = new org.mtr.mapping.holder.Identifier(Jme.MOD_ID, "crossing_link_session");
     private static final int SESSION_CHECK_TICKS = 10;
+
     /**
-     * The selection is cancelled when the player moves further than this from the selected controller.
+     * Which crossing screen to open, see {@link ScreenOpener}.
      */
-    private static final double MAX_SESSION_DISTANCE = 96;
+    public static final int SCREEN_CONTROLLER = 0;
+    public static final int SCREEN_LIGHTS = 1;
+    public static final int SCREEN_GATE = 2;
 
     private static final Map<UUID, Session> SESSIONS = new HashMap<>();
     private static int sessionCheckCounter;
+    /**
+     * Set by the client, which opens the crossing screens; never set on a dedicated server.
+     */
+    @Nullable
+    private static ScreenOpener screenOpener;
 
     private CrossingLinkerHandler() {
+    }
+
+    public static void setScreenOpener(ScreenOpener opener) {
+        screenOpener = opener;
     }
 
     public static void register() {
@@ -62,12 +77,19 @@ public final class CrossingLinkerHandler {
             final ItemStack heldItem = player.getStackInHand(hand);
             final BlockPos pos = hitResult.getBlockPos();
 
-            // Sneak + right-click with MTR's brush picks the level crossing's next bell sound. Handled on the client
-            // too, so the brush's own action never runs on the crossing.
-            if (player.isSneaking() && heldItem.getItem() instanceof org.mtr.mod.item.ItemBrush && world.getBlockEntity(pos) instanceof BlockCrossingLights.BlockEntity) {
-                if (!world.isClient()) {
-                    final int bell = ((BlockCrossingLights.BlockEntity) world.getBlockEntity(pos)).cycleBell();
-                    player.sendMessage(TextHelper.literal("§aBell sound " + (bell + 1) + " of " + CrossingSignal.getBellCount()).data, true);
+            // MTR's brush opens the crossing screens. Handled on both sides, so the brush's own action never runs here.
+            if (heldItem.getItem() instanceof org.mtr.mod.item.ItemBrush) {
+                final net.minecraft.block.entity.BlockEntity blockEntity = world.getBlockEntity(pos);
+                final int screen;
+                if (blockEntity instanceof BlockCrossingGate.BlockEntity) {
+                    screen = SCREEN_GATE;
+                } else if (blockEntity instanceof CrossingControl.Holder) {
+                    screen = player.isSneaking() && blockEntity instanceof BlockCrossingLights.BlockEntity ? SCREEN_LIGHTS : SCREEN_CONTROLLER;
+                } else {
+                    return ActionResult.PASS;
+                }
+                if (world.isClient() && screenOpener != null) {
+                    screenOpener.open(pos, screen);
                 }
                 return ActionResult.success(world.isClient());
             }
@@ -80,7 +102,7 @@ public final class CrossingLinkerHandler {
                 return ActionResult.success(world.isClient());
             }
             final net.minecraft.block.entity.BlockEntity blockEntity = world.getBlockEntity(pos);
-            final boolean relevant = blockEntity instanceof CrossingControl.Holder || blockEntity instanceof CrossingObject || blockEntity instanceof BlockAxleCounter.BlockEntity;
+            final boolean relevant = blockEntity instanceof CrossingControl.Holder || blockEntity instanceof CrossingObject || blockEntity instanceof BlockAxleCounter.BlockEntity || blockEntity instanceof org.mtr.mod.block.BlockTrainSensorBase.BlockEntityBase;
             if (!relevant) {
                 return ActionResult.PASS;
             }
@@ -95,6 +117,14 @@ public final class CrossingLinkerHandler {
                 return ActionResult.PASS;
             }
             final ItemStack heldItem = player.getStackInHand(hand);
+            // MTR's brush makes the counter directional: it then only detects trains running one way.
+            if (heldItem.getItem() instanceof org.mtr.mod.item.ItemBrush) {
+                if (!world.isClient()) {
+                    final String setting = ((AxleCounterEntity) entity).cycleDetectionDirection();
+                    player.sendMessage(TextHelper.literal("§aAxle counter now detects " + setting + ".").data, true);
+                }
+                return ActionResult.success(world.isClient());
+            }
             if (!(heldItem.getItem() instanceof CrossingLinkerItem)) {
                 return ActionResult.PASS;
             }
@@ -111,22 +141,26 @@ public final class CrossingLinkerHandler {
     }
 
     public static void onModeChanged(ServerPlayerEntity player, CrossingLinkMode mode) {
-        player.sendMessage(TextHelper.literal("§7Crossing Linker: §f" + mode.displayName + (mode == CrossingLinkMode.INACTIVE ? "" : "§7 - right-click a crossing controller first")).data, true);
-        if (mode == CrossingLinkMode.INACTIVE) {
+        player.sendMessage(TextHelper.literal("§7Crossing Linker: §f" + mode.displayName + (mode == CrossingLinkMode.INACTIVE ? "" : mode.linksCounters() ? "§7 - right-click a crossing controller or an axle counter first" : "§7 - right-click a crossing controller first")).data, true);
+        final Session session = SESSIONS.get(player.getUuid());
+        if (mode == CrossingLinkMode.INACTIVE || session != null && session.isCounter() && !mode.linksCounters()) {
+            // A selected counter can only be linked in the node modes.
             clearSession(player);
         } else {
             // The outline colour follows the mode; resend so the client redraws it.
-            final Session session = SESSIONS.get(player.getUuid());
             sendSession(player, session);
         }
     }
 
     public static void onUseInAir(ServerPlayerEntity player, ItemStack stack) {
         final CrossingLinkMode mode = CrossingLinkMode.get(stack);
+        final Session session = SESSIONS.get(player.getUuid());
         if (mode == CrossingLinkMode.INACTIVE) {
             player.sendMessage(TextHelper.literal("§7Crossing Linker is inactive. Sneak + right-click to choose a mode.").data, true);
-        } else if (!SESSIONS.containsKey(player.getUuid())) {
-            player.sendMessage(TextHelper.literal("§eRight-click a crossing controller (level crossing) first.").data, true);
+        } else if (session == null) {
+            player.sendMessage(TextHelper.literal(mode.linksCounters() ? "§eRight-click a crossing controller (level crossing) or an axle counter first." : "§eRight-click a crossing controller (level crossing) first.").data, true);
+        } else if (session.isCounter()) {
+            player.sendMessage(TextHelper.literal("§eRight-click the crossing controller (level crossing) to link the axle counter to.").data, true);
         } else if (mode.linksCounters()) {
             player.sendMessage(TextHelper.literal("§eAim at an axle counter on the rail.").data, true);
         }
@@ -139,20 +173,32 @@ public final class CrossingLinkerHandler {
         }
         final Session session = getValidSession(player, world);
 
-        if (session != null && session.controllerPos.equals(pos)) {
+        if (session != null && pos.equals(session.controllerPos)) {
             clearSession(player);
             player.sendMessage(TextHelper.literal("§eSelection cancelled.").data, true);
             return;
         }
 
-        if (mode == CrossingLinkMode.OBJECT && session != null && blockEntity instanceof CrossingObject) {
+        // A counter selected first is linked to the controller clicked now.
+        if (session != null && session.isCounter() && mode.linksCounters() && blockEntity instanceof CrossingControl.Holder) {
+            final AxleCounterEntity counter = findCounter(world, session.counterId);
+            linkCounter(player, pos, ((CrossingControl.Holder) blockEntity).getCrossingControl(), mode, session.counterId, session.counterX, session.counterY, session.counterZ, session.railId, session.railProgress, counter);
+            return;
+        }
+
+        if (mode == CrossingLinkMode.OBJECT && session != null && !session.isCounter() && blockEntity instanceof CrossingObject) {
             linkObject(player, world, session, pos);
             return;
         }
 
+        if (mode == CrossingLinkMode.OBJECT && session != null && !session.isCounter() && blockEntity instanceof org.mtr.mod.block.BlockTrainSensorBase.BlockEntityBase) {
+            linkDetector(player, world, session, pos);
+            return;
+        }
+
         if (blockEntity instanceof CrossingControl.Holder) {
-            setSession(player, new Session(pos.toImmutable(), world.getRegistryKey().getValue()));
-            player.sendMessage(TextHelper.literal("§aSelected crossing controller at " + pos.toShortString() + ". " + (mode == CrossingLinkMode.OBJECT ? "Right-click a crossing object to link it." : "Right-click an axle counter on the rail to link it as the " + mode.displayName.toLowerCase() + ".")).data, true);
+            setSession(player, Session.controller(pos.toImmutable(), world.getRegistryKey().getValue()));
+            player.sendMessage(TextHelper.literal("§aSelected crossing controller at " + pos.toShortString() + ". " + (mode == CrossingLinkMode.OBJECT ? "Right-click a crossing object (level crossing or gate) or a train detector to link it." : "Right-click an axle counter on the rail (any distance) to link it as a " + mode.displayName.toLowerCase() + ".")).data, true);
             return;
         }
 
@@ -171,36 +217,45 @@ public final class CrossingLinkerHandler {
             return;
         }
         final Session session = getValidSession(player, world);
-        if (session == null) {
-            player.sendMessage(TextHelper.literal("§eRight-click a crossing controller (level crossing) first.").data, true);
+        if (session == null || session.isCounter()) {
+            // No controller selected yet: select the counter, then link it by clicking the controller.
+            if (session != null && counter.getUuid().equals(session.counterId)) {
+                clearSession(player);
+                player.sendMessage(TextHelper.literal("§eSelection cancelled.").data, true);
+                return;
+            }
+            setSession(player, Session.counter(counter.getUuid(), counter.getX(), counter.getY(), counter.getZ(), counter.getRailId(), counter.getRailProgress(), world.getRegistryKey().getValue()));
+            player.sendMessage(TextHelper.literal("§aSelected the axle counter. Right-click a crossing controller (any distance) to link it as a " + mode.displayName.toLowerCase() + ".").data, true);
             return;
         }
-        final CrossingControl control = CrossingLinks.getControl(world, session.controllerPos);
+        // The controller may be far away (counters link at any distance): load its chunk for this one action.
+        final CrossingControl control = CrossingLinks.loadControl(world, session.controllerPos);
         if (control == null) {
             clearSession(player);
             player.sendMessage(TextHelper.literal("§cThe selected crossing controller is gone. Select it again.").data, true);
             return;
         }
-        if (counter.getBlockPos().getSquaredDistance(session.controllerPos) > CrossingControl.MAX_LINK_DISTANCE * CrossingControl.MAX_LINK_DISTANCE) {
-            player.sendMessage(TextHelper.literal("§cThis axle counter is too far from the controller (max " + (int) CrossingControl.MAX_LINK_DISTANCE + " blocks).").data, true);
-            return;
-        }
+        linkCounter(player, session.controllerPos, control, mode, counter.getUuid(), counter.getX(), counter.getY(), counter.getZ(), counter.getRailId(), counter.getRailProgress(), counter);
+    }
 
+    private static void linkCounter(ServerPlayerEntity player, BlockPos controllerPos, CrossingControl control, CrossingLinkMode mode, UUID counterId, double x, double y, double z, String railId, double railProgress, @Nullable AxleCounterEntity counter) {
         final boolean startRole = mode == CrossingLinkMode.START_NODE;
-        final CrossingLinkRules.CounterLinkResult result = CrossingLinks.linkCounter(world, session.controllerPos, control, startRole, counter);
+        final CrossingLinkRules.CounterLinkResult result = CrossingLinks.linkCounter(controllerPos, control, startRole, counterId, x, y, z, railId, railProgress, counter);
         final String role = startRole ? "§2start node" : "§4end node";
+        final int count = (startRole ? control.getStarts() : control.getEnds()).size();
         switch (result) {
             case LINKED:
-                player.sendMessage(TextHelper.literal("§aLinked the axle counter as the " + role + "§a.").data, true);
-                break;
             case REPLACED:
-                player.sendMessage(TextHelper.literal("§aLinked the axle counter as the " + role + "§a, replacing the previous one.").data, true);
+                player.sendMessage(TextHelper.literal("§aLinked the axle counter as a " + role + "§a (" + count + " " + (startRole ? "start" : "end") + " node" + (count == 1 ? "" : "s") + ").").data, true);
                 break;
             case UNLINKED:
                 player.sendMessage(TextHelper.literal("§eUnlinked the " + role + "§e axle counter.").data, true);
                 break;
             case REJECTED_OTHER_ROLE:
-                player.sendMessage(TextHelper.literal("§cThis axle counter is already the controller's " + (startRole ? "end" : "start") + " node.").data, true);
+                player.sendMessage(TextHelper.literal("§cThis axle counter is already one of the controller's " + (startRole ? "end" : "start") + " nodes.").data, true);
+                return;
+            case REJECTED_FULL:
+                player.sendMessage(TextHelper.literal("§cThis controller already has " + CrossingControl.MAX_COUNTERS_PER_ROLE + " " + (startRole ? "start" : "end") + " nodes.").data, true);
                 return;
         }
         // The operation is complete: the outline and preview line are cleared.
@@ -208,7 +263,7 @@ public final class CrossingLinkerHandler {
     }
 
     private static void linkObject(ServerPlayerEntity player, World world, Session session, BlockPos objectPos) {
-        final CrossingControl control = CrossingLinks.getControl(world, session.controllerPos);
+        final CrossingControl control = CrossingLinks.loadControl(world, session.controllerPos);
         if (control == null) {
             clearSession(player);
             player.sendMessage(TextHelper.literal("§cThe selected crossing controller is gone. Select it again.").data, true);
@@ -231,8 +286,44 @@ public final class CrossingLinkerHandler {
     }
 
     /**
-     * Cancels selections whose player no longer holds the linker, changed dimension, moved away, or whose controller
-     * is gone.
+     * Links a train detector (or one of MTR's powered train sensors) as an input: the crossing closes while it is powered.
+     */
+    private static void linkDetector(ServerPlayerEntity player, World world, Session session, BlockPos detectorPos) {
+        final CrossingControl control = CrossingLinks.loadControl(world, session.controllerPos);
+        if (control == null) {
+            clearSession(player);
+            player.sendMessage(TextHelper.literal("§cThe selected crossing controller is gone. Select it again.").data, true);
+            return;
+        }
+        if (detectorPos.getSquaredDistance(session.controllerPos) > CrossingControl.MAX_LINK_DISTANCE * CrossingControl.MAX_LINK_DISTANCE) {
+            player.sendMessage(TextHelper.literal("§cThis train detector is too far from the controller (max " + (int) CrossingControl.MAX_LINK_DISTANCE + " blocks).").data, true);
+            return;
+        }
+        final int result = CrossingLinks.toggleDetector(control, detectorPos);
+        final int count = control.getDetectors().size();
+        if (result > 0) {
+            player.sendMessage(TextHelper.literal("§9Linked the train detector at " + detectorPos.toShortString() + ": the crossing closes while it is powered (" + count + " linked).").data, true);
+        } else if (result < 0) {
+            player.sendMessage(TextHelper.literal("§eUnlinked the train detector at " + detectorPos.toShortString() + " (" + count + " linked).").data, true);
+        } else {
+            player.sendMessage(TextHelper.literal("§cThis controller already has " + CrossingControl.MAX_LINKED_DETECTORS + " linked train detectors.").data, true);
+            return;
+        }
+        clearSession(player);
+    }
+
+    @Nullable
+    private static AxleCounterEntity findCounter(World world, UUID id) {
+        if (!(world instanceof net.minecraft.server.world.ServerWorld)) {
+            return null;
+        }
+        final net.minecraft.entity.Entity entity = ((net.minecraft.server.world.ServerWorld) world).getEntity(id);
+        return entity instanceof AxleCounterEntity && entity.isAlive() ? (AxleCounterEntity) entity : null;
+    }
+
+    /**
+     * Cancels selections whose player no longer holds the linker, changed dimension, or whose controller is gone. There
+     * is no distance limit, so a counter or controller can be selected and the player walk to the other end.
      */
     private static void checkSessions(MinecraftServer server) {
         if (SESSIONS.isEmpty() || ++sessionCheckCounter < SESSION_CHECK_TICKS) {
@@ -247,11 +338,11 @@ public final class CrossingLinkerHandler {
             final Session session = entry.getValue();
             final ItemStack heldItem = player.getMainHandStack();
             final World world = player.getEntityWorld();
-            final boolean valid = heldItem.getItem() instanceof CrossingLinkerItem
-                    && CrossingLinkMode.get(heldItem) != CrossingLinkMode.INACTIVE
+            final CrossingLinkMode mode = heldItem.getItem() instanceof CrossingLinkerItem ? CrossingLinkMode.get(heldItem) : CrossingLinkMode.INACTIVE;
+            final boolean valid = mode != CrossingLinkMode.INACTIVE
+                    && (!session.isCounter() || mode.linksCounters())
                     && world.getRegistryKey().getValue().equals(session.dimension)
-                    && player.getBlockPos().getSquaredDistance(session.controllerPos) <= MAX_SESSION_DISTANCE * MAX_SESSION_DISTANCE
-                    && (!world.isChunkLoaded(session.controllerPos.getX() >> 4, session.controllerPos.getZ() >> 4) || CrossingLinks.getControl(world, session.controllerPos) != null);
+                    && (session.isCounter() || !world.isChunkLoaded(session.controllerPos.getX() >> 4, session.controllerPos.getZ() >> 4) || CrossingLinks.getControl(world, session.controllerPos) != null);
             if (!valid) {
                 sendSession(player, null);
             }
@@ -279,32 +370,79 @@ public final class CrossingLinkerHandler {
         }
     }
 
+    /**
+     * Sends the selection: whether a controller is selected and its position, then whether a counter is selected and
+     * its position.
+     */
     private static void sendSession(PlayerEntity player, @Nullable Session session) {
         if (!(player instanceof ServerPlayerEntity)) {
             return;
         }
         final PacketByteBuf packetByteBuf = new PacketByteBuf(Unpooled.buffer());
-        packetByteBuf.writeBoolean(session != null);
-        if (session != null) {
+        final boolean controller = session != null && !session.isCounter();
+        packetByteBuf.writeBoolean(controller);
+        if (controller) {
             packetByteBuf.writeLong(session.controllerPos.asLong());
+        }
+        final boolean counter = session != null && session.isCounter();
+        packetByteBuf.writeBoolean(counter);
+        if (counter) {
+            packetByteBuf.writeDouble(session.counterX);
+            packetByteBuf.writeDouble(session.counterY);
+            packetByteBuf.writeDouble(session.counterZ);
         }
         MagicNetworkingCompat.sendToPlayer((ServerPlayerEntity) player, SESSION_PACKET_ID, packetByteBuf);
     }
 
     /**
-     * The crossing controller a player has selected with the linker.
+     * Opens a crossing screen on the client.
+     */
+    public interface ScreenOpener {
+        /**
+         * @param screen {@link #SCREEN_CONTROLLER}, {@link #SCREEN_LIGHTS} or {@link #SCREEN_GATE}
+         */
+        void open(BlockPos pos, int screen);
+    }
+
+    /**
+     * What a player has selected with the linker: a crossing controller, or an axle counter to link to a controller
+     * clicked next.
      */
     private static final class Session {
 
+        @Nullable
         private final BlockPos controllerPos;
+        @Nullable
+        private final UUID counterId;
+        private final double counterX, counterY, counterZ;
+        private final String railId;
+        private final double railProgress;
         /**
          * The dimension's id (a registry key's class moved between the supported versions; its id did not).
          */
         private final Identifier dimension;
 
-        private Session(BlockPos controllerPos, Identifier dimension) {
+        private Session(@Nullable BlockPos controllerPos, @Nullable UUID counterId, double counterX, double counterY, double counterZ, String railId, double railProgress, Identifier dimension) {
             this.controllerPos = controllerPos;
+            this.counterId = counterId;
+            this.counterX = counterX;
+            this.counterY = counterY;
+            this.counterZ = counterZ;
+            this.railId = railId;
+            this.railProgress = railProgress;
             this.dimension = dimension;
+        }
+
+        private static Session controller(BlockPos controllerPos, Identifier dimension) {
+            return new Session(controllerPos, null, 0, 0, 0, "", 0, dimension);
+        }
+
+        private static Session counter(UUID counterId, double x, double y, double z, String railId, double railProgress, Identifier dimension) {
+            return new Session(null, counterId, x, y, z, railId, railProgress, dimension);
+        }
+
+        private boolean isCounter() {
+            return counterId != null;
         }
     }
 }

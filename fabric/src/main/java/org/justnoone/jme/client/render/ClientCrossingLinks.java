@@ -9,7 +9,8 @@ import java.util.Iterator;
 import java.util.Map;
 
 /**
- * Client-side crossing link state: the crossing controller selected with the Crossing Linker (sent by the server), and
+ * Client-side crossing link state: the crossing controller or axle counter selected with the Crossing Linker (sent by
+ * the server), and
  * the crossing controllers in render distance (registered by {@link RenderCrossing}, which draws every loaded controller
  * each frame), whose connections the MTR brush shows.
  */
@@ -17,6 +18,11 @@ public final class ClientCrossingLinks {
 
     @Nullable
     private static BlockPos selectedController;
+    /**
+     * The axle counter selected first (to link to a controller clicked next), or {@code null}.
+     */
+    @Nullable
+    private static net.minecraft.util.math.Vec3d selectedCounter;
     private static final Map<Long, BlockEntity> CONTROLLERS = new HashMap<>();
 
     private ClientCrossingLinks() {
@@ -27,8 +33,14 @@ public final class ClientCrossingLinks {
         return selectedController;
     }
 
-    public static void setSelectedController(@Nullable BlockPos pos) {
-        selectedController = pos;
+    @Nullable
+    public static net.minecraft.util.math.Vec3d getSelectedCounter() {
+        return selectedCounter;
+    }
+
+    public static void setSelection(@Nullable BlockPos controller, @Nullable net.minecraft.util.math.Vec3d counter) {
+        selectedController = controller;
+        selectedCounter = counter;
     }
 
     static void onControllerRendered(BlockEntity blockEntity) {
@@ -51,6 +63,7 @@ public final class ClientCrossingLinks {
 
     public static void clear() {
         selectedController = null;
+        selectedCounter = null;
         CONTROLLERS.clear();
     }
 }

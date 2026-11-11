@@ -1,0 +1,8 @@
+{
+  "variants": {
+    "facing=north": { "model": "jme:block/pids_odd", "y": 90 },
+    "facing=east": { "model": "jme:block/pids_odd", "y": 180 },
+    "facing=south": { "model": "jme:block/pids_odd", "y": 270 },
+    "facing=west": { "model": "jme:block/pids_odd" }
+  }
+}

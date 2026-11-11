@@ -837,7 +837,7 @@ public abstract class WidgetMapRouteOverlayMixin {
 
     @Unique
     private static int jme$getRailSpeedColor(int speedKmh, int alpha) {
-        final int clampedSpeed = (int) Math.max(1L, Math.min(400L, speedKmh <= 0 ? 1 : speedKmh));
+        final int clampedSpeed = (int) Math.max(1L, Math.min((long) org.justnoone.jme.rail.MagicRailConstants.MAX_SPEED_KMH, speedKmh <= 0 ? 1 : speedKmh));
         final int rgb = MagicRailSpeedColor.colorForSpeed(clampedSpeed) & 0xFFFFFF;
         return jme$withAlpha(rgb, alpha);
     }

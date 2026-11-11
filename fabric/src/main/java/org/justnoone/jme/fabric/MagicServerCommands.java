@@ -245,17 +245,25 @@ public final class MagicServerCommands {
 
     private static void sendFeedback(ServerCommandSource source, String message) {
         final Text text = Text.of(message);
-        try {
-            final Method sendFeedbackTextMethod = source.getClass().getMethod("sendFeedback", Text.class, boolean.class);
-            sendFeedbackTextMethod.invoke(source, text, false);
-            return;
-        } catch (Exception ignored) {
-        }
-
-        try {
-            final Method sendFeedbackSupplierMethod = source.getClass().getMethod("sendFeedback", Supplier.class, boolean.class);
-            sendFeedbackSupplierMethod.invoke(source, (Supplier<Text>) () -> text, false);
-        } catch (Exception ignored) {
+        // sendFeedback takes a Text up to 1.19.4 and a Supplier<Text> from 1.20. Matched by signature, not by name:
+        // released jars use intermediary names, so getMethod("sendFeedback", ...) found nothing and every /magic
+        // reply was dropped. It is the only public void (Text|Supplier, boolean) method of ServerCommandSource.
+        for (final Method method : ServerCommandSource.class.getMethods()) {
+            final Class<?>[] parameterTypes = method.getParameterTypes();
+            if (method.getReturnType() != void.class || parameterTypes.length != 2 || parameterTypes[1] != boolean.class) {
+                continue;
+            }
+            try {
+                if (parameterTypes[0] == Text.class) {
+                    method.invoke(source, text, false);
+                    return;
+                }
+                if (parameterTypes[0] == Supplier.class) {
+                    method.invoke(source, (Supplier<Text>) () -> text, false);
+                    return;
+                }
+            } catch (Exception ignored) {
+            }
         }
     }
 }

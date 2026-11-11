@@ -120,6 +120,14 @@ public class BlockAxleCounter extends BlockExtension implements BlockWithEntity 
      * trains actually passing over the counter.
      */
     public static boolean isRailPointOccupied(Simulator simulator, Rail rail, double railProgress) {
+        return isRailPointOccupied(simulator, rail, railProgress, 0);
+    }
+
+    /**
+     * @param direction {@code 0} to detect trains running either way; {@code 1} only trains running towards the rail's
+     *                  second position (increasing {@code railProgress}), {@code -1} only trains running towards its first
+     */
+    public static boolean isRailPointOccupied(Simulator simulator, Rail rail, double railProgress, int direction) {
         final AxleCounterCache cache = getOrBuildCache(simulator);
         if (cache == null) {
             return false;
@@ -133,6 +141,9 @@ public class BlockAxleCounter extends BlockExtension implements BlockWithEntity 
                 }
                 final Rail pathRail = pathData.getRail();
                 if (pathRail != rail && (pathRail == null || !pathRail.getHexId().equals(rail.getHexId()))) {
+                    continue;
+                }
+                if (direction != 0 && (direction > 0) == pathData.reversePositions) {
                     continue;
                 }
                 final double length = pathData.getEndDistance() - pathData.getStartDistance();

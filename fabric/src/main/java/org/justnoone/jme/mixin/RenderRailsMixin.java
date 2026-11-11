@@ -21,8 +21,8 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public class RenderRailsMixin {
 
     private static final double JME_SPEED_TEXT_MAX_DISTANCE_SQUARED = 64D * 64D;
-    private static final String[] JME_KMH_LABEL_CACHE = new String[401];
-    private static final String[] JME_MPH_LABEL_CACHE = new String[401];
+    private static final String[] JME_KMH_LABEL_CACHE = new String[org.justnoone.jme.rail.MagicRailConstants.MAX_SPEED_KMH + 1];
+    private static final String[] JME_MPH_LABEL_CACHE = new String[org.justnoone.jme.rail.MagicRailConstants.MAX_SPEED_KMH + 1];
 
     @Inject(
             method = "renderRailStandard(Lorg/mtr/mapping/holder/ClientWorld;Lorg/mtr/core/data/Rail;Lorg/mtr/mod/render/RenderRails$RenderState;F)V",
@@ -89,7 +89,7 @@ public class RenderRailsMixin {
     }
 
     private static String jme$getCachedSpeedLabel(int speedKmh, boolean useMph) {
-        final int clamped = Math.max(1, Math.min(400, speedKmh));
+        final int clamped = Math.max(1, Math.min(org.justnoone.jme.rail.MagicRailConstants.MAX_SPEED_KMH, speedKmh));
         if (useMph) {
             String cached = JME_MPH_LABEL_CACHE[clamped];
             if (cached == null) {

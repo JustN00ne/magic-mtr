@@ -337,7 +337,8 @@ tasks.withType(JavaCompile).configureEach {
 }
 
 java {
-    toolchain.languageVersion = JavaLanguageVersion.of(21)
+    // Every supported version targets Java 17 or older (see targetJava), so a JDK 17 is enough to build and run.
+    toolchain.languageVersion = JavaLanguageVersion.of(17)
     withSourcesJar()
 }
 

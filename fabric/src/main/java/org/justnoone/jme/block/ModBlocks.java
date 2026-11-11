@@ -30,6 +30,13 @@ public class ModBlocks {
     public static BlockRegistryObject CROSSING_LIGHTS_BLOCK;
     public static BlockEntityTypeRegistryObject<BlockCrossingLights.BlockEntity> CROSSING_LIGHTS_BLOCK_ENTITY;
 
+    public static BlockRegistryObject RAILROAD_CROSSING_CONTROLLER_BLOCK;
+    public static BlockEntityTypeRegistryObject<BlockRailroadCrossingController.BlockEntity> RAILROAD_CROSSING_CONTROLLER_BLOCK_ENTITY;
+
+    public static BlockRegistryObject CROSSING_GATE_LEFT_BLOCK;
+    public static BlockRegistryObject CROSSING_GATE_RIGHT_BLOCK;
+    public static BlockEntityTypeRegistryObject<BlockCrossingGate.BlockEntity> CROSSING_GATE_BLOCK_ENTITY;
+
     public static void registerModBlocks(Registry registry) {
         registerPlatform(registry, "platform_german", false);
         registerPlatform(registry, "platform_polish", false);
@@ -130,6 +137,35 @@ public class ModBlocks {
                 new Identifier(Jme.MOD_ID, "crossing_lights"),
                 BlockCrossingLights.BlockEntity::new,
                 CROSSING_LIGHTS_BLOCK::get
+        );
+
+        RAILROAD_CROSSING_CONTROLLER_BLOCK = registry.registerBlockWithBlockItem(
+                new Identifier(Jme.MOD_ID, "railroad_crossing_controller"),
+                () -> new Block(new BlockRailroadCrossingController()),
+                ModItemGroups.JME_TAB
+        );
+        RAILROAD_CROSSING_CONTROLLER_BLOCK_ENTITY = registry.registerBlockEntityType(
+                new Identifier(Jme.MOD_ID, "railroad_crossing_controller"),
+                BlockRailroadCrossingController.BlockEntity::new,
+                RAILROAD_CROSSING_CONTROLLER_BLOCK::get
+        );
+
+        // The arm of a left gate swings to the left of the road in front of it, a right gate's to the right.
+        CROSSING_GATE_LEFT_BLOCK = registry.registerBlockWithBlockItem(
+                new Identifier(Jme.MOD_ID, "crossing_gate_left"),
+                () -> new Block(new BlockCrossingGate(false)),
+                ModItemGroups.JME_TAB
+        );
+        CROSSING_GATE_RIGHT_BLOCK = registry.registerBlockWithBlockItem(
+                new Identifier(Jme.MOD_ID, "crossing_gate_right"),
+                () -> new Block(new BlockCrossingGate(true)),
+                ModItemGroups.JME_TAB
+        );
+        CROSSING_GATE_BLOCK_ENTITY = registry.registerBlockEntityType(
+                new Identifier(Jme.MOD_ID, "crossing_gate"),
+                BlockCrossingGate.BlockEntity::new,
+                CROSSING_GATE_LEFT_BLOCK::get,
+                CROSSING_GATE_RIGHT_BLOCK::get
         );
     }
 

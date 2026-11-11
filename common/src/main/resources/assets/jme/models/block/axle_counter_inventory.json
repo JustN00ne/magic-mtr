@@ -1,0 +1,69 @@
+{
+  "textures": {
+    "tex_0": "jme:block/axle_counter",
+    "particle": "jme:block/axle_counter"
+  },
+  "display": {
+    "thirdperson_righthand": {
+      "rotation": [75, 45, 0],
+      "translation": [0, 0, 0],
+      "scale": [0.6, 0.6, 0.6]
+    },
+    "thirdperson_lefthand": {
+      "rotation": [75, 45, 0],
+      "translation": [0, 0, 0],
+      "scale": [0.6, 0.6, 0.6]
+    },
+    "firstperson_righthand": {
+      "rotation": [0, 45, 0],
+      "translation": [0, 2, 0],
+      "scale": [0.8, 0.8, 0.8]
+    },
+    "firstperson_lefthand": {
+      "rotation": [0, 225, 0],
+      "translation": [0, 2, 0],
+      "scale": [0.8, 0.8, 0.8]
+    },
+    "ground": {
+      "translation": [0, -1, 0],
+      "scale": [0.8, 0.8, 0.8]
+    },
+    "gui": {
+      "rotation": [30, 225, 0],
+      "translation": [0, 0, 0],
+      "scale": [1.3, 1.3, 1.3]
+    },
+    "fixed": {
+      "rotation": [0, 90, 0],
+      "translation": [0, 0, 0],
+      "scale": [1.2, 1.2, 1.2]
+    }
+  },
+  "elements": [
+    {
+      "name": "body",
+      "from": [7.25, 6.5, 4.25],
+      "to": [9.25, 9.5, 11.75],
+      "faces": {
+        "east": {"uv": [0, 13.5, 4, 16], "texture": "#tex_0"},
+        "west": {"uv": [0.125, 12.33, 3.875, 13], "texture": "#tex_0"},
+        "up": {"uv": [4.5, 7.5, 5.5, 11.5], "texture": "#tex_0"},
+        "down": {"uv": [4.875, 12, 5.875, 15.75], "texture": "#tex_0"},
+        "south": {"uv": [6.375, 9, 7.375, 11.5], "texture": "#tex_0"},
+        "north": {"uv": [0.125, 7, 1.125, 9.5], "texture": "#tex_0"}
+      }
+    },
+    {
+      "name": "slope",
+      "from": [6.75, 6.5, 4.25],
+      "to": [7.25, 8.75, 11.75],
+      "faces": {
+        "west": {"uv": [0.125, 10.45, 3.875, 12.33], "texture": "#tex_0"},
+        "up": {"uv": [0.125, 12.33, 3.875, 13], "rotation": 90, "texture": "#tex_0"},
+        "down": {"uv": [4.625, 12, 4.875, 15.75], "texture": "#tex_0"},
+        "south": {"uv": [6.125, 9, 6.375, 10.875], "texture": "#tex_0"},
+        "north": {"uv": [1.125, 7, 1.375, 8.875], "texture": "#tex_0"}
+      }
+    }
+  ]
+}

@@ -1,0 +1,3 @@
+# Level crossing material. map_Kd default.png makes MTR use the texture the renderer passes in (one per lamp state).
+newmtl level_crossing
+map_Kd default.png

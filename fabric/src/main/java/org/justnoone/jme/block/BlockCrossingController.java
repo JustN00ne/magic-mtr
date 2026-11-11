@@ -67,7 +67,7 @@ public class BlockCrossingController extends BlockExtension implements BlockWith
         return new BlockEntity(pos, state);
     }
 
-    public static class BlockEntity extends BlockEntityExtension implements CrossingControl.Holder {
+    public static class BlockEntity extends BlockEntityExtension implements CrossingTicker.Ticking, CrossingControl.Holder {
 
         private final CrossingControl control = new CrossingControl(this::markDirty2);
         // The controller is drawn as a crossing too, so its own lamps and bell follow the crossing like linked lights.
@@ -82,6 +82,7 @@ public class BlockCrossingController extends BlockExtension implements BlockWith
         @Override
         public void readCompoundTag(CompoundTag compoundTag) {
             super.readCompoundTag(compoundTag);
+            CrossingTicker.track(this);
             control.read(compoundTag);
         }
 
@@ -93,10 +94,11 @@ public class BlockCrossingController extends BlockExtension implements BlockWith
 
         @Override
         public void blockEntityTick() {
-            final World world = getWorld2();
-            if (world == null || world.isClient()) {
-                return;
-            }
+            CrossingTicker.onTick(this);
+        }
+
+        @Override
+        public void crossingTick(World world) {
 
             final boolean active = control.tick(world);
             BlockState state = getCachedState2();
@@ -115,7 +117,7 @@ public class BlockCrossingController extends BlockExtension implements BlockWith
                 redstoneCheckCounter = 0;
                 redstoneInput = world.data.isReceivingRedstonePower(getPos2().data);
             }
-            signal.tick(world, getPos2(), state, active || redstoneInput, 0);
+            signal.tick(world, getPos2(), state, control.isLightsOn() || redstoneInput, 0);
         }
 
         @Override

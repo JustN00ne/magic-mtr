@@ -8,6 +8,7 @@ import net.minecraft.client.render.entity.EntityRendererFactory;
 import net.minecraft.client.util.math.MatrixStack;
 import net.minecraft.util.Identifier;
 import net.minecraft.util.math.RotationAxis;
+import org.joml.Vector3f;
 import org.justnoone.jme.client.render.AxleCounterModel;
 import org.justnoone.jme.entity.AxleCounterEntity;
 import org.justnoone.jme.entity.ModEntities;
@@ -27,6 +28,15 @@ public final class McClientCompat {
     public static void rotateYawPitch(MatrixStack matrices, float yawDegrees, float pitchDegrees) {
         matrices.multiply(RotationAxis.POSITIVE_Y.rotationDegrees(yawDegrees));
         matrices.multiply(RotationAxis.POSITIVE_X.rotationDegrees(pitchDegrees));
+    }
+
+    /** Rotates by {@code degrees} (right-hand rule) around the given axis; the axis does not need to be normalized. */
+    public static void rotateAroundAxis(MatrixStack matrices, float axisX, float axisY, float axisZ, float degrees) {
+        final Vector3f axis = new Vector3f(axisX, axisY, axisZ);
+        if (axis.lengthSquared() < 1.0E-12F) {
+            return;
+        }
+        matrices.multiply(RotationAxis.of(axis.normalize()).rotationDegrees(degrees));
     }
 
     public static void entityVertex(VertexConsumer consumer, MatrixStack.Entry entry, float x, float y, float z, float u, float v, int overlay, int light, float nx, float ny, float nz) {

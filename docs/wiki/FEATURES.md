@@ -363,32 +363,25 @@ What it does:
 
 ### Configuring Alternatives In The Dashboard
 
-Where:
-- In the Dashboard, when editing a route destination.
+Step-by-step guide for players: [TUTORIAL-ALTERNATIVE-PLATFORMS.md](TUTORIAL-ALTERNATIVE-PLATFORMS.md).
 
-Buttons added by MAGIC (to the right of the custom destination field, only while a route stop is being edited and
-its station has another platform of the same transport mode):
-- `≣` opens the alternative platforms menu.
-- `⎇` toggles map-click selection mode; when active it shows `⎇*`.
+Alternative platforms are off by default: turn on `Alternative Platforms` in MAGIC's settings (Dashboard tab).
 
-The same menu is also available from the `...` menu of a route stop (`Alternative platforms`).
+While a route is being edited in the Dashboard, an `Alternative platforms...` button is shown under its stop list,
+above the route's name and colour (with the number of alternatives of the selected stop). It opens the route's
+alternative platforms screen at the selected stop, or at the route's first stop whose station has another platform.
+The same screen opens from a stop's right-click menu (`Alternative Platforms`) and its `...` menu.
 
-In the route's stop list, a stop with alternatives gets a collapsible `⎇ Alternative platforms (n)` row below it
-(click to open or close; remembered in `dashboard_folders.json`). Open, it lists each alternative. Clicking one opens
-the menu; its delete button (or `Remove alternative` in its `...` menu) removes that alternative, not the stop.
+The screen lists the route's stops on the left (with their number of alternatives); click one to edit it. On the right
+it shows that stop's main platform (`★ Main platform`), its alternatives (`Remove`) and the other platforms of the same
+station that can be added (`Add`). Changes apply immediately and are synced to the server.
+`Any free platform of the station` toggles the wildcard (all compatible platforms of the station, including ones built
+later).
 
-Method A: Alternative platforms menu
-1. Select a route destination (platform) you want to configure.
-2. Click `≣`.
-3. The menu shows the primary platform (`★ Primary`), the assigned alternatives (`Remove`) and the other platforms of
-   the same station that can be added (`Add`). Changes apply immediately and are synced to the server.
-4. `Use every platform in station` toggles the wildcard (all compatible platforms of the station, including ones built later).
+In the route's stop list, a stop with alternatives shows a mark after its name (`⎇1`, `⎇2`, `⎇ all`).
 
-Method B: Map-click selection mode
-1. Select a route destination (platform) you want to configure.
-2. Click `⎇` so it becomes `⎇*`.
-3. Click other platforms of the same station on the map to toggle them as alternatives (other platforms are ignored).
-4. Click `⎇*` again to exit selection mode.
+At a terminus where one route of a depot ends and the next starts at the same platform, the alternatives configured on
+either route apply; the screen says so for such a stop.
 
 Rules:
 - Only platforms of the same station and transport mode can be alternatives. Entries that become invalid (platform
@@ -640,10 +633,13 @@ Storage (server side, sent to every client):
 
 ## Railway Crossings
 
-Block `Polish Level Crossing`, items `Axle Counter` and `Crossing Linker`. Any Polish Level Crossing can be the crossing
-controller; other level crossings (and future crossing equipment such as barrier gates) are linked to it as objects.
-(The old `Crossing Controller` and axle counter blocks are no longer obtainable, but those already placed keep
-working.)
+Step-by-step guide for players: [TUTORIAL-LEVEL-CROSSING.md](TUTORIAL-LEVEL-CROSSING.md).
+
+Blocks `Polish Level Crossing`, `Railroad Crossing Controller`, `Crossing Gate (Left)` and `Crossing Gate (Right)`,
+items `Axle Counter` and `Crossing Linker`. The crossing controller is either a `Railroad Crossing Controller` (a
+lineside cabinet without lamps) or any Polish Level Crossing; the crossing's other level crossings and its gates are
+linked to it as objects and it controls them all. (The old `Crossing Controller` and axle counter blocks are no longer
+obtainable, but those already placed keep working.)
 
 Axle counters are placed directly on existing MTR rails: hold the `Axle Counter` and right-click while aiming at a rail.
 The counter clamps onto the rail to the right of the direction you are looking along it; the rail itself is not
@@ -653,44 +649,58 @@ the counter follows it. A counter only detects trains passing over its own point
 Crossing Linker modes (sneak + right-click to cycle; the icon shows the mode; this never changes a connection):
 Inactive -> Start Node (green) -> End Node (red) -> Object Linking (blue).
 
-Setup (the controller is always selected first):
+Setup:
 1. Start Node mode: right-click the controller (green outline, and a green line to where you aim), then right-click
-   the axle counter on one side of the crossing.
-2. End Node mode: the same for the counter on the other side (red).
-3. Object Linking mode: right-click the controller (blue outline), then right-click each level crossing that should
-   switch with it (the aimed one gets a blue outline; no line is drawn). Up to 16 objects.
-- Linking a counter or object that is already linked the same way unlinks it; a counter cannot be both start and end;
-  linking a new start/end counter replaces the old one. Right-click the selected controller again to cancel.
-- The selection is cancelled when you put the linker away, set it to Inactive, change dimension or move more than 96
-  blocks away. Counters and objects must be within 256 blocks of the controller.
+   an axle counter on one side of the crossing. Or right-click the counter first, then the controller.
+2. End Node mode: the same for the counters on the other side (red).
+3. Object Linking mode: right-click the controller (blue outline), then right-click each level crossing or gate that
+   should switch with it (the aimed one gets a blue outline; no line is drawn). Up to 16 objects.
+- A controller can have up to 16 start and 16 end counters (eg one per track), at any distance. Linking a counter or
+  object that is already linked the same way unlinks it; a counter cannot be both start and end. Right-click the
+  selected block again to cancel.
+- The selection is cancelled when you put the linker away, set it to Inactive or change dimension (not by distance, so
+  you can walk from a far counter to the controller). Objects must be within 256 blocks of the controller.
 
-Seeing the connections: hold an MTR brush. Each controller in range shows a green line from its start counter, a red
-line from its end counter (arrows point to the controller) and a blue line to each linked object (arrows point to the
+Seeing the connections: hold an MTR brush. Each controller in range shows a green line from each start counter, a red
+line from each end counter (arrows point to the controller) and a blue line to each linked object (arrows point to the
 object). Without a brush nothing is shown.
 
-A level crossing faces the player who places it (lamps towards the player), in steps of 45°: look diagonally while
-placing it to turn it by 45°, eg for a crossing on a curve. Sneak + right-click it with MTR's brush to switch
-between its 5 bell sounds (the new one rings once; each level crossing keeps its own choice).
+Screens (right-click with MTR's brush; they cover the whole screen, slightly transparent, and do not pause the game):
+- A controller (Railroad Crossing Controller or level crossing): *Components* lists every counter and object with its
+  coordinates, each can be unlinked; *Timeline & Controls* switches between automatic and closed by hand, and edits
+  when the lights switch on and the gates start lowering after a train is detected, and when the gates start rising
+  and the lights switch off after the crossing clears (drag the markers or use the buttons, 0.05 s steps, up to 15 s);
+  *Lights* (level crossings) chooses the bell sound or no sound, and the flash rate. Sneak + right-click a level
+  crossing opens its Lights tab directly.
+- A crossing gate: its arm length (4 to 11 blocks) and its bell sound or no sound (silent by default).
+
+A level crossing or gate faces the player who places it, in steps of 45°: look diagonally while placing it to turn it
+by 45°, eg for a crossing on a curve. A left gate's arm swings to the left as seen from the road in front of it, a right
+gate's to the right.
 
 Behaviour:
-- The crossing activates as soon as a train reaches either counter and stays active while the section is occupied.
-  It clears once every train that entered has passed the counter on the other side, so it works in both directions
-  and with closely following trains. With only one counter linked, it is active while that counter is occupied.
+- The crossing activates as soon as a train reaches any counter and stays active while the section is occupied.
+  It clears once every train that entered has passed a counter on the other side, so it works in both directions
+  and with closely following trains. With only start (or only end) counters linked, it is active while one is occupied.
 - Fail-safe: if no counter has seen a train for 2 minutes (eg a train reversed back out), the crossing clears.
-- While active, the lights' two lamps flash alternately (every 0.5 s) and a bell rings (heard up to 24 blocks away);
-  while idle both lamps are dark.
-- State is saved with the world; lights in unloaded chunks catch up when loaded.
+- The timeline then switches the lights and the gates (default: lights at once, gates 3 s later; both open as soon as
+  the crossing clears). Gates take 5 s to lower or rise.
+- While on, the lights' two lamps flash alternately (every 0.5 s by default) and a bell rings (heard up to 24 blocks
+  away) unless set to no sound; while idle both lamps are dark.
+- State is saved with the world; lights and gates in unloaded chunks catch up when loaded.
 
 Redstone:
-- Each level crossing outputs a redstone signal (15) while a train is in the crossing, for gates, lamps, etc.
+- Each level crossing and Railroad Crossing Controller outputs a redstone signal (15) while a train is in the crossing.
+- Each gate outputs a signal (15) while its controller has it closed.
 - Legacy axle counter blocks output a signal (15) while a train occupies their rail node.
-- A level crossing also flashes and rings while it receives a redstone signal (lever, button, detector rail, an axle
-  counter next to it, ...), without any linking. A redstone input only flashes and rings that level crossing: it does
-  not switch on its redstone output or linked level crossings (which would latch through adjacent dust).
+- A level crossing also flashes and rings, and a gate lowers, while it receives a redstone signal (lever, button,
+  detector rail, ...), without any linking. A redstone input never switches on their redstone output or linked
+  equipment (which would latch through adjacent dust).
 
 Performance:
 - Train positions are read once per second per dimension (shared by all counters); a counter looks its rail up by id
-  instead of searching the rails. Unloaded chunks are never loaded by crossings.
+  instead of searching the rails. Crossings never load chunks while running (linking a counter to a far controller
+  loads the controller's chunk once).
 
 ### MTR File Loader Thread Limit (Performance/Stability)
 

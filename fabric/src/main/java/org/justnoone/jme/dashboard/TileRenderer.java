@@ -6,6 +6,7 @@ import net.minecraft.server.world.ServerWorld;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.world.Heightmap;
 import net.minecraft.world.chunk.WorldChunk;
+import org.justnoone.jme.compat.McCompat;
 import org.justnoone.jme.config.MagicConfigPaths;
 import org.tukaani.xz.LZMA2Options;
 import org.tukaani.xz.XZInputStream;
@@ -46,13 +47,6 @@ public class TileRenderer {
     private static final int VOID_COLOR = 0xFF15171d;
     private static final long SAVE_DEBOUNCE_MILLIS = 5000L;
     private static final int MAX_TRANSPARENT_SCAN_DEPTH = 32;
-
-    private static volatile java.lang.reflect.Method cachedGetMapColorMethod;
-    private static volatile java.lang.reflect.Field cachedMapColorField;
-    private static volatile java.lang.reflect.Method cachedGetBottomYMethod;
-    private static volatile boolean mapColorResolved;
-    private static volatile boolean bottomYResolved;
-    private static volatile Integer cachedBottomY;
 
     private static class CachedTile {
         final byte[] bytes;
@@ -336,81 +330,19 @@ public class TileRenderer {
         tileCache.entrySet().removeIf(entry -> now - entry.getValue().renderedAt > STALE_LIMIT_MILLIS);
     }
 
-    /** Returns the bottom Y of the world. Uses getBottomY() on 1.17+; falls back to 0 on 1.16. */
+    // Both go through McCompat: looking "getBottomY"/"getMapColor" up by name only works in dev (production jars use
+    // intermediary names), which left every tile blank in released builds.
+
     private static int getBottomY(ServerWorld world) {
-        final Integer cached = cachedBottomY;
-        if (cached != null) {
-            return cached;
-        }
-
-        if (!bottomYResolved) {
-            try {
-                cachedGetBottomYMethod = world.getClass().getMethod("getBottomY");
-            } catch (Exception ignored) {
-                cachedGetBottomYMethod = null;
-            }
-            bottomYResolved = true;
-        }
-
-        try {
-            final java.lang.reflect.Method method = cachedGetBottomYMethod;
-            final int value = method == null ? 0 : (int) method.invoke(world);
-            cachedBottomY = value;
-            return value;
-        } catch (Exception e) {
-            cachedBottomY = 0;
-            return 0;
-        }
+        return McCompat.getBottomY(world);
     }
 
-    /** Returns the map color int for a block state. Handles API differences between MC versions. */
+    /** Returns the map color int for a block state. */
     private static int getMapColor(BlockState state, ServerWorld world, BlockPos pos) {
-        resolveMapColorAccessors(state);
-        final java.lang.reflect.Method method = cachedGetMapColorMethod;
-        final java.lang.reflect.Field colorField = cachedMapColorField;
-        if (method == null || colorField == null) {
-            return 0;
-        }
         try {
-            final Object color = method.invoke(state, world, pos);
-            if (color == null) {
-                return 0;
-            }
-            return colorField.getInt(color);
+            return McCompat.getMapColor(state, world, pos);
         } catch (Exception e) {
             return 0;
-        }
-    }
-
-    private static void resolveMapColorAccessors(BlockState state) {
-        if (mapColorResolved) {
-            return;
-        }
-        synchronized (TileRenderer.class) {
-            if (mapColorResolved) {
-                return;
-            }
-            try {
-                final java.lang.reflect.Method method = state.getClass().getMethod(
-                        "getMapColor",
-                        net.minecraft.world.BlockView.class,
-                        net.minecraft.util.math.BlockPos.class);
-                cachedGetMapColorMethod = method;
-                cachedMapColorField = method.getReturnType().getField("color");
-            } catch (Exception primary) {
-                try {
-                    for (final java.lang.reflect.Method method : state.getClass().getMethods()) {
-                        if (!"getMapColor".equals(method.getName()) || method.getParameterCount() != 2) {
-                            continue;
-                        }
-                        cachedGetMapColorMethod = method;
-                        cachedMapColorField = method.getReturnType().getField("color");
-                        break;
-                    }
-                } catch (Exception ignored) {
-                }
-            }
-            mapColorResolved = true;
         }
     }
 

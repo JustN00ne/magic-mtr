@@ -82,4 +82,23 @@ public final class MagicSimulatorAccess {
             });
         }
     }
+
+    /**
+     * Regenerates every depot that runs the route, like MTR's "Refresh" button.
+     */
+    public static void regenerateDepotsWithRoute(long routeId) {
+        for (final Simulator simulator : getSimulators()) {
+            simulator.run(() -> {
+                final ObjectArrayList<Depot> depots = new ObjectArrayList<>();
+                simulator.depots.forEach(depot -> {
+                    if (depot.getRouteIds().contains(routeId)) {
+                        depots.add(depot);
+                    }
+                });
+                if (!depots.isEmpty()) {
+                    Depot.generateDepots(simulator, depots);
+                }
+            });
+        }
+    }
 }

@@ -12,7 +12,7 @@ Join our [Discord server](https://discord.gg/K8xnzDADzS) to suggest things!
 
 # ❓ How does this mod work?
 
-This mod modifies MTR a lot, but does not need MTR (the MTR jar file) to be replaced. This mod basically acts like the middleman between both MTR (game) and you (the client). This makes MAGIC compatible with most modern MTR versions! 
+This mod modifies MTR a lot, but does not need MTR (the MTR jar file) to be replaced. This mod basically acts like the middleman between both MTR (game) and you (the client). This makes MAGIC compatible with most modern MTR versions!
 
 ---
 
@@ -21,7 +21,7 @@ This mod modifies MTR a lot, but does not need MTR (the MTR jar file) to be repl
 - Train tilt
 - Custom rail speeds
 - Max speed per train.
-- Custom rail colors (Including OpenRailwayMap styling) 
+- Custom rail colors (Including OpenRailwayMap styling)
 - Rail overlay in the MTR Dashboard
 - The exporting of such rails
 - Positioning the train stop position on the platform (start,end,middle)
@@ -31,7 +31,7 @@ This mod modifies MTR a lot, but does not need MTR (the MTR jar file) to be repl
 
 # 🏗️ How do I build the mod?
 
-Simply run the ```./build_mod``` command in the root directory of the mod. It will automatically build versions 1.16.5 through 1.20.4. 
+Simply run the ```./build_mod``` command in the root directory of the mod. It will automatically build versions 1.16.5 through 1.20.4.
 
 ---
 

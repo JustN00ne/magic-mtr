@@ -1,5 +1,6 @@
 package org.justnoone.jme.mixin;
 
+import net.fabricmc.loader.api.FabricLoader;
 import org.justnoone.jme.client.data.SidingSpeedSliderFileStore;
 import org.justnoone.jme.client.screen.DepotCancellationSettingsScreen;
 import org.justnoone.jme.config.JmeConfig;
@@ -40,13 +41,21 @@ import java.util.function.IntFunction;
 public abstract class SidingScreenMixin implements IGui {
 
     /**
-     * When the UI slider shows "No limit" (at 300 km/h), we actually store a high cap in the siding
-     * rather than the vanilla 300 km/h. This keeps compatibility with MTR internals while making
-     * "No limit" effectively unrestricted for normal gameplay.
+     * The slider goes from 1 to 500 km/h, then "No limit" (the last step, 501). "No limit" stores a high cap in the
+     * siding rather than MTR's 300 km/h, which keeps compatibility with MTR internals while making it effectively
+     * unrestricted for normal gameplay.
      */
     private static final int JME_NO_LIMIT_CAP_KMH = 1000;
-    private static final int JME_MAX_MANUAL_SPEED_SLIDER_KMH = 300;
-    private static final int JME_DEFAULT_MANUAL_SPEED_SLIDER_KMH = 300;
+    private static final int JME_MAX_MANUAL_SPEED_SLIDER_KMH = 501;
+    private static final int JME_DEFAULT_MANUAL_SPEED_SLIDER_KMH = JME_MAX_MANUAL_SPEED_SLIDER_KMH;
+
+    /**
+     * Tianjin Metro adds a "Duplicate Settings" button (and its logo) below MTR's rows, at a position computed for MTR's
+     * own layout: y = 214, or 274 with "Manual" on. With it installed, MTR's rows keep their places and MAGIC's
+     * additions go around that button instead of adding a row above it.
+     */
+    @Unique
+    private static final boolean JME_TJMETRO_LOADED = FabricLoader.getInstance().isModLoaded("tjmetro");
 
     @Shadow
     private WidgetShorterSlider sliderDecelerationConstant;
@@ -78,7 +87,15 @@ public abstract class SidingScreenMixin implements IGui {
                     : JME_DEFAULT_MANUAL_SPEED_SLIDER_KMH;
             final int sliderFromSiding = kmhFromSiding >= JME_NO_LIMIT_CAP_KMH ? JME_MAX_MANUAL_SPEED_SLIDER_KMH : Math.min(kmhFromSiding, JME_MAX_MANUAL_SPEED_SLIDER_KMH);
             final Integer cachedKmh = SidingSpeedSliderFileStore.get(sidingKey);
-            sliderMaxManualSpeed.setValue(cachedKmh == null ? sliderFromSiding : Math.max(1, Math.min(JME_MAX_MANUAL_SPEED_SLIDER_KMH, cachedKmh)));
+            // A siding without a limit always shows "No limit": before 1.4.2 the slider's last step (300) meant no
+            // limit, so a cached 300 must not turn into 300 km/h.
+            sliderMaxManualSpeed.setValue(cachedKmh == null || kmhFromSiding >= JME_NO_LIMIT_CAP_KMH ? sliderFromSiding : Math.max(1, Math.min(JME_MAX_MANUAL_SPEED_SLIDER_KMH, cachedKmh)));
+        }
+
+        if (JME_TJMETRO_LOADED) {
+            jme$initCancellationButton();
+            jme$layOutAroundTianjinMetro();
+            return;
         }
 
         sliderMaxManualSpeed.setY2(108);
@@ -109,6 +126,27 @@ public abstract class SidingScreenMixin implements IGui {
         final boolean hasDepot = jme$resolveDepotId() != 0L;
         jme$cancellationButton.visible = hasDepot;
         jme$cancellationButton.active = hasDepot;
+    }
+
+    /**
+     * With Tianjin Metro: MTR's rows stay where MTR puts them. The always visible maximum speed slider takes MTR's own
+     * place (y = 208) with "Manual" on, and goes below Tianjin Metro's button (y = 214) with it off; "Cancellations"
+     * follows it, above Tianjin Metro's button in manual mode (y = 274).
+     */
+    @Unique
+    private void jme$layOutAroundTianjinMetro() {
+        final boolean manual = buttonIsManual.isChecked2();
+        sliderMaxManualSpeed.setY2(manual ? 208 : 238);
+        if (jme$cancellationButton != null) {
+            IDrawing.setPositionAndWidth(jme$cancellationButton, 20, manual ? 248 : 258, 120);
+        }
+    }
+
+    @Inject(method = "render", at = @At("HEAD"))
+    private void jme$followManualCheckbox(org.mtr.mapping.mapper.GraphicsHolder graphicsHolder, int mouseX, int mouseY, float delta, CallbackInfo ci) {
+        if (JME_TJMETRO_LOADED) {
+            jme$layOutAroundTianjinMetro();
+        }
     }
 
     @Unique
@@ -213,7 +251,7 @@ public abstract class SidingScreenMixin implements IGui {
         graphicsHolder.drawText(
                 TextHelper.translatable("gui.mtr.max_manual_speed"),
                 20,
-                114,
+                JME_TJMETRO_LOADED ? 244 : 114,
                 0xFFFFFFFF,
                 false,
                 org.mtr.mapping.mapper.GraphicsHolder.getDefaultLight()
@@ -247,28 +285,28 @@ public abstract class SidingScreenMixin implements IGui {
 
     @ModifyConstant(method = "render", constant = @Constant(intValue = 114))
     private int jme$moveDecelerationLabelDown(int original) {
-        return 134;
+        return JME_TJMETRO_LOADED ? original : 134;
     }
 
     @ModifyConstant(method = "render", constant = @Constant(intValue = 134))
     private int jme$moveDelayedIncreaseLabelDown(int original) {
-        return 154;
+        return JME_TJMETRO_LOADED ? original : 154;
     }
 
     @ModifyConstant(method = "render", constant = @Constant(intValue = 154))
     private int jme$moveDelayedReduceLabelDown(int original) {
-        return 174;
+        return JME_TJMETRO_LOADED ? original : 174;
     }
 
     @ModifyConstant(method = "render", constant = @Constant(intValue = 214))
     private int jme$moveMaxManualSpeedLabelUp(int original) {
         // Align the "Maximum Drive Speed" label with the relocated slider.
-        return 114;
+        return JME_TJMETRO_LOADED ? original : 114;
     }
 
     @ModifyConstant(method = "render", constant = @Constant(intValue = 234))
     private int jme$moveManualToAutomaticLabelDown(int original) {
-        return 254;
+        return JME_TJMETRO_LOADED ? original : 254;
     }
 
 }

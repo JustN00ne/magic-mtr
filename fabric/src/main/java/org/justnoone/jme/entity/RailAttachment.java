@@ -103,6 +103,28 @@ public final class RailAttachment {
         return (ahead.x - behind.x) * look[0] + (ahead.z - behind.z) * look[2] >= 0;
     }
 
+    /**
+     * The compass heading ("north", "north-east", ...) of a train running along the rail at {@code railProgress}
+     * towards increasing ({@code direction > 0}) or decreasing progress.
+     */
+    @Nullable
+    static String compassHeading(Rail rail, double railProgress, int direction) {
+        final double length = rail.railMath.getLength();
+        final Vector ahead = rail.railMath.getPosition(Math.min(length, railProgress + TANGENT_STEP), false);
+        final Vector behind = rail.railMath.getPosition(Math.max(0, railProgress - TANGENT_STEP), false);
+        if (ahead == null || behind == null) {
+            return null;
+        }
+        final double dx = (ahead.x - behind.x) * direction;
+        final double dz = (ahead.z - behind.z) * direction;
+        if (Math.abs(dx) + Math.abs(dz) < 1E-9) {
+            return null;
+        }
+        // Minecraft: -z is north, +x is east. 0 = north, clockwise in eighths.
+        final int octant = (int) Math.floorMod(Math.round(Math.atan2(dx, -dz) / (Math.PI / 4)), 8L);
+        return new String[]{"north", "north-east", "east", "south-east", "south", "south-west", "west", "north-west"}[octant];
+    }
+
     private static double[] toArray(Vector vector) {
         return new double[]{vector.x, vector.y, vector.z};
     }

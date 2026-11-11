@@ -4,8 +4,10 @@ import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.loader.api.FabricLoader;
 import org.justnoone.jme.Jme;
+import org.justnoone.jme.block.CrossingConfigPackets;
 import org.justnoone.jme.block.CrossingLinkerHandler;
 import org.justnoone.jme.block.CrossingSignal;
+import org.justnoone.jme.block.CrossingTicker;
 import org.justnoone.jme.entity.ModEntities;
 import org.justnoone.jme.block.ModBlocks;
 import org.justnoone.jme.item.ModItemGroups;
@@ -39,6 +41,8 @@ public class JmeFabric implements ModInitializer {
         MagicRailNetworking.registerServer();
         MagicServerCommands.register();
         CrossingLinkerHandler.register();
+        CrossingConfigPackets.register();
+        CrossingTicker.register();
 
         ServerLifecycleEvents.SERVER_STARTED.register(server -> {
             final MagicConfigReloader.ReloadResult result = MagicConfigReloader.reloadAllFromDisk();

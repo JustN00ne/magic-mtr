@@ -11,7 +11,8 @@ import java.util.Properties;
 public final class SidingSpeedSliderFileStore {
 
     private static final Path FILE_PATH = MagicConfigPaths.resolveConfigFile("siding_speed_slider.properties", "jme_siding_speed_slider.properties");
-    private static final int JME_MAX_MANUAL_SPEED_SLIDER_KMH = 300;
+    // 1..500 km/h, and 501 for "No limit" (see SidingScreenMixin).
+    private static final int JME_MAX_MANUAL_SPEED_SLIDER_KMH = 501;
     private static final Properties PROPERTIES = new Properties();
     private static boolean loaded;
 

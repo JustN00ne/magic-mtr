@@ -44,4 +44,12 @@ public final class McCompat {
     public static NbtCompound getOrCreateNbt(ItemStack stack) {
         return stack.getOrCreateNbt();
     }
+
+    public static int getMapColor(net.minecraft.block.BlockState state, net.minecraft.world.BlockView world, BlockPos pos) {
+        return state.getMapColor(world, pos).color;
+    }
+
+    public static int getBottomY(ServerWorld world) {
+        return world.getBottomY();
+    }
 }

@@ -1,0 +1,8 @@
+{
+  "parent": "jme:block/platform_overlay_base",
+  "textures": {
+    "overlay": "jme:block/platform_overlay_tactile_y2",
+    "particle": "jme:block/platform_overlay_tactile_y2"
+  }
+}
+

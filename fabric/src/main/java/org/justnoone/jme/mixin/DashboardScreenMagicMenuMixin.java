@@ -7,6 +7,7 @@ import org.justnoone.jme.client.screen.AlternativePlatformMenuScreen;
 import org.justnoone.jme.client.screen.RouteFolderEditScreen;
 import org.justnoone.jme.client.ui.OverlayClickHandler;
 import org.justnoone.jme.client.ui.OverlayMenuState;
+import org.justnoone.jme.dashboard.MagicDashboardServer;
 import org.justnoone.jme.rail.AlternativePlatformRegistry;
 import org.mtr.core.Main;
 import org.mtr.core.data.AreaBase;
@@ -22,6 +23,7 @@ import org.mtr.mapping.holder.Identifier;
 import org.mtr.mapping.holder.MinecraftClient;
 import org.mtr.mapping.holder.Screen;
 import org.mtr.mapping.holder.Text;
+import org.mtr.mapping.holder.Util;
 import org.mtr.mapping.mapper.ButtonWidgetExtension;
 import org.mtr.mapping.mapper.GraphicsHolder;
 import org.mtr.mapping.mapper.GuiDrawing;
@@ -63,6 +65,18 @@ public abstract class DashboardScreenMagicMenuMixin extends ScreenExtension impl
     // The user requested restoring the dock buttons.
     @Unique
     private static final boolean JME_ENABLE_DASHBOARD_ROW_OVERFLOW_MENU = false;
+
+    @Unique
+    private static final String[] JME_MAGIC_MENU_LABELS = new String[]{
+            "Export PNG (viewport)",
+            "Export PNG (all rails)",
+            "Export SVG (viewport)",
+            "Export SVG (all rails)",
+            "Open Livemap in browser",
+    };
+
+    @Unique
+    private static final int JME_MAGIC_MENU_LIVEMAP_INDEX = 4;
 
     @Unique
     private ButtonWidgetExtension jme$magicMenuButton;
@@ -178,7 +192,7 @@ public abstract class DashboardScreenMagicMenuMixin extends ScreenExtension impl
         final int rowHeight = SQUARE_SIZE;
         final int gap = 2;
         final int padding = 6;
-        final int rows = 4;
+        final int rows = JME_MAGIC_MENU_LABELS.length;
         final int panelHeight = rows * (rowHeight + gap) - gap;
         final int[] magicLayout = jme$getMagicMenuLayout(panelWidth, panelHeight, padding);
         final int panelX = magicLayout[0];
@@ -210,12 +224,7 @@ public abstract class DashboardScreenMagicMenuMixin extends ScreenExtension impl
 
         guiDrawing.finishDrawingRectangle();
 
-        final String[] labels = new String[]{
-                "Export PNG (viewport)",
-                "Export PNG (all rails)",
-                "Export SVG (viewport)",
-                "Export SVG (all rails)",
-        };
+        final String[] labels = JME_MAGIC_MENU_LABELS;
 
         for (int i = 0; i < labels.length; i++) {
             final int rowY = panelY + padding + i * (rowHeight + gap);
@@ -305,7 +314,7 @@ public abstract class DashboardScreenMagicMenuMixin extends ScreenExtension impl
         final int rowHeight = SQUARE_SIZE;
         final int gap = 2;
         final int padding = 6;
-        final int rows = 4;
+        final int rows = JME_MAGIC_MENU_LABELS.length;
         final int panelHeight = rows * (rowHeight + gap) - gap;
         final int[] magicLayout = jme$getMagicMenuLayout(panelWidth, panelHeight, padding);
         final int panelX = magicLayout[0];
@@ -327,6 +336,12 @@ public abstract class DashboardScreenMagicMenuMixin extends ScreenExtension impl
         final int inside = (int) Math.floor(relativeY - index * (double) stride);
         if (index < 0 || index >= rows || inside < 0 || inside >= rowHeight) {
             // Clicked the panel padding or a gap; consume.
+            return true;
+        }
+
+        if (index == JME_MAGIC_MENU_LIVEMAP_INDEX) {
+            jme$openLivemap();
+            jme$magicMenuOpen = false;
             return true;
         }
 
@@ -357,6 +372,23 @@ public abstract class DashboardScreenMagicMenuMixin extends ScreenExtension impl
 
         jme$magicMenuOpen = false;
         return true;
+    }
+
+    @Unique
+    private void jme$openLivemap() {
+        final String url = MagicDashboardServer.getLivemapUrl();
+        // The dashboard only listens on loopback, so it is reachable only when this client hosts the world.
+        if (!MagicDashboardServer.isRunning()) {
+            jme$sendClientMessage("MAGIC: The Livemap runs on the computer hosting the server (" + url + ")");
+            return;
+        }
+        try {
+            Util.getOperatingSystem().open(url);
+            jme$sendClientMessage("MAGIC: Opened the Livemap in your browser (" + url + ")");
+        } catch (Throwable throwable) {
+            Main.LOGGER.warn("[MAGIC] Failed opening the Livemap", throwable);
+            jme$sendClientMessage("MAGIC: Open " + url + " in your browser");
+        }
     }
 
     @Unique

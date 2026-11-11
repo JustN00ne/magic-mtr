@@ -1,0 +1,3 @@
+# Crossing pole material
+newmtl pole
+map_Kd jme:textures/block/crossing_pl_o1.png

@@ -20,8 +20,9 @@ import java.util.List;
 
 /**
  * The level crossing. Any level crossing can be the main one of a crossing: axle counters are linked to it with the
- * Crossing Linker, and the other level crossings of the same crossing (eg the other side of the road) are linked to it
- * and switch with it. A level crossing also flashes and rings while it receives a redstone signal.
+ * Crossing Linker, and the other level crossings and the crossing gates of the same crossing (eg the other side of the
+ * road) are linked to it and switch with it, following its timeline. A level crossing also flashes and rings while it
+ * receives a redstone signal. Right-click it with MTR's brush for its screen (components, timeline and its own lights).
  */
 public class BlockCrossingLights extends BlockExtension implements BlockWithEntity {
 
@@ -99,7 +100,7 @@ public class BlockCrossingLights extends BlockExtension implements BlockWithEnti
      * A level crossing is both a crossing controller (axle counters and other crossing objects link to it) and a
      * crossing object (it can follow another controller).
      */
-    public static class BlockEntity extends BlockEntityExtension implements CrossingControl.Holder, CrossingObject {
+    public static class BlockEntity extends BlockEntityExtension implements CrossingTicker.Ticking, CrossingControl.Holder, CrossingObject {
 
         /**
          * Set by the main level crossing (or legacy controller) this one is linked to.
@@ -113,9 +114,11 @@ public class BlockCrossingLights extends BlockExtension implements BlockWithEnti
         private boolean redstoneActive;
         private int redstoneCheckCounter;
         /**
-         * Which of the {@link CrossingSignal} bell sounds this level crossing rings, changed with MTR's brush.
+         * Which of the {@link CrossingSignal} bell sounds this level crossing rings, or {@link CrossingSignal#BELL_NONE},
+         * chosen in its screen.
          */
         private int bell;
+        private int flashRate = CrossingSignal.DEFAULT_FLASH_RATE;
         private final CrossingControl control = new CrossingControl(this::markDirty2);
         private final CrossingSignal signal = new CrossingSignal();
 
@@ -126,10 +129,12 @@ public class BlockCrossingLights extends BlockExtension implements BlockWithEnti
         @Override
         public void readCompoundTag(CompoundTag compoundTag) {
             super.readCompoundTag(compoundTag);
+            CrossingTicker.track(this);
             control.read(compoundTag);
             followActive = compoundTag.getBoolean("jme_crossing_follow_active");
             redstoneActive = compoundTag.getBoolean("jme_crossing_redstone_active");
             bell = CrossingSignal.clampBell(compoundTag.getInt("jme_crossing_bell"));
+            flashRate = compoundTag.data.contains("jme_crossing_flash_rate") ? CrossingSignal.clampFlashRate(compoundTag.getInt("jme_crossing_flash_rate")) : CrossingSignal.DEFAULT_FLASH_RATE;
         }
 
         @Override
@@ -139,16 +144,20 @@ public class BlockCrossingLights extends BlockExtension implements BlockWithEnti
             compoundTag.putBoolean("jme_crossing_follow_active", followActive);
             compoundTag.putBoolean("jme_crossing_redstone_active", redstoneActive);
             compoundTag.putInt("jme_crossing_bell", bell);
+            compoundTag.putInt("jme_crossing_flash_rate", flashRate);
         }
 
         @Override
         public void blockEntityTick() {
-            final World world = getWorld2();
-            if (world == null || world.isClient()) {
-                return;
-            }
+            CrossingTicker.onTick(this);
+        }
+
+        @Override
+        public void crossingTick(World world) {
 
             final boolean trainActive = control.tick(world) || followActive;
+            // The lamps and bell follow the timeline, which can switch them on after and off after the train.
+            final boolean lightsOn = control.isLightsOn() || followActive;
 
             if (++redstoneCheckCounter >= REDSTONE_CHECK_TICKS) {
                 redstoneCheckCounter = 0;
@@ -165,21 +174,29 @@ public class BlockCrossingLights extends BlockExtension implements BlockWithEnti
                 state = state.with(POWERED_PROPERTY, trainActive);
                 world.setBlockState(getPos2(), state, 3);
             }
-            signal.tick(world, getPos2(), state, trainActive || redstoneActive, bell);
+            signal.tick(world, getPos2(), state, lightsOn || redstoneActive, bell, flashRate);
         }
 
         /**
-         * Switches to the next bell sound (rings it once) and returns its index.
+         * Applies the settings chosen in the level crossing's screen; a new bell rings once.
          */
-        public int cycleBell() {
-            final int newBell = (bell + 1) % CrossingSignal.getBellCount();
+        void configure(int newBell, int newFlashRate) {
+            newBell = CrossingSignal.clampBell(newBell);
             final World world = getWorld2();
-            if (world != null) {
+            if (world != null && newBell != bell) {
                 signal.changeBell(world, getPos2(), bell, newBell);
             }
             bell = newBell;
+            flashRate = CrossingSignal.clampFlashRate(newFlashRate);
             markDirty2();
+        }
+
+        public int getBell() {
             return bell;
+        }
+
+        public int getFlashRate() {
+            return flashRate;
         }
 
         public void setFollowActive(boolean followActive) {
@@ -197,6 +214,11 @@ public class BlockCrossingLights extends BlockExtension implements BlockWithEnti
         @Override
         public void setCrossingActive(boolean active) {
             setFollowActive(active);
+        }
+
+        @Override
+        public String getCrossingObjectName() {
+            return "Level crossing";
         }
 
         @Override

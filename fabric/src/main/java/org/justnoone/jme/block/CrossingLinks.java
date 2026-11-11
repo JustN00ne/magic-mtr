@@ -27,8 +27,21 @@ public final class CrossingLinks {
         return blockEntity instanceof CrossingControl.Holder ? ((CrossingControl.Holder) blockEntity).getCrossingControl() : null;
     }
 
-    public static CrossingLinkRules.CounterLinkResult linkCounter(World world, BlockPos controllerPos, CrossingControl control, boolean startRole, AxleCounterEntity counter) {
-        return control.linkCounter(new org.mtr.mapping.holder.World(world), new org.mtr.mapping.holder.BlockPos(controllerPos), startRole, counter);
+    /**
+     * Like {@link #getControl}, but loads the controller's chunk if needed: axle counters can be linked at any
+     * distance, so the controller may be far from the player. Only for a player's action, never from a tick.
+     */
+    @Nullable
+    public static CrossingControl loadControl(World world, BlockPos pos) {
+        world.getChunk(pos.getX() >> 4, pos.getZ() >> 4);
+        return getControl(world, pos);
+    }
+
+    /**
+     * @param counter the counter entity, or {@code null} if it is not loaded (linked from a counter selected earlier)
+     */
+    public static CrossingLinkRules.CounterLinkResult linkCounter(BlockPos controllerPos, CrossingControl control, boolean startRole, UUID counterId, double x, double y, double z, String railId, double railProgress, @Nullable AxleCounterEntity counter) {
+        return control.linkCounter(new org.mtr.mapping.holder.BlockPos(controllerPos), startRole, counterId, x, y, z, railId, railProgress, counter);
     }
 
     /**
@@ -36,6 +49,13 @@ public final class CrossingLinks {
      */
     public static int toggleObject(World world, CrossingControl control, BlockPos objectPos) {
         return control.toggleObject(new org.mtr.mapping.holder.World(world), new org.mtr.mapping.holder.BlockPos(objectPos));
+    }
+
+    /**
+     * @return {@code 1} if linked, {@code -1} if unlinked, {@code 0} if the maximum is already linked
+     */
+    public static int toggleDetector(CrossingControl control, BlockPos detectorPos) {
+        return control.toggleDetector(new org.mtr.mapping.holder.BlockPos(detectorPos));
     }
 
     public static int getLinkedObjectsCount(CrossingControl control) {

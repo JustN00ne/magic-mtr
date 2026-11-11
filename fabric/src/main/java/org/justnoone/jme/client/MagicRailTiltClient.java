@@ -275,6 +275,14 @@ public final class MagicRailTiltClient {
         return index;
     }
 
+    /**
+     * Yaw of the car the local player rides, in MTR's convention (forward = (sin yaw, 0, cos yaw)); the riding car roll
+     * is signed relative to it. Null when not riding or when MTR's field could not be read.
+     */
+    public static Double getRidingVehicleYawRadians() {
+        return jme$getRidingVehicleYawRadians();
+    }
+
     private static Double jme$getRidingVehicleYawRadians() {
         if (!isPlayerRidingMtrVehicle()) {
             return null;

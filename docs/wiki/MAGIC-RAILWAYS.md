@@ -39,131 +39,42 @@ railways:
 
 ## Properties Reference
 
-### `railway`
+These properties describe the railway. How they are drawn (colours, line widths and the styles in the dashboard's style
+bar) is set in `map-style.yaml`; see [MAGIC Map Style](MAGIC-MAP-STYLE.md).
 
-The railway type. Affects the general rendering style.
-
-| Value | Description |
-|---|---|
-| `rail` | Standard railway |
-| `subway` | Underground metro |
-| `tram` | Tram/streetcar |
-| `light_rail` | Light rail |
-| `narrow_gauge` | Narrow gauge railway |
-| `miniature` | Miniature railway |
-| `funicular` | Funicular |
-| `monorail` | Monorail |
-
-### `usage`
-
-Controls the **line color** (main visible line).
-
-| Value | Color | Description |
+| Property | Type | Values / description |
 |---|---|---|
-| `main` | Orange | Primary mainline railway |
-| `secondary` | Invisible | Secondary lines (rendered but no visible usage color) |
-| `hsr` | Red | High-speed rail lines |
-| `branch` | Yellow | Branch/feeder lines |
-| `industrial` | Brown | Industrial sidings and spurs |
-| `spur` | Brown | Spur lines (same as industrial) |
-| `military` | Gray | Military railway lines |
-
-### `maxspeed`
-
-Controls the **speed color** (gradient applied to the line) and **line thickness**.
-
-| Speed Range | Color | Width |
-|---|---|---|
-| 0 (stopped) | Dark Blue (`#1a237e`) | 2.5px |
-| 1-40 | Blue (`#1565c0`) | 3px |
-| 41-80 | Teal (`#00838f`) | 3px |
-| 81-120 | Green (`#2e7d32`) | 3.5px |
-| 121-160 | Yellowish Green (`#9e9d24`) | 4px |
-| 161-200 | Amber (`#f9a825`) | 4px |
-| 201-250 | Deep Orange (`#ef6c00`) | 4.5px |
-| 251-300 | Red (`#c62828`) | 5px |
-| 301-350 | Purplish Red (`#7b1fa2`) | 5px |
-| 351+ | Magenta (`#d500f9`) | 5px |
-
-### `electrified`
-
-Controls the **electrification overlay** (dashed lines drawn on top of the usage line).
-
-| Value | Pattern | Description |
-|---|---|---|
-| `none` | No overlay | Not electrified |
-| `contact_line` | Dashed (`- - -`) | Overhead catenary wire |
-| `contact_side` | Dashed (`- - -`) | Side contact wire |
-| `rail` | Dashed (`- - -`) | Third rail |
-| `proposed` | Dash-dot-dot (`-__-__`) | Proposed electrification |
-| `construction` | Dash-dot (`-_-_`) | Under construction |
-
-When `electrified` is not `none`, the `voltage` and `frequency` fields determine the **color** of the dashed overlay:
-
-#### AC Voltages (tilde `~`)
-
-| Voltage | Frequency | Color | Hex |
-|---|---|---|---|
-| 25 kV | (any) | Red (dark border) | `#cc0000` + `#800000` border |
-| 25 kV | 60 Hz | Red | `#cc0000` |
-| 25 kV | 50 Hz | Red-Orange | `#e05000` |
-| 20 kV | 60 Hz | Orange | `#e88000` |
-| 20 kV | 50 Hz | Gold / Yellow-Orange | `#e8b000` |
-| 15-25 kV | (any) | Yellow | `#e8d800` |
-| 15 kV | 16.7 Hz | Teal / Dark Cyan | `#00838f` |
-| 15 kV | 16.67 Hz | Bright Green | `#00c853` |
-| 12.5-15 kV | (any) | Dark Olive Green | `#556b2f` |
-| 12.5 kV | 60 Hz | Olive Green | `#6b8e23` |
-| 12.5 kV | 25 Hz | Medium Green | `#2e7d32` |
-| < 12.5 kV | (any) | Light Green | `#66bb6a` |
-
-#### DC Voltages (equals `=`)
-
-| Voltage | Color | Hex |
-|---|---|---|
-| 3 kV | Medium Blue | `#1565c0` |
-| 1.5-3 kV | Cyan / Light Blue | `#29b6f6` |
-| 1.5 kV | Dark Cyan | `#00838f` |
-| 1-1.5 kV | Deep Blue | `#1a237e` |
-| 1 kV | Indigo / Purple | `#4a148c` |
-| 750 V - 1 kV | Magenta / Purple | `#9c27b0` |
-| 750 V | Pink / Bright Magenta | `#ec407a` |
-| < 750 V | Light Pink | `#f48fb1` |
-
-**Note:** For `contact_line` without explicit voltage, defaults to 3 kV DC. For AC catenary without explicit voltage, defaults to 25 kV 50 Hz.
-
-### `gauge`
-
-Controls the **gauge background color** (thick colored line drawn behind the usage line).
-
-| Gauge (mm) | Color | Hex | Description |
-|---|---|---|---|
-| 3000 | Lime | `#aaff00` | Indian gauge |
-| 1600 | Orange | `#ff8800` | Irish / Iberian gauge |
-| 1520 | Dark Red | `#8b0000` | Russian gauge |
-| 1435 | Black | `#222222` | Standard gauge (subtle dark outline) |
-| 1432 | Dark Blue | `#1a237e` | Irish broad gauge |
-| 1050 | Blue | `#1565c0` | Metre gauge variant |
-| 800 | Pink | `#ff69b4` | Narrow gauge |
-| 600 | White | `#ffffff` | Narrow gauge |
-| 63 | Teal | `#00838f` | Miniature railway |
-
-### Other Properties
-
-| Property | Type | Description |
-|---|---|---|
-| `voltage` | number | Electrification voltage (V or kV depending on system) |
-| `frequency` | number | AC frequency in Hz (0 for DC) |
-| `operator` | string | Full operator name |
-| `operatorShort` | string | Short operator code (shown in tooltips) |
-| `ref` | string | Line reference number |
+| `railway` | text | `rail`, `subway`, `tram`, `light_rail`, `narrow_gauge`, `miniature`, `funicular`, `monorail` |
+| `usage` | text | `main`, `hsr` (high-speed), `branch`, `industrial`, `spur`, `military`, `tourism`, `secondary` |
+| `maxspeed` | number | km/h. Leave out or `0` to use the rail's MTR speed limit |
+| `electrified` | text | `none`, `contact_line` (overhead wire), `contact_side`, `rail` (third rail), `proposed`, `construction`, `deelectrified` |
+| `voltage` | number | Volts, eg `25000`, `15000`, `3000`, `1500`, `750`. Electrified without a voltage counts as 3000 V DC |
+| `frequency` | number | Hz for AC (`50`, `60`, `16.7`); `0` for DC. A voltage of 4000 V or more without a frequency counts as 50 Hz |
+| `gauge` | number | Track gauge in mm, eg `1435`, `1668`, `1520`, `1000` |
+| `operator` | text | Full operator name |
+| `operatorShort` | text | Short operator code |
+| `ref` | text | Line reference number |
 | `passengerLines` | number | Number of passenger lines |
-| `trafficMode` | string | `mixed`, `passenger`, `freight` |
-| `shp` | boolean | SHP (Szybka Kolej Miejska) flag |
-| `workrules` | string | Working rules reference |
-| `preferredDirection` | string | `forward` or `backward` |
-| `trackClass` | string | Track class (currently ignored in rendering) |
-| `trackRef` | string | Track reference |
+| `trafficMode` | text | `mixed`, `passenger`, `freight` |
+| `shp` | true/false | SHP flag |
+| `workrules` | text | Working rules reference |
+| `preferredDirection` | text | `forward` or `backward` |
+| `trackClass`, `trackRef` | text | Track class and reference |
+
+Write `"no"` in quotes: unquoted, YAML reads `no` as false (MAGIC treats both as "not electrified").
+
+### Your own properties
+
+Any other property you add is kept and can be used by a map style, for example:
+
+```yaml
+properties:
+  usage: main
+  owner: Northern Rail
+  signalling: ETCS
+```
+
+[MAGIC Map Style](MAGIC-MAP-STYLE.md) shows how to add a style that colours rails by `owner`.
 
 ## Matching Rails to Definitions
 
@@ -173,7 +84,7 @@ Rails are matched to railway definitions using three methods (in priority order)
 
 Each rail has a unique hex ID (e.g. `"00000001-0000000a-00000005-00000002-0000000b-00000006"`). You can find these in:
 - The `/api/rails` JSON response (`id` field)
-- The dashboard hover tooltip (shows rail ID at the bottom)
+- The dashboard map: click a rail and the popup shows its rail ID at the bottom
 - The MTR system map (right-click a rail segment)
 
 ```yaml
@@ -185,7 +96,9 @@ match:
 
 ### 2. Route IDs (fallback)
 
-Each rail has `connectedNodes` containing `routes` arrays with route ID strings. A rail matches if **any** of its node route IDs appear in the definition's `match.routeIds`.
+A rail matches if any route listed in `match.routeIds` runs over it, along the path MTR generated for the route
+(the track its trains actually drive on, from platform to platform). Route IDs are the routes' hex IDs, as shown in
+the popup when you click a rail ("Routes") or in `/api/livemap/lines`.
 
 ```yaml
 match:
@@ -209,22 +122,19 @@ match:
 
 **Priority:** `trackIds` > `routeIds` > `area`. The first matching definition wins.
 
-## Rendering Layers
+## How rails are drawn
 
-The dashboard renders ORM-configured rails in 4 passes:
-
-1. **Gauge background** — Thick colored line (6px wider than usage line) showing gauge type
-2. **Usage line** — Main visible line colored by usage type, with shadow for depth
-3. **Electrification overlay** — Dashed lines offset to both sides of the rail, colored by voltage/frequency
-4. **Speed labels** — Shown at zoom level 4+, displaying the max speed at the midpoint of each rail
-
-Rails without ORM config fall back to the default speed-based rendering.
+The dashboard (and the Livemap's map styles) colour every rail with the style picked in the style bar; the styles and
+their colours are in `map-style.yaml` ([MAGIC Map Style](MAGIC-MAP-STYLE.md)). Rails without a `map.yaml` entry are
+still drawn: as a line when a route runs over them, otherwise as a siding, and with their MTR speed limit in the
+speed style.
 
 ## API Endpoints
 
 | Method | Path | Description |
 |---|---|---|
 | GET | `/api/railways` | Returns parsed config as JSON |
+| GET | `/api/rail-routes` | For each rail on a route's generated path, the routes that run over it |
 | POST | `/api/railways` | Saves raw YAML content |
 
 ## Examples
@@ -316,23 +226,22 @@ Rails without ORM config fall back to the default speed-based rendering.
 
 ## Troubleshooting
 
-**Rails not appearing with ORM colors:**
+**Rails not drawn with your properties:**
+- Click the rail on the dashboard map. The popup shows its rail ID and, if it matched, the `map.yaml` entry's name
 - Check that the track hex IDs in your config match the rail IDs in your MTR world
-- Find rail hex IDs by hovering over a rail segment in the dashboard (shown at bottom of tooltip)
 - Verify the config file is at `config/MAGIC/config/map.yaml`
 - Check the game log for `[jme] Loaded N railway definitions` message
 
-**Electrification not showing:**
-- Ensure `electrified` is not `none`
-- Set `voltage` and `frequency` for the correct color
-- The electrification overlay only appears when zoomed in enough
+**Electrification shows as grey:**
+- Grey means the rail has no `map.yaml` entry, or is electrified with a voltage the style has no colour for
+- Set `voltage` (and `frequency` for AC) to one of the values in the Electrification legend
 
 **Config not loading:**
-- The config is hot-reloaded — save the YAML file and it will take effect on the next data refresh (every 30 seconds)
+- The config is hot-reloaded: save the YAML file and the dashboard picks it up on its next refresh (every 15 seconds)
 - Check for YAML syntax errors in the game log
 
 **Finding rail hex IDs:**
 1. Open the dashboard map in your browser
-2. Hover over any train — the tooltip shows the rail hex ID at the bottom
+2. Click the rail: the popup shows its rail ID at the bottom
 3. Or call `GET /api/rails` and search for the rail's `id` field
 4. Copy the hex ID into your YAML config under `match.trackIds`

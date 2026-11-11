@@ -1,8 +1,12 @@
 package org.justnoone.jme.block;
 
 import org.justnoone.jme.entity.AxleCounterEntity;
+import org.justnoone.jme.entity.RailAttachment;
 import org.justnoone.jme.util.CrossingLinkRules;
 import org.justnoone.jme.util.CrossingStateMachine;
+import org.justnoone.jme.util.CrossingTimeline;
+import org.mtr.core.data.Rail;
+import org.mtr.core.simulation.Simulator;
 import org.mtr.mapping.holder.BlockPos;
 import org.mtr.mapping.holder.CompoundTag;
 import org.mtr.mapping.holder.World;
@@ -14,11 +18,12 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * The control side of a level crossing (the crossing controller): its start and end axle counters, the
- * {@link CrossingStateMachine} that decides when the crossing is active, and the crossing equipment
- * ({@link CrossingObject}, eg other level crossings) it switches. Held by every level crossing (any of them can be the
- * controller) and by the legacy crossing controller. Saved in the block entity, which also syncs it to clients (for the
- * MTR brush view of the connections).
+ * The control side of a level crossing (the crossing controller): its start and end axle counters (several of each,
+ * eg one per track, at any distance), the {@link CrossingStateMachine} that decides when the crossing is active, the
+ * {@link CrossingTimeline} that switches the lights and then the gates, and the crossing equipment
+ * ({@link CrossingObject}: other level crossings, crossing gates) it switches. Held by every level crossing (any of them
+ * can be the controller) and by the legacy crossing controller. Saved in the block entity, which also syncs it to
+ * clients (for the MTR brush view of the connections and the controller's screen).
  */
 public final class CrossingControl {
 
@@ -33,18 +38,39 @@ public final class CrossingControl {
      */
     private static final int MISSING_COUNTER_CHECKS = 3;
     private static final int MAX_LINKED_OBJECTS = 16;
+    public static final int MAX_LINKED_DETECTORS = 16;
     /**
-     * Counters and objects further than this from the controller cannot be linked.
+     * How many axle counters each of the start and end roles can hold.
+     */
+    public static final int MAX_COUNTERS_PER_ROLE = 16;
+    /**
+     * Objects further than this from the controller cannot be linked (they must be loaded to be switched). Axle counters
+     * can be linked at any distance.
      */
     public static final double MAX_LINK_DISTANCE = 256;
+    // Each linked counter is saved as its UUID (2 longs, both 0 for a legacy counter block), its position (3 doubles as
+    // long bits) and whether it detected a train at the last tick.
+    private static final int COUNTER_STRIDE = 6;
+    private static final int DETECT_TICKS = 3;
 
     private final Runnable markDirty;
-    @Nullable
-    private CounterLink start;
-    @Nullable
-    private CounterLink end;
+    private final List<CounterLink> starts = new ArrayList<>();
+    private final List<CounterLink> ends = new ArrayList<>();
     private final List<BlockPos> objects = new ArrayList<>();
+    /**
+     * Train detectors (MAGIC's, or any of MTR's powered train sensors) linked in Object Linking mode: while any of them
+     * is powered the crossing closes as if a train were in its section. A redstone signal wired into a controller only
+     * flashes its own lamps (its output would feed back into it); a linked detector has no such loop, so it switches the
+     * whole crossing: timeline, linked objects and redstone output.
+     */
+    private final List<BlockPos> detectors = new ArrayList<>();
+    private boolean detectorActive;
     private final CrossingStateMachine stateMachine = new CrossingStateMachine();
+    private final CrossingTimeline timeline = new CrossingTimeline();
+    /**
+     * Set from the controller's screen: the crossing stays closed (lights and gates) until set back to automatic.
+     */
+    private boolean manualClosed;
     private int resyncCounter = RESYNC_TICKS;
 
     CrossingControl(Runnable markDirty) {
@@ -52,8 +78,8 @@ public final class CrossingControl {
     }
 
     void read(CompoundTag compoundTag) {
-        start = CounterLink.read(compoundTag, "jme_crossing_start", "activator");
-        end = CounterLink.read(compoundTag, "jme_crossing_end", "deactivator");
+        readCounters(compoundTag, starts, "jme_crossing_starts", "jme_crossing_start", "activator");
+        readCounters(compoundTag, ends, "jme_crossing_ends", "jme_crossing_end", "deactivator");
 
         objects.clear();
         final long[] objectsList = compoundTag.getLongArray("jme_crossing_lights_list");
@@ -65,6 +91,12 @@ public final class CrossingControl {
             objects.add(new BlockPos(compoundTag.getInt("jme_crossing_lights_x"), compoundTag.getInt("jme_crossing_lights_y"), compoundTag.getInt("jme_crossing_lights_z")));
         }
 
+        detectors.clear();
+        for (final long packed : compoundTag.getLongArray("jme_crossing_detectors")) {
+            detectors.add(BlockPos.fromLong(packed));
+        }
+        detectorActive = compoundTag.getBoolean("jme_crossing_detector_active");
+
         stateMachine.restore(
                 compoundTag.getBoolean("jme_crossing_active"),
                 compoundTag.getInt("jme_crossing_entry_side"),
@@ -73,11 +105,31 @@ public final class CrossingControl {
                 compoundTag.getBoolean("jme_crossing_last_deactivator"),
                 compoundTag.getLong("jme_crossing_idle_ticks")
         );
+
+        manualClosed = compoundTag.getBoolean("jme_crossing_manual_closed");
+        if (compoundTag.data.contains("jme_crossing_gates_lower_delay")) {
+            timeline.setDelays(
+                    compoundTag.getInt("jme_crossing_lights_on_delay"),
+                    compoundTag.getInt("jme_crossing_gates_lower_delay"),
+                    compoundTag.getInt("jme_crossing_gates_raise_delay"),
+                    compoundTag.getInt("jme_crossing_lights_off_delay")
+            );
+            timeline.restore(
+                    compoundTag.getBoolean("jme_crossing_timeline_active"),
+                    compoundTag.getBoolean("jme_crossing_lights_on"),
+                    compoundTag.getBoolean("jme_crossing_gates_down"),
+                    compoundTag.getInt("jme_crossing_timeline_ticks")
+            );
+        } else {
+            // Saved before the timeline existed: an active crossing already has its lights on.
+            final boolean active = stateMachine.isActive();
+            timeline.restore(active, active, false, 0);
+        }
     }
 
     void write(CompoundTag compoundTag) {
-        CounterLink.write(compoundTag, start, "jme_crossing_start", "activator");
-        CounterLink.write(compoundTag, end, "jme_crossing_end", "deactivator");
+        writeCounters(compoundTag, starts, "jme_crossing_starts", "jme_crossing_start", "activator");
+        writeCounters(compoundTag, ends, "jme_crossing_ends", "jme_crossing_end", "deactivator");
 
         final long[] objectsList = new long[objects.size()];
         for (int i = 0; i < objectsList.length; i++) {
@@ -92,78 +144,182 @@ public final class CrossingControl {
             compoundTag.putInt("jme_crossing_lights_z", objects.get(0).getZ());
         }
 
+        final long[] detectorsList = new long[detectors.size()];
+        for (int i = 0; i < detectorsList.length; i++) {
+            detectorsList[i] = detectors.get(i).asLong();
+        }
+        compoundTag.putLongArray("jme_crossing_detectors", detectorsList);
+        compoundTag.putBoolean("jme_crossing_detector_active", detectorActive);
+
         compoundTag.putBoolean("jme_crossing_active", stateMachine.isActive());
         compoundTag.putInt("jme_crossing_entry_side", stateMachine.getEntrySide());
         compoundTag.putInt("jme_crossing_trains_inside", stateMachine.getTrainsInside());
         compoundTag.putBoolean("jme_crossing_last_activator", stateMachine.getLastActivator());
         compoundTag.putBoolean("jme_crossing_last_deactivator", stateMachine.getLastDeactivator());
         compoundTag.putLong("jme_crossing_idle_ticks", stateMachine.getTicksWithoutDetection());
+
+        compoundTag.putBoolean("jme_crossing_manual_closed", manualClosed);
+        compoundTag.putInt("jme_crossing_lights_on_delay", timeline.getLightsOnDelay());
+        compoundTag.putInt("jme_crossing_gates_lower_delay", timeline.getGatesLowerDelay());
+        compoundTag.putInt("jme_crossing_gates_raise_delay", timeline.getGatesRaiseDelay());
+        compoundTag.putInt("jme_crossing_lights_off_delay", timeline.getLightsOffDelay());
+        compoundTag.putBoolean("jme_crossing_timeline_active", timeline.isActive());
+        compoundTag.putBoolean("jme_crossing_lights_on", timeline.isLightsOn());
+        compoundTag.putBoolean("jme_crossing_gates_down", timeline.isGatesDown());
+        compoundTag.putInt("jme_crossing_timeline_ticks", timeline.getTicksInPhase());
     }
 
     /**
-     * Called every server tick: updates the crossing from its axle counters and switches the linked objects.
+     * Called every server tick: updates the crossing from its axle counters, runs the timeline and switches the linked
+     * objects.
      *
-     * @return whether the crossing is active (a train is in the section between the counters)
+     * @return whether the crossing is active (a train is in the section between the counters, or it is closed by hand)
      */
     boolean tick(World world) {
         final boolean resync = ++resyncCounter >= RESYNC_TICKS;
         if (resync) {
             resyncCounter = 0;
-            boolean changed = false;
-            if (start != null && start.checkStale(world)) {
-                start = null;
-                changed = true;
-            }
-            if (end != null && end.checkStale(world)) {
-                end = null;
-                changed = true;
-            }
+            boolean changed = starts.removeIf(link -> link.checkStale(world));
+            changed |= ends.removeIf(link -> link.checkStale(world));
             changed |= removeInvalidObjects(world);
+            changed |= detectors.removeIf(detectorPos -> isLoaded(world, detectorPos) && !isTrainSensor(world, detectorPos));
             if (changed) {
                 markDirty.run();
             }
         }
 
-        // The axle counters do the (cached, throttled) train detection; this only reads their latest result.
-        final boolean startDetected = start != null && start.isDetecting(world);
-        final boolean endDetected = end != null && end.isDetecting(world);
+        // The axle counters do the (cached, throttled) train detection; this only reads their latest result. Every
+        // counter that starts or stops detecting is a train entering or leaving, so trains on different tracks count.
+        final int[] startEdges = new int[2];
+        final int[] endEdges = new int[2];
+        final boolean startDetected = readCounters(world, starts, startEdges);
+        final boolean endDetected = readCounters(world, ends, endEdges);
 
-        final boolean wasActive = stateMachine.isActive();
+        final boolean wasActive = isActive();
         final int previousTrainsInside = stateMachine.getTrainsInside();
-        final boolean active = stateMachine.update(start != null, startDetected, end != null, endDetected, 1, CrossingStateMachine.DEFAULT_TIMEOUT_TICKS);
+        stateMachine.update(!starts.isEmpty(), startDetected, startEdges[0], startEdges[1], !ends.isEmpty(), endDetected, endEdges[0], endEdges[1], 1, CrossingStateMachine.DEFAULT_TIMEOUT_TICKS);
+        detectorActive = readDetectors(world);
+        final boolean active = isActive();
 
-        if (active != wasActive) {
-            applyToObjects(world, active);
+        if (timeline.update(active)) {
+            applyToObjects(world);
             markDirty.run();
-        } else if (previousTrainsInside != stateMachine.getTrainsInside()) {
+        } else if (active != wasActive || previousTrainsInside != stateMachine.getTrainsInside()) {
             markDirty.run();
         } else if (resync) {
-            applyToObjects(world, active);
+            applyToObjects(world);
         }
         return active;
     }
 
     /**
-     * Links a rail-attached axle counter as the start or end node, replacing the counter that held the role, or unlinks
-     * it if it already held it.
+     * Reads the counters of one role, counting those that started ({@code edges[0]}) and stopped ({@code edges[1]})
+     * detecting since the last tick.
+     *
+     * @return whether any of them detects a train
      */
-    CrossingLinkRules.CounterLinkResult linkCounter(World world, BlockPos controllerPos, boolean startRole, AxleCounterEntity counter) {
-        final UUID id = counter.getUuid();
-        final CounterLink current = startRole ? start : end;
-        final CounterLink other = startRole ? end : start;
-        final CrossingLinkRules.CounterLinkResult result = CrossingLinkRules.linkCounter(id, current == null ? null : current.entityId, other == null ? null : other.entityId);
+    private static boolean readCounters(World world, List<CounterLink> links, int[] edges) {
+        boolean any = false;
+        for (final CounterLink link : links) {
+            final boolean detecting = link.isDetecting(world);
+            if (detecting && !link.lastDetecting) {
+                edges[0]++;
+            } else if (!detecting && link.lastDetecting) {
+                edges[1]++;
+            }
+            link.lastDetecting = detecting;
+            any |= detecting;
+        }
+        return any;
+    }
+
+    /**
+     * @return whether any linked train detector is powered (only loaded ones are read)
+     */
+    private boolean readDetectors(World world) {
+        for (final BlockPos detectorPos : detectors) {
+            if (isLoaded(world, detectorPos)) {
+                final net.minecraft.block.BlockState state = world.data.getBlockState(detectorPos.data);
+                final net.minecraft.state.property.IntProperty powered = org.mtr.mod.block.BlockTrainPoweredSensorBase.POWERED.data;
+                if (state.contains(powered) && state.get(powered) > 0) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Whether the block is a train detector that can be linked: MAGIC's train detector or one of MTR's powered train
+     * sensors.
+     */
+    static boolean isTrainSensor(World world, BlockPos pos) {
+        final net.minecraft.block.BlockState state = world.data.getBlockState(pos.data);
+        return state.contains(org.mtr.mod.block.BlockTrainPoweredSensorBase.POWERED.data) && world.data.getBlockEntity(pos.data) instanceof org.mtr.mod.block.BlockTrainSensorBase.BlockEntityBase;
+    }
+
+    /**
+     * Links a train detector so the crossing closes while it is powered, or unlinks it if it already was.
+     *
+     * @return {@code 1} if linked, {@code -1} if unlinked, {@code 0} if the maximum is already linked
+     */
+    int toggleDetector(BlockPos pos) {
+        for (int i = 0; i < detectors.size(); i++) {
+            if (samePos(detectors.get(i), pos)) {
+                detectors.remove(i);
+                markDirty.run();
+                return -1;
+            }
+        }
+        if (detectors.size() >= MAX_LINKED_DETECTORS) {
+            return 0;
+        }
+        detectors.add(pos);
+        markDirty.run();
+        return 1;
+    }
+
+    /**
+     * Unlinks a train detector, from the controller's screen.
+     */
+    boolean unlinkDetector(int index) {
+        if (index < 0 || index >= detectors.size()) {
+            return false;
+        }
+        detectors.remove(index);
+        markDirty.run();
+        return true;
+    }
+
+    /**
+     * Links an axle counter as a start or end node, or unlinks it if it already is one. A controller can have several
+     * of each, and they can be any distance away.
+     *
+     * @param railId       the MTR rail the counter is on, so it detects trains even while its chunk is not loaded
+     * @param railProgress where the counter is along the rail
+     * @param counter      the counter entity, to store the back reference in, or {@code null} if it is not loaded (the
+     *                     controller then notices by itself when it is removed)
+     */
+    CrossingLinkRules.CounterLinkResult linkCounter(BlockPos controllerPos, boolean startRole, UUID id, double x, double y, double z, String railId, double railProgress, @Nullable AxleCounterEntity counter) {
+        final List<CounterLink> role = startRole ? starts : ends;
+        final List<CounterLink> other = startRole ? ends : starts;
+        final CrossingLinkRules.CounterLinkResult result = CrossingLinkRules.toggleCounter(id, ids(role), ids(other), MAX_COUNTERS_PER_ROLE);
         switch (result) {
             case UNLINKED:
-                setRole(startRole, null);
-                counter.removeController(controllerPos.data);
+                role.removeIf(link -> id.equals(link.entityId));
+                if (counter != null) {
+                    counter.removeController(controllerPos.data);
+                }
                 break;
             case LINKED:
-            case REPLACED:
-                if (current != null) {
-                    current.removeBackReference(world, controllerPos);
+                final CounterLink link = new CounterLink(id, null, x, y, z);
+                link.railId = railId;
+                link.railProgress = railProgress;
+                link.direction = counter == null ? 0 : counter.getDetectionDirection();
+                role.add(link);
+                if (counter != null) {
+                    counter.addController(controllerPos.data);
                 }
-                setRole(startRole, new CounterLink(id, null, counter.getX(), counter.getY(), counter.getZ()));
-                counter.addController(controllerPos.data);
                 break;
             default:
                 return result;
@@ -173,18 +329,25 @@ public final class CrossingControl {
     }
 
     /**
+     * Unlinks a start or end node, from the controller's screen.
+     *
+     * @return whether a counter was unlinked
+     */
+    boolean unlinkCounter(World world, BlockPos controllerPos, boolean startRole, int index) {
+        final List<CounterLink> role = startRole ? starts : ends;
+        if (index < 0 || index >= role.size()) {
+            return false;
+        }
+        role.remove(index).removeBackReference(world, controllerPos);
+        markDirty.run();
+        return true;
+    }
+
+    /**
      * Called when a linked axle counter is removed (broken, or its rail removed).
      */
     void onCounterRemoved(UUID id) {
-        boolean changed = false;
-        if (start != null && id.equals(start.entityId)) {
-            start = null;
-            changed = true;
-        }
-        if (end != null && id.equals(end.entityId)) {
-            end = null;
-            changed = true;
-        }
+        final boolean changed = starts.removeIf(link -> id.equals(link.entityId)) | ends.removeIf(link -> id.equals(link.entityId));
         if (changed) {
             markDirty.run();
         }
@@ -194,11 +357,11 @@ public final class CrossingControl {
      * Removes the back references from the linked counters, when the controller is broken.
      */
     void onControllerRemoved(World world, BlockPos controllerPos) {
-        if (start != null) {
-            start.removeBackReference(world, controllerPos);
+        for (final CounterLink link : starts) {
+            link.removeBackReference(world, controllerPos);
         }
-        if (end != null) {
-            end.removeBackReference(world, controllerPos);
+        for (final CounterLink link : ends) {
+            link.removeBackReference(world, controllerPos);
         }
         for (final BlockPos objectPos : objects) {
             final CrossingObject object = getObject(world, objectPos);
@@ -234,43 +397,177 @@ public final class CrossingControl {
         return 1;
     }
 
-    @Nullable
-    public CounterLink getStart() {
-        return start;
+    /**
+     * Applies the settings edited in the controller's screen.
+     */
+    void configure(boolean manualClosed, int lightsOnDelay, int gatesLowerDelay, int gatesRaiseDelay, int lightsOffDelay) {
+        this.manualClosed = manualClosed;
+        timeline.setDelays(lightsOnDelay, gatesLowerDelay, gatesRaiseDelay, lightsOffDelay);
+        markDirty.run();
     }
 
+    /**
+     * The first start node, or {@code null}.
+     */
+    @Nullable
+    public CounterLink getStart() {
+        return starts.isEmpty() ? null : starts.get(0);
+    }
+
+    /**
+     * The first end node, or {@code null}.
+     */
     @Nullable
     public CounterLink getEnd() {
-        return end;
+        return ends.isEmpty() ? null : ends.get(0);
+    }
+
+    public List<CounterLink> getStarts() {
+        return Collections.unmodifiableList(starts);
+    }
+
+    public List<CounterLink> getEnds() {
+        return Collections.unmodifiableList(ends);
     }
 
     public List<BlockPos> getObjects() {
         return Collections.unmodifiableList(objects);
     }
 
+    public List<BlockPos> getDetectors() {
+        return Collections.unmodifiableList(detectors);
+    }
+
     int getLinkedObjectsCount() {
         return objects.size();
     }
 
-    boolean isActive() {
+    /**
+     * Whether a train is in the crossing's section, a linked train detector is powered, or the crossing is closed by
+     * hand.
+     */
+    public boolean isActive() {
+        return stateMachine.isActive() || manualClosed || detectorActive;
+    }
+
+    /**
+     * Whether a linked train detector is powered.
+     */
+    public boolean isDetectorActive() {
+        return detectorActive;
+    }
+
+    public boolean isTrainDetected() {
         return stateMachine.isActive();
     }
 
-    private void setRole(boolean startRole, @Nullable CounterLink link) {
-        if (startRole) {
-            start = link;
-        } else {
-            end = link;
-        }
+    public int getTrainsInside() {
+        return stateMachine.getTrainsInside();
     }
 
-    private void applyToObjects(World world, boolean active) {
+    /**
+     * Whether the lights are on, following the timeline.
+     */
+    public boolean isLightsOn() {
+        return timeline.isLightsOn();
+    }
+
+    /**
+     * Whether the gates are down, following the timeline.
+     */
+    public boolean isGatesDown() {
+        return timeline.isGatesDown();
+    }
+
+    public boolean isManualClosed() {
+        return manualClosed;
+    }
+
+    public CrossingTimeline getTimeline() {
+        return timeline;
+    }
+
+    private void applyToObjects(World world) {
         for (final BlockPos objectPos : objects) {
             final CrossingObject object = getObject(world, objectPos);
             if (object != null) {
-                object.setCrossingActive(active);
+                object.setCrossingState(timeline.isLightsOn(), timeline.isGatesDown());
             }
         }
+    }
+
+    private static List<UUID> ids(List<CounterLink> links) {
+        final List<UUID> ids = new ArrayList<>();
+        for (final CounterLink link : links) {
+            if (link.entityId != null) {
+                ids.add(link.entityId);
+            }
+        }
+        return ids;
+    }
+
+    private static void readCounters(CompoundTag compoundTag, List<CounterLink> links, String listKey, String key, String legacyKey) {
+        links.clear();
+        // The rail and position along it of each counter, "railId|progress" separated by ";", in the same order.
+        final String[] rails = compoundTag.getString(listKey + "_rails").split(";", -1);
+        // Saved apart from the rails, so older MAGIC versions still read those.
+        final int[] directions = compoundTag.data.getIntArray(listKey + "_directions");
+        if (compoundTag.data.contains(listKey)) {
+            final long[] data = compoundTag.getLongArray(listKey);
+            for (int i = 0; i + COUNTER_STRIDE <= data.length; i += COUNTER_STRIDE) {
+                final double x = Double.longBitsToDouble(data[i + 2]);
+                final double y = Double.longBitsToDouble(data[i + 3]);
+                final double z = Double.longBitsToDouble(data[i + 4]);
+                final CounterLink link = data[i] == 0 && data[i + 1] == 0
+                        ? new CounterLink(null, new BlockPos((int) Math.floor(x), (int) Math.floor(y), (int) Math.floor(z)), x, y, z)
+                        : new CounterLink(new UUID(data[i], data[i + 1]), null, x, y, z);
+                link.lastDetecting = data[i + 5] != 0;
+                final int index = i / COUNTER_STRIDE;
+                if (index < rails.length) {
+                    link.readRail(rails[index]);
+                }
+                if (index < directions.length) {
+                    link.direction = Integer.signum(directions[index]);
+                }
+                links.add(link);
+            }
+        } else {
+            // Saved before several counters per role were supported.
+            final CounterLink link = CounterLink.read(compoundTag, key, legacyKey);
+            if (link != null) {
+                links.add(link);
+            }
+        }
+    }
+
+    private static void writeCounters(CompoundTag compoundTag, List<CounterLink> links, String listKey, String key, String legacyKey) {
+        final long[] data = new long[links.size() * COUNTER_STRIDE];
+        for (int i = 0; i < links.size(); i++) {
+            final CounterLink link = links.get(i);
+            final int offset = i * COUNTER_STRIDE;
+            data[offset] = link.entityId == null ? 0 : link.entityId.getMostSignificantBits();
+            data[offset + 1] = link.entityId == null ? 0 : link.entityId.getLeastSignificantBits();
+            data[offset + 2] = Double.doubleToLongBits(link.x);
+            data[offset + 3] = Double.doubleToLongBits(link.y);
+            data[offset + 4] = Double.doubleToLongBits(link.z);
+            data[offset + 5] = link.lastDetecting ? 1 : 0;
+        }
+        compoundTag.putLongArray(listKey, data);
+        final StringBuilder rails = new StringBuilder();
+        for (int i = 0; i < links.size(); i++) {
+            if (i > 0) {
+                rails.append(';');
+            }
+            rails.append(links.get(i).railId).append('|').append(links.get(i).railProgress);
+        }
+        compoundTag.putString(listKey + "_rails", rails.toString());
+        final int[] directions = new int[links.size()];
+        for (int i = 0; i < directions.length; i++) {
+            directions[i] = links.get(i).direction;
+        }
+        compoundTag.data.putIntArray(listKey + "_directions", directions);
+        // Keep the first counter in the old keys too, so the world still loads correctly in older MAGIC versions.
+        CounterLink.write(compoundTag, links.isEmpty() ? null : links.get(0), key, legacyKey);
     }
 
     /**
@@ -290,7 +587,7 @@ public final class CrossingControl {
     }
 
     @Nullable
-    private static CrossingObject getObject(World world, BlockPos pos) {
+    static CrossingObject getObject(World world, BlockPos pos) {
         if (!isLoaded(world, pos)) {
             return null;
         }
@@ -301,7 +598,7 @@ public final class CrossingControl {
     /**
      * An axle counter linked as a start or end node: a counter attached to an MTR rail ({@link AxleCounterEntity},
      * by UUID), or a legacy axle counter block linked before counters were attached to rails. The position is the
-     * counter's last known position, for drawing the connection on clients.
+     * counter's last known position, for drawing the connection on clients and listing it in the controller's screen.
      */
     public static final class CounterLink {
 
@@ -311,6 +608,24 @@ public final class CrossingControl {
         private final BlockPos legacyPos;
         private double x, y, z;
         private int missingChecks;
+        /**
+         * Whether the counter detected a train at the last tick, to count the trains entering and leaving.
+         */
+        private boolean lastDetecting;
+        /**
+         * The MTR rail the counter is on and where along it, so the controller can check that point itself from MTR's
+         * simulation, which runs everywhere: a counter far away, in a chunk that is not loaded, still detects trains.
+         * Empty for counters linked before 1.4.2 until their entity is seen once.
+         */
+        private String railId = "";
+        private double railProgress;
+        /**
+         * Copied from the counter ({@link AxleCounterEntity#getDetectionDirection()}): {@code 0} detects trains running
+         * either way, otherwise only those running towards increasing ({@code 1}) or decreasing rail progress.
+         */
+        private int direction;
+        private int detectCooldown;
+        private boolean railDetecting;
 
         CounterLink(@Nullable UUID entityId, @Nullable BlockPos legacyPos, double x, double y, double z) {
             this.entityId = entityId;
@@ -341,7 +656,24 @@ public final class CrossingControl {
             return legacyPos != null;
         }
 
+        /**
+         * @return {@code 0} if it detects trains running either way, otherwise {@code 1} or {@code -1}
+         */
+        public int getDirection() {
+            return direction;
+        }
+
         private boolean isDetecting(World world) {
+            if (!railId.isEmpty()) {
+                // Like the counter entity, the rail point is checked every few ticks.
+                if (--detectCooldown <= 0) {
+                    detectCooldown = DETECT_TICKS;
+                    final Simulator simulator = BlockAxleCounter.getSimulator(world);
+                    final Rail rail = RailAttachment.getRail(simulator, railId);
+                    railDetecting = rail != null && BlockAxleCounter.isRailPointOccupied(simulator, rail, railProgress, direction);
+                }
+                return railDetecting;
+            }
             if (entityId != null) {
                 final AxleCounterEntity counter = findCounter(world);
                 return counter != null && counter.isDetecting();
@@ -366,6 +698,10 @@ public final class CrossingControl {
                 x = counter.getX();
                 y = counter.getY();
                 z = counter.getZ();
+                // Follows the counter if its rail was reshaped, and fills in counters linked before 1.4.2.
+                railId = counter.getRailId();
+                railProgress = counter.getRailProgress();
+                direction = counter.getDetectionDirection();
                 return false;
             }
             // Only conclude it is gone where its entities are loaded; in unloaded chunks it may simply not be loaded.
@@ -374,6 +710,17 @@ public final class CrossingControl {
             }
             missingChecks = 0;
             return false;
+        }
+
+        private void readRail(String saved) {
+            final int separator = saved.lastIndexOf('|');
+            if (separator > 0) {
+                try {
+                    railProgress = Double.parseDouble(saved.substring(separator + 1));
+                    railId = saved.substring(0, separator);
+                } catch (NumberFormatException ignored) {
+                }
+            }
         }
 
         private void removeBackReference(World world, BlockPos controllerPos) {
@@ -429,5 +776,17 @@ public final class CrossingControl {
      */
     public interface Holder {
         CrossingControl getCrossingControl();
+
+        /**
+         * The height of the controller above its block, for the outline shown while linking. Level crossings (and the
+         * legacy controller, drawn as one) are tall.
+         */
+        default double getLinkOutlineHeight() {
+            return BlockCrossingLights.LINK_OUTLINE_HEIGHT;
+        }
+
+        default double getLinkOutlineHalfWidth() {
+            return BlockCrossingLights.LINK_OUTLINE_HALF_WIDTH;
+        }
     }
 }

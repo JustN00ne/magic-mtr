@@ -15,6 +15,7 @@ import org.justnoone.jme.rail.MagicRailRotationRegistry;
 import org.justnoone.jme.rail.MagicRailTiltRegistry;
 
 import org.justnoone.jme.rail.PlatformStopPositionRegistry;
+import org.justnoone.jme.rail.RouteTimetableRegistry;
 import org.justnoone.jme.rail.VirtualPlatformRegistry;
 import org.justnoone.jme.mixin.SidingVehiclesAccessor;
 import org.justnoone.jme.mixin.VehicleExtraDataDoorInvoker;
@@ -165,6 +166,38 @@ public final class MagicRailNetworking {
             });
         });
 
+        MagicNetworkingCompat.registerServerReceiver(MagicRailConstants.SET_ROUTE_TIMETABLE_PACKET_ID, (server, player, buf) -> {
+            final long routeId = buf.readLong();
+            final boolean remove = buf.readBoolean();
+            final long minimumDwellMillis = buf.readVarLong();
+            final int headcodeClass = buf.readVarInt();
+            final int count = Math.min(1024, buf.readVarInt());
+            final long[] platformIds = new long[count];
+            final long[] offsets = new long[count];
+            for (int i = 0; i < count; i++) {
+                platformIds[i] = buf.readLong();
+                offsets[i] = buf.readLong();
+            }
+            MagicNetworkingCompat.executeOnServer(server, () -> {
+                final String error;
+                if (remove) {
+                    RouteTimetableRegistry.remove(routeId);
+                    error = null;
+                } else {
+                    error = RouteTimetableRegistry.set(routeId, new RouteTimetableRegistry.Entry(minimumDwellMillis, headcodeClass, platformIds, offsets));
+                }
+
+                if (error == null) {
+                    // The dwell times are worked out when a depot builds its timetable.
+                    MagicSimulatorAccess.regenerateDepotsWithRoute(routeId);
+                    sendFeedback(player, remove ? "\u00a7aRoute settings removed; the route uses its platforms' dwell times again." : "\u00a7aRoute settings saved; its depots were refreshed.");
+                } else {
+                    sendFeedback(player, "\u00a7cRoute settings not saved: " + error);
+                }
+                MagicRouteStateSync.broadcast(server);
+            });
+        });
+
         MagicNetworkingCompat.registerServerReceiver(MagicRailConstants.SET_TRAIN_DETECTOR_RANGE_PACKET_ID, (server, player, buf) -> {
             final BlockPos blockPos = buf.readBlockPos();
             final int nodeRange = buf.readVarInt();
@@ -294,25 +327,15 @@ public final class MagicRailNetworking {
             return null;
         }
 
+        // Go through the MTR mapping holder instead of reflecting on "getServerWorld"/"getWorld": those names only
+        // exist in dev (Yarn). Production jars use intermediary names, so the lookup returned null and every
+        // world-dependent packet (train detector settings, brush apply) was silently dropped.
         try {
-            final Method getServerWorldMethod = player.getClass().getMethod("getServerWorld");
-            final Object world = getServerWorldMethod.invoke(player);
-            if (world instanceof net.minecraft.world.World) {
-                return (net.minecraft.world.World) world;
-            }
+            final org.mtr.mapping.holder.World world = new org.mtr.mapping.holder.ServerPlayerEntity(player).getEntityWorld();
+            return world == null ? null : world.data;
         } catch (Exception ignored) {
+            return null;
         }
-
-        try {
-            final Method getWorldMethod = player.getClass().getMethod("getWorld");
-            final Object world = getWorldMethod.invoke(player);
-            if (world instanceof net.minecraft.world.World) {
-                return (net.minecraft.world.World) world;
-            }
-        } catch (Exception ignored) {
-        }
-
-        return null;
     }
 
 

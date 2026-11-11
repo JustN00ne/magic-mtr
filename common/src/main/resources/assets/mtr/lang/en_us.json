@@ -1,0 +1,11 @@
+{
+  "gui.mtr.route_type_train_metro": "Type: Metro",
+  "gui.mtr.route_type_train_sbahn": "Type: Commuter Rail",
+  "gui.mtr.route_type_train_regional": "Type: Regional Rail",
+  "gui.mtr.route_type_train_intercity": "Type: Intercity",
+  "gui.mtr.route_type_train_tram": "Type: Tram",
+  "gui.mtr.route_type_train_bus": "Type: Bus",
+  "gui.mtr.route_type_train_trolleybus": "Type: Trolleybus",
+  "gui.mtr.route_type_train_ferry": "Type: Ferry",
+  "gui.mtr.route_type_train_freight": "Type: Freight"
+}

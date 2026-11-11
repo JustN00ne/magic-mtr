@@ -1,0 +1,80 @@
+{
+  "textures": {
+    "particle": "mtr:block/metal",
+    "back": "mtr:block/black",
+    "orange": "mtr:block/light_on",
+    "pids1": "mtr:block/pids_1",
+    "pids2": "mtr:block/pids_2",
+    "pids3": "mtr:block/pids_3",
+    "pids4": "mtr:block/pids_4",
+    "pids5": "mtr:block/pids_5"
+  },
+  "elements": [
+    {
+      "from": [6, 0, -8],
+      "to": [10, 11, 40],
+      "faces": {
+        "down": { "texture": "#particle", "cullface": "down" },
+        "up": { "texture": "#particle" },
+        "south": { "texture": "#particle", "cullface": "south" },
+        "east": { "texture": "#particle" },
+        "west": { "texture": "#particle" }
+      }
+    },
+    {
+      "from": [7.5, 11, 15.5],
+      "to": [8.5, 16, 16.5],
+      "faces": {
+        "up": { "texture": "#particle", "cullface": "up" },
+        "north": { "texture": "#particle" },
+        "south": { "texture": "#particle" },
+        "east": { "texture": "#particle" },
+        "west": { "texture": "#particle" }
+      }
+    },
+    {
+      "from": [5.95, 0.5, -8],
+      "to": [10.05, 10.5, 39.5],
+      "faces": {
+        "east": { "texture": "#back" },
+        "west": { "texture": "#back" }
+      }
+    },
+    {
+      "from": [5.9, 3.90625, -8],
+      "to": [10.1, 4, 39],
+      "shade": false,
+      "faces": {
+        "east": { "uv": [0, 0, 16, 16], "texture": "#orange" },
+        "west": { "uv": [0, 0, 16, 16], "texture": "#orange" }
+      }
+    },
+    {
+      "from": [5.9, 4, -8],
+      "to": [10.1, 10, 8],
+      "shade": false,
+      "faces": {
+        "east": { "uv": [0, 0, 16, 16], "texture": "#pids1" },
+        "west": { "uv": [0, 0, 16, 16], "texture": "#pids5" }
+      }
+    },
+    {
+      "from": [5.9, 4, 8],
+      "to": [10.1, 10, 24],
+      "shade": false,
+      "faces": {
+        "east": { "uv": [0, 0, 16, 16], "texture": "#pids2" },
+        "west": { "uv": [0, 0, 16, 16], "texture": "#pids4" }
+      }
+    },
+    {
+      "from": [5.9, 4, 24],
+      "to": [10.1, 10, 40],
+      "shade": false,
+      "faces": {
+        "east": { "uv": [0, 0, 16, 16], "texture": "#pids3" },
+        "west": { "uv": [0, 0, 16, 16], "texture": "#pids3" }
+      }
+    }
+  ]
+}

@@ -373,7 +373,7 @@ public final class DashboardRailExporter {
         final long speedForward = rail.getSpeedLimitKilometersPerHour(false);
         final long speedReverse = rail.getSpeedLimitKilometersPerHour(true);
         final long resolvedSpeed = Math.max(speedForward, speedReverse);
-        final int clampedSpeed = (int) Math.max(1L, Math.min(400L, resolvedSpeed <= 0 ? 1 : resolvedSpeed));
+        final int clampedSpeed = (int) Math.max(1L, Math.min((long) org.justnoone.jme.rail.MagicRailConstants.MAX_SPEED_KMH, resolvedSpeed <= 0 ? 1 : resolvedSpeed));
         return MagicRailSpeedColor.colorForSpeed(clampedSpeed);
     }
 

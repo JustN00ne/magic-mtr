@@ -1,0 +1,741 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>MAGIC Railway Map</title>
+<link href="https://unpkg.com/maplibre-gl@4.1.1/dist/maplibre-gl.css" rel="stylesheet">
+<style>
+/* Layout and look follow openrailwaymap.app: map controls in white boxes, a style bar top right, a legend
+   bottom left. Colours of the rails come from map-style.yaml (see /assets/map-style.js). */
+:root{
+  --bg:#f2f2f2;
+  --panel:#ffffff;
+  --panel-hover:#f0f0f0;
+  --border:rgba(0,0,0,.1);
+  --text:#212529;
+  --text2:#5c636a;
+  --text3:#8a9096;
+  --accent:#198754;
+  --accent-soft:rgba(25,135,84,.12);
+  --shadow:0 0 0 2px rgba(0,0,0,.1);
+  --station-text:#0000ff;
+  --station-halo:#ffffff;
+  --station-fill:#ffffff;
+  --station-stroke:#5c5c5c;
+  --rail-casing:#ffffff;
+  --rail-text:#585858;
+  --late:#d63384;
+  --ontime:#198754;
+  --radius:4px;
+}
+:root[data-theme="dark"]{
+  --bg:#262626;
+  --panel:#212529;
+  --panel-hover:#2b3035;
+  --border:rgba(255,255,255,.15);
+  --text:#dee2e6;
+  --text2:#adb5bd;
+  --text3:#6c757d;
+  --accent:#75b798;
+  --accent-soft:rgba(117,183,152,.15);
+  --shadow:0 0 0 2px rgba(255,255,255,.12);
+  --station-text:#bdcfff;
+  --station-halo:#000000;
+  --station-fill:#333333;
+  --station-stroke:#cccccc;
+  --rail-casing:#333333;
+  --rail-text:#cccccc;
+  --late:#e685b5;
+  --ontime:#75b798;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--text);
+  font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;font-size:14px}
+#map{position:absolute;inset:0}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+a{color:inherit}
+
+/* Boxes in the style of MapLibre's control groups */
+.box{background:var(--panel);border-radius:var(--radius);box-shadow:var(--shadow);color:var(--text)}
+.tbtn{display:inline-flex;align-items:center;gap:6px;height:29px;padding:0 9px;border-radius:var(--radius);font-size:16px;white-space:nowrap}
+.tbtn:hover{background:var(--panel-hover)}
+.tbtn svg{flex:none}
+.corner{position:absolute;z-index:3;display:flex;gap:10px;pointer-events:none}
+.corner > *{pointer-events:auto}
+.tl{top:10px;left:10px;flex-direction:column;align-items:flex-start}
+.tr{top:10px;right:10px;align-items:flex-start}
+.bl{bottom:10px;left:10px;flex-direction:column-reverse;align-items:flex-start}
+.br{bottom:10px;right:10px;flex-direction:column;align-items:flex-end;gap:6px}
+
+/* Style bar */
+.stylebar{display:flex;border:1px solid var(--accent);padding:2px;gap:0}
+.stylebar button{width:48px;height:40px;display:grid;place-items:center;border-radius:3px;color:var(--text2);position:relative}
+.stylebar button + button::before{content:"";position:absolute;left:0;top:8px;bottom:8px;width:1px;background:var(--border)}
+.stylebar button:hover{background:var(--panel-hover);color:var(--text)}
+.stylebar button.on{background:var(--accent-soft);color:var(--text)}
+.stylebar button.on::after{content:"";position:absolute;left:8px;right:8px;bottom:2px;height:3px;border-radius:2px;background:var(--accent)}
+.sq{width:44px;height:44px;display:grid;place-items:center;border-radius:var(--radius)}
+.sq:hover{background:var(--panel-hover)}
+.sq.on{box-shadow:0 0 0 2px var(--accent)}
+.rightcol{position:absolute;right:10px;top:64px;z-index:3;display:flex;flex-direction:column;gap:10px}
+.rightcol .box{display:flex;flex-direction:column;overflow:hidden}
+.rightcol .box button{width:29px;height:29px;display:grid;place-items:center}
+.rightcol .box button + button{border-top:1px solid var(--border)}
+.rightcol .box button:hover{background:var(--panel-hover)}
+
+/* Dropdown (layers) */
+.dropdown{position:absolute;top:56px;right:0;width:250px;padding:8px 0;display:none;z-index:5}
+.dropdown.open{display:block}
+.dropdown h6{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);padding:8px 14px 4px;font-weight:600}
+.dropdown label,.dropdown .item{display:flex;align-items:center;gap:10px;padding:6px 14px;cursor:pointer;font-size:14px}
+.dropdown label:hover,.dropdown .item:hover{background:var(--panel-hover)}
+.dropdown input{accent-color:var(--accent);width:15px;height:15px}
+.dropdown .item.on{font-weight:600}
+.dropdown .item svg{width:18px;height:18px}
+.dropdown hr{border:0;border-top:1px solid var(--border);margin:6px 0}
+.dot{width:10px;height:10px;border-radius:50%;flex:none}
+
+/* Legend */
+.legend{width:300px;max-height:calc(100vh - 80px);display:none;flex-direction:column;overflow:hidden}
+.legend.open{display:flex}
+.legend-head{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-bottom:1px solid var(--border)}
+.legend-head h5{font-size:16px;font-weight:600}
+.legend-body{overflow-y:auto;padding:6px 0 8px}
+.legend-row{display:flex;align-items:center;gap:10px;padding:3px 12px;font-size:13px;cursor:pointer;user-select:none}
+.legend-row:hover{background:var(--panel-hover)}
+.legend-row.off{opacity:.35}
+.legend-row.off .lbl{text-decoration:line-through}
+.legend-note{font-size:11px;color:var(--text3);padding:6px 12px 0}
+.legend-section{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);padding:8px 12px 2px;font-weight:600}
+.station-swatch{width:40px;display:flex;justify-content:center}
+.station-swatch i{width:10px;height:10px;border-radius:50%;background:var(--station-fill);border:2px solid var(--station-stroke)}
+
+/* Bottom right */
+.scale{height:18px;border:2px solid var(--text);border-top:0;font-size:10px;line-height:16px;padding:0 4px;background:color-mix(in srgb,var(--panel) 70%,transparent);transition:width .1s}
+.attrib{font-size:12px;padding:2px 8px;color:var(--text2)}
+.attrib a{color:var(--text2)}
+.stats{display:flex;align-items:center;gap:6px;padding:0 10px;height:29px;font-size:13px;color:var(--text2)}
+.stats b{color:var(--text);font-variant-numeric:tabular-nums}
+.stats .sep{width:1px;height:14px;background:var(--border)}
+.live{width:7px;height:7px;border-radius:50%;background:var(--ontime);animation:pulse 1.6s infinite}
+.live.off{background:var(--text3);animation:none}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+
+/* Modals */
+.backdrop{position:fixed;inset:0;z-index:10;background:rgba(0,0,0,.4);display:none;align-items:flex-start;justify-content:center;padding:28px 16px;overflow-y:auto}
+.backdrop.open{display:flex}
+.modal{width:100%;max-width:640px;background:var(--panel);border-radius:6px;box-shadow:0 8px 32px rgba(0,0,0,.3)}
+.modal-head{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid var(--border)}
+.modal-head h5{font-size:20px;font-weight:500}
+.modal-body{padding:16px}
+.close{width:32px;height:32px;display:grid;place-items:center;border-radius:4px;color:var(--text2)}
+.close:hover{background:var(--panel-hover);color:var(--text)}
+.input{width:100%;height:38px;padding:0 12px;border:1px solid var(--border);border-radius:var(--radius);background:var(--panel);color:var(--text);font:inherit}
+.input:focus{outline:2px solid var(--accent);outline-offset:-1px}
+.results{margin-top:12px;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
+.results:empty{display:none}
+.result{display:flex;align-items:center;gap:10px;padding:9px 12px;cursor:pointer}
+.result + .result{border-top:1px solid var(--border)}
+.result:hover{background:var(--panel-hover)}
+.result .kind{margin-left:auto;font-size:12px;color:var(--text3)}
+.badge{display:inline-flex;align-items:center;justify-content:center;min-width:28px;height:20px;padding:0 6px;border-radius:4px;font-size:12px;font-weight:700}
+.field{margin-bottom:18px}
+.field > label{display:block;font-weight:500;margin-bottom:6px}
+.field small{display:block;color:var(--text3);font-size:12px;margin-top:4px}
+.field input[type=range]{width:100%;accent-color:var(--accent)}
+.radios{display:flex;gap:16px}
+.radios label{display:flex;align-items:center;gap:6px;font-weight:400;cursor:pointer}
+.radios input{accent-color:var(--accent)}
+code{font-family:ui-monospace,Consolas,monospace;font-size:12px;background:var(--panel-hover);padding:1px 4px;border-radius:3px}
+
+/* Popups */
+.maplibregl-popup-content{background:var(--panel);color:var(--text);border-radius:6px;padding:10px 12px;box-shadow:0 2px 12px rgba(0,0,0,.25);font-size:13px;min-width:200px}
+.maplibregl-popup-tip{border-top-color:var(--panel)!important;border-bottom-color:var(--panel)!important}
+.maplibregl-popup-close-button{color:var(--text2);font-size:18px;padding:0 6px}
+.pop-title{font-size:15px;font-weight:600;margin-bottom:6px;padding-right:16px}
+.pop-list{list-style:none;display:grid;grid-template-columns:auto 1fr;gap:3px 12px}
+.pop-list dt{color:var(--text3)}
+.pop-list dd{font-variant-numeric:tabular-nums;word-break:break-all}
+.color-marker{display:inline-block;width:12px;height:12px;border-radius:2px;vertical-align:-1px;margin-right:5px;border:1px solid var(--border)}
+.pop-hint{margin-top:8px;font-size:11px;color:var(--text3)}
+
+/* Map configuration warning (map-style.yaml error) */
+.warn{position:absolute;top:10px;left:50%;transform:translateX(-50%);z-index:4;max-width:min(560px,calc(100% - 32px));padding:8px 12px;font-size:13px;background:#fff3cd;color:#664d03;border:1px solid #ffecb5;border-radius:var(--radius);display:none}
+.warn.show{display:block}
+
+.maplibregl-ctrl-attrib{display:none}
+
+@media (max-width:720px){
+  .stylebar button{width:38px;height:36px}
+  .tr{left:auto;max-width:calc(100% - 140px);overflow-x:auto}
+  .legend{width:calc(100vw - 20px)}
+  .attrib{display:none}
+}
+</style>
+</head>
+<body>
+<div id="map"></div>
+<div class="warn" id="warn"></div>
+
+<div class="corner tl">
+  <button class="box tbtn" id="searchBtn" title="Search stations, lines and railways">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m20 20-4.8-4.8"/></svg>
+    Search
+  </button>
+  <a class="box tbtn" href="/livemap" title="Live trains, delays and stops" style="text-decoration:none">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="5" y="3" width="14" height="14" rx="3"/><path d="M5 11h14M9 21l-2-4M15 21l2-4"/></svg>
+    Livemap
+  </a>
+</div>
+
+<div class="corner tr">
+  <div class="box stylebar" id="stylebar" role="toolbar" aria-label="Map style"></div>
+  <div style="position:relative">
+    <button class="box sq" id="layersBtn" title="Map style and layers" aria-label="Map style and layers">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="m12 3 9 5-9 5-9-5z"/><path d="m3 13 9 5 9-5"/></svg>
+    </button>
+    <div class="box dropdown" id="layersMenu"></div>
+  </div>
+</div>
+
+<div class="rightcol">
+  <div class="box">
+    <button id="zoomIn" title="Zoom in" aria-label="Zoom in"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
+    <button id="zoomOut" title="Zoom out" aria-label="Zoom out"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M5 12h14"/></svg></button>
+    <button id="north" title="Reset north" aria-label="Reset north"><svg id="northIcon" width="16" height="16" viewBox="0 0 24 24"><path d="M12 2 7 12h10z" fill="currentColor"/><path d="M12 22l5-10H7z" fill="currentColor" opacity=".35"/></svg></button>
+  </div>
+  <div class="box">
+    <button id="fitBtn" title="Show the whole network" aria-label="Show the whole network"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2" fill="currentColor"/><path d="M12 1v3M12 20v3M1 12h3M20 12h3"/></svg></button>
+  </div>
+  <div class="box">
+    <button id="configBtn" title="Map configuration" aria-label="Map configuration"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg></button>
+  </div>
+</div>
+
+<div class="corner bl">
+  <button class="box tbtn" id="legendBtn" title="Legend">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M9 9a3 3 0 1 1 4 2.8c-.6.3-1 .9-1 1.6V15"/><circle cx="12" cy="19" r=".6" fill="currentColor"/></svg>
+    Legend
+  </button>
+  <div class="box legend" id="legend"></div>
+</div>
+
+<div class="corner br">
+  <div class="box stats" title="Trains running now">
+    <span class="live off" id="liveDot"></span>
+    <b id="sTrains">0</b> trains <span class="sep"></span> <b id="sLines">0</b> lines <span class="sep"></span> <b id="sDelayed">0</b> delayed
+  </div>
+  <div class="scale" id="scale">100 m</div>
+  <div class="box attrib">MAGIC · Minecraft Transit Railway · map style after the <a href="https://openrailwaymap.app" target="_blank" rel="noopener">OpenRailwayMap</a> map key</div>
+</div>
+
+<div class="backdrop" id="searchModal" role="dialog" aria-modal="true" aria-labelledby="searchTitle">
+  <div class="modal">
+    <div class="modal-head"><h5 id="searchTitle">Search</h5><button class="close" data-close aria-label="Close">✕</button></div>
+    <div class="modal-body">
+      <input class="input" id="searchInput" type="search" placeholder="Station, line or railway name" autocomplete="off">
+      <div class="results" id="searchResults"></div>
+    </div>
+  </div>
+</div>
+
+<div class="backdrop" id="configModal" role="dialog" aria-modal="true" aria-labelledby="configTitle">
+  <div class="modal">
+    <div class="modal-head"><h5 id="configTitle">Map configuration</h5><button class="close" data-close aria-label="Close">✕</button></div>
+    <div class="modal-body">
+      <div class="field">
+        <label for="bgSaturation">Background map saturation</label>
+        <input type="range" id="bgSaturation" min="0" max="1" step="0.05">
+        <small>The smallest value makes the world map grey, the largest shows Minecraft's colours.</small>
+      </div>
+      <div class="field">
+        <label for="bgOpacity">Background map opacity</label>
+        <input type="range" id="bgOpacity" min="0" max="1" step="0.05">
+        <small>How strongly the world map shows under the railways.</small>
+      </div>
+      <div class="field">
+        <label>Theme</label>
+        <div class="radios">
+          <label><input type="radio" name="theme" value="system"> System</label>
+          <label><input type="radio" name="theme" value="light"> Light</label>
+          <label><input type="radio" name="theme" value="dark"> Dark</label>
+        </div>
+      </div>
+      <div class="field">
+        <button class="box tbtn" id="resetConfig" style="font-size:14px">Use the server's settings</button>
+        <small>These settings are saved in this browser only. The server's defaults, and all colours and styles, are in <code>config/MAGIC/config/map-style.yaml</code>.</small>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://unpkg.com/maplibre-gl@4.1.1/dist/maplibre-gl.js"></script>
+<script src="/assets/map-style.js"></script>
+<script>
+(function(){
+'use strict';
+
+var BPD = 64; /* blocks per degree; z grows south */
+var REFRESH_MS = 15000;
+var MS = window.MagicMapStyle;
+
+var CAT_COLORS = {train_normal:'#6366f1',train_metro:'#3b82f6',train_sbahn:'#818cf8',train_regional:'#14b8a6',train_intercity:'#eab308',train_high_speed:'#06b6d4',train_light_rail:'#a78bfa',train_tram:'#c084fc',train_bus:'#22c55e',train_trolleybus:'#fb923c',train_freight:'#f43f5e'};
+var CAT_LABELS = {train_normal:'Passenger',train_metro:'Metro',train_sbahn:'Commuter',train_regional:'Regional',train_intercity:'Intercity',train_high_speed:'High speed',train_light_rail:'Light rail',train_tram:'Tram',train_bus:'Bus',train_trolleybus:'Trolleybus',train_freight:'Freight'};
+
+var map, styleCfg = { styles: [] }, currentStyle = null;
+var rails = [], stations = [], vehicles = [], routes = {}, lines = [];
+var railwayDefs = [], defsByRail = {}, railRoutes = {};
+var hiddenLegend = {}, hiddenCats = {};
+var overlays = { trains: true, stations: true, labels: true, world: true };
+var fitted = false, legendOpen = false;
+
+/* ── small helpers ── */
+function ll(x, z){ return [x / BPD, -z / BPD]; }
+function esc(s){ return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function clean(s){ return String(s == null ? '' : s).split('|')[0].trim(); }
+function hex(c){ return '#' + ((Number(c) >>> 0) & 0xFFFFFF).toString(16).padStart(6, '0'); }
+function load(k){ try { return localStorage.getItem('magic.map.' + k); } catch (e) { return null; } }
+function save(k, v){ try { if (v == null) localStorage.removeItem('magic.map.' + k); else localStorage.setItem('magic.map.' + k, v); } catch (e) {} }
+function cssVar(n){ return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); }
+function getRouteType(r){ if (!r) return 'train_normal'; if (r.jmeType && CAT_COLORS[r.jmeType]) return r.jmeType; if (r.type && CAT_COLORS[r.type]) return r.type; return 'train_normal'; }
+
+/* ── viewer settings (fall back to map-style.yaml) ── */
+function setting(name){
+  var local = load(name);
+  if (local != null) return name === 'theme' ? local : parseFloat(local);
+  if (name === 'theme') return styleCfg.theme || 'system';
+  var bg = styleCfg.background || {};
+  if (name === 'bgOpacity') return bg.opacity != null ? Number(bg.opacity) : 0.55;
+  if (name === 'bgSaturation') return bg.saturation != null ? Number(bg.saturation) : 0;
+}
+function applyTheme(){
+  document.documentElement.setAttribute('data-theme', MS.prefersDark(setting('theme')) ? 'dark' : 'light');
+  if (!map || !map.getLayer('bg')) return;
+  map.setPaintProperty('bg', 'background-color', cssVar('--bg'));
+  map.setPaintProperty('world', 'raster-opacity', setting('bgOpacity'));
+  map.setPaintProperty('world', 'raster-saturation', setting('bgSaturation') - 1);
+  map.setPaintProperty('station-dot', 'circle-color', cssVar('--station-fill'));
+  map.setPaintProperty('station-dot', 'circle-stroke-color', cssVar('--station-stroke'));
+  map.setPaintProperty('station-label', 'text-color', cssVar('--station-text'));
+  map.setPaintProperty('station-label', 'text-halo-color', cssVar('--station-halo'));
+  if (currentStyle) drawStyle();
+}
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyTheme);
+
+/* ── map ── */
+map = new maplibregl.Map({
+  container: 'map',
+  center: [0, 0],
+  zoom: 3,
+  maxZoom: 11,
+  attributionControl: false,
+  style: { version: 8, glyphs: 'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf', sources: {},
+    layers: [{ id: 'bg', type: 'background', paint: { 'background-color': '#f2f2f2' } }] }
+});
+
+map.on('load', function(){
+  map.addSource('world', { type: 'raster', tiles: [location.origin + '/api/tiles/{z}/{x}/{y}.png'], tileSize: 256, maxzoom: 8 });
+  map.addLayer({ id: 'world', type: 'raster', source: 'world', paint: { 'raster-opacity': 0.55, 'raster-saturation': -1 } });
+  map.addSource('rails', { type: 'geojson', data: fc([]) });
+  map.addSource('stations', { type: 'geojson', data: fc([]) });
+  map.addSource('vehicles', { type: 'geojson', data: fc([]) });
+
+  map.addLayer({ id: 'station-area', type: 'fill', source: 'stations', filter: ['==', ['geometry-type'], 'Polygon'],
+    paint: { 'fill-color': ['get', 'color'], 'fill-opacity': 0.12 } });
+  map.addLayer({ id: 'station-dot', type: 'circle', source: 'stations', filter: ['==', ['geometry-type'], 'Point'],
+    paint: { 'circle-radius': ['interpolate', ['linear'], ['zoom'], 3, 3, 8, 6], 'circle-color': '#fff', 'circle-stroke-color': '#5c5c5c', 'circle-stroke-width': 2 } });
+  map.addLayer({ id: 'station-label', type: 'symbol', source: 'stations', minzoom: 3.5, filter: ['==', ['geometry-type'], 'Point'],
+    layout: { 'text-field': ['get', 'name'], 'text-font': ['Open Sans Semibold'], 'text-size': ['interpolate', ['linear'], ['zoom'], 4, 11, 9, 14],
+      'text-variable-anchor': ['top', 'bottom', 'right', 'left'], 'text-radial-offset': 0.9, 'text-optional': true },
+    paint: { 'text-color': '#0000ff', 'text-halo-color': '#fff', 'text-halo-width': 1.6 } });
+
+  map.addLayer({ id: 'vehicle-dot', type: 'circle', source: 'vehicles',
+    paint: { 'circle-radius': ['interpolate', ['linear'], ['zoom'], 3, 4, 9, 7], 'circle-color': ['get', 'color'],
+      'circle-stroke-color': '#ffffff', 'circle-stroke-width': 2, 'circle-opacity': ['case', ['get', 'canceled'], 0.45, 1] } });
+
+  var arrow = document.createElement('canvas');
+  arrow.width = arrow.height = 24;
+  var cx = arrow.getContext('2d');
+  cx.fillStyle = '#ffffff';
+  cx.beginPath(); cx.moveTo(12, 3); cx.lineTo(18, 15); cx.lineTo(12, 12); cx.lineTo(6, 15); cx.closePath(); cx.fill();
+  /* MapLibre 4 needs ImageData here; a canvas element throws "mismatched image size". */
+  map.addImage('arrow', cx.getImageData(0, 0, 24, 24));
+  map.addLayer({ id: 'vehicle-arrow', type: 'symbol', source: 'vehicles', filter: ['>=', ['get', 'bearing'], 0],
+    layout: { 'icon-image': 'arrow', 'icon-size': 0.45, 'icon-rotate': ['get', 'bearing'], 'icon-rotation-alignment': 'map', 'icon-allow-overlap': true, 'icon-ignore-placement': true } });
+
+  bindMapEvents();
+  applyTheme();
+  refresh();
+  setInterval(refresh, REFRESH_MS);
+});
+
+function fc(features){ return { type: 'FeatureCollection', features: features }; }
+
+/* ── data ── */
+function refresh(){
+  Promise.all([
+    MS.fetchJson('/api/map-style').catch(function(){ return null; }),
+    MS.fetchJson('/api/railways').catch(function(){ return { railways: [] }; }),
+    MS.fetchJson('/api/rail-routes').catch(function(){ return { rails: {} }; }),
+    MS.fetchJson('/api/rails'),
+    MS.fetchJson('/api/livemap/lines').catch(function(){ return { lines: [] }; })
+  ]).then(function(res){
+    setLive(true);
+    if (res[0]) setStyleConfig(res[0]);
+    railwayDefs = res[1].railways || [];
+    railRoutes = res[2].rails || {};
+    var data = res[3] || {};
+    rails = data.rails || [];
+    stations = data.stations || [];
+    vehicles = data.vehicles || [];
+    routes = {};
+    (data.routes || []).forEach(function(r){ if (r && r.id != null) routes[String(r.id)] = r; });
+    lines = res[4].lines || [];
+    defsByRail = MS.matchDefinitions(rails, railwayDefs, railRoutes);
+    if (!currentStyle) chooseInitialStyle();
+    drawRails();
+    drawStations();
+    drawVehicles();
+    updateStats();
+    if (!fitted && rails.length) { fitted = true; fitAll(false); }
+  }).catch(function(){ setLive(false); });
+}
+
+function setLive(ok){ document.getElementById('liveDot').className = 'live' + (ok ? '' : ' off'); }
+
+function setStyleConfig(cfg){
+  var warn = document.getElementById('warn');
+  if (cfg.error) { warn.textContent = cfg.error + ' (showing the last working version)'; warn.classList.add('show'); }
+  else warn.classList.remove('show');
+  var changed = JSON.stringify(cfg.styles) !== JSON.stringify(styleCfg.styles) || cfg.theme !== styleCfg.theme || JSON.stringify(cfg.background) !== JSON.stringify(styleCfg.background);
+  styleCfg = cfg;
+  if (!changed) return;
+  if (currentStyle) currentStyle = MS.findStyle(styleCfg, currentStyle.id) || null;
+  if (!currentStyle && rails.length) chooseInitialStyle();
+  renderStyleBar();
+  renderLayersMenu();
+  applyTheme();
+}
+
+function chooseInitialStyle(){
+  var fromHash = (location.hash.match(/style=([\w-]+)/) || [])[1];
+  currentStyle = MS.findStyle(styleCfg, fromHash) || MS.findStyle(styleCfg, styleCfg.defaultStyle) || (styleCfg.styles || [])[0] || null;
+  renderStyleBar();
+  renderLayersMenu();
+  if (currentStyle) drawStyle();
+}
+
+function setStyle(id){
+  var s = MS.findStyle(styleCfg, id);
+  if (!s) return;
+  currentStyle = s;
+  hiddenLegend = {};
+  history.replaceState(null, '', '#style=' + encodeURIComponent(id));
+  renderStyleBar();
+  renderLayersMenu();
+  drawStyle();
+  drawRails();
+  renderLegend();
+}
+
+/* ── drawing ── */
+function drawStyle(){
+  if (!map.getSource('rails') || !currentStyle) return;
+  MS.addRailLayers(map, 'rails', currentStyle, { prefix: 'rail-', before: 'station-area',
+    casing: cssVar('--rail-casing'), casingOpacity: 0.85, textColor: cssVar('--rail-text'), textHalo: cssVar('--station-halo') });
+  MS.setRailLayersVisible(map, 'rail-', true);
+  setLabelsVisible();
+}
+
+function drawRails(){
+  if (!map.getSource('rails') || !currentStyle) return;
+  var hidden = hiddenLegend;
+  map.getSource('rails').setData(MS.railFeatures(rails, defsByRail, railRoutes, currentStyle, ll, function(rail, props){
+    if (!Object.keys(hidden).length) return true;
+    return !hidden[MS.evaluate(currentStyle, props).key];
+  }));
+}
+
+function drawStations(){
+  if (!map.getSource('stations')) return;
+  var feats = [];
+  stations.forEach(function(s){
+    var p1 = s.position1, p2 = s.position2;
+    if (!p1 || !p2) return;
+    var x1 = Math.min(p1.x, p2.x), x2 = Math.max(p1.x, p2.x), z1 = Math.min(p1.z, p2.z), z2 = Math.max(p1.z, p2.z);
+    var color = s.color != null ? hex(s.color) : '#888888';
+    feats.push({ type: 'Feature', properties: { name: clean(s.name), color: color },
+      geometry: { type: 'Polygon', coordinates: [[ll(x1, z1), ll(x2, z1), ll(x2, z2), ll(x1, z2), ll(x1, z1)]] } });
+    feats.push({ type: 'Feature', properties: { name: clean(s.name), color: color, full: String(s.name || '') },
+      geometry: { type: 'Point', coordinates: ll((x1 + x2) / 2, (z1 + z2) / 2) } });
+  });
+  map.getSource('stations').setData(fc(feats));
+}
+
+function vehicleColor(v){
+  if (v.lineColor != null && (v.lineName || v.canceled || v.cancelled)) return hex(v.lineColor);
+  var r = routes[String(v.routeId)];
+  return r && r.color != null ? hex(r.color) : '#6366f1';
+}
+
+function drawVehicles(){
+  if (!map.getSource('vehicles')) return;
+  map.getSource('vehicles').setData(fc(vehicles.filter(function(v){
+    return v && v.position && !hiddenCats[getRouteType(routes[String(v.routeId)])];
+  }).map(function(v){
+    var cat = getRouteType(routes[String(v.routeId)]);
+    return { type: 'Feature', properties: {
+      color: vehicleColor(v), bearing: typeof v.bearing === 'number' ? v.bearing : -1,
+      lineName: clean(v.lineName) || clean((routes[String(v.routeId)] || {}).name) || 'Not in service',
+      destination: clean(v.destination), nextStation: clean(v.nextStation), speed: Math.round(Math.abs(v.speed || 0) * 3600),
+      delayMin: Math.round((v.deviationMillis || 0) / 60000), canceled: !!(v.canceled || v.cancelled), category: CAT_LABELS[cat] || cat
+    }, geometry: { type: 'Point', coordinates: ll(v.position.x, v.position.z) } };
+  })));
+}
+
+function updateStats(){
+  var running = vehicles.filter(function(v){ return !(v.canceled || v.cancelled); });
+  document.getElementById('sTrains').textContent = running.length;
+  document.getElementById('sLines').textContent = lines.length || Object.keys(routes).length;
+  document.getElementById('sDelayed').textContent = running.filter(function(v){ return (v.deviationMillis || 0) > 30000; }).length;
+}
+
+function setLabelsVisible(){
+  var vis = function(id, on){ if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', on ? 'visible' : 'none'); };
+  vis('rail-text', overlays.labels);
+  vis('station-label', overlays.labels && overlays.stations);
+  vis('station-dot', overlays.stations);
+  vis('station-area', overlays.stations);
+  vis('vehicle-dot', overlays.trains);
+  vis('vehicle-arrow', overlays.trains);
+  vis('world', overlays.world);
+}
+
+/* ── style bar, layers menu, legend ── */
+function renderStyleBar(){
+  var bar = document.getElementById('stylebar');
+  bar.innerHTML = (styleCfg.styles || []).map(function(s){
+    var on = currentStyle && currentStyle.id === s.id;
+    return '<button class="' + (on ? 'on' : '') + '" data-style="' + esc(s.id) + '" title="' + esc(s.name || s.id) + '" aria-label="' + esc(s.name || s.id) + '" aria-pressed="' + on + '">' + MS.icon(s.icon, s.name || s.id) + '</button>';
+  }).join('');
+  Array.prototype.forEach.call(bar.querySelectorAll('button'), function(b){ b.onclick = function(){ setStyle(b.getAttribute('data-style')); }; });
+}
+
+function renderLayersMenu(){
+  var menu = document.getElementById('layersMenu');
+  var html = '<h6>Map style</h6>' + (styleCfg.styles || []).map(function(s){
+    var on = currentStyle && currentStyle.id === s.id;
+    return '<div class="item' + (on ? ' on' : '') + '" data-style="' + esc(s.id) + '">' + MS.icon(s.icon, s.name || s.id) + esc(s.name || s.id) + '</div>';
+  }).join('');
+  html += '<hr><h6>Show</h6>';
+  [['trains', 'Trains'], ['stations', 'Stations'], ['labels', 'Labels'], ['world', 'World map']].forEach(function(o){
+    html += '<label><input type="checkbox" data-overlay="' + o[0] + '"' + (overlays[o[0]] ? ' checked' : '') + '>' + o[1] + '</label>';
+  });
+  html += '<hr><h6>Trains by service</h6>';
+  Object.keys(CAT_COLORS).forEach(function(c){
+    html += '<label><input type="checkbox" data-cat="' + c + '"' + (hiddenCats[c] ? '' : ' checked') + '><span class="dot" style="background:' + CAT_COLORS[c] + '"></span>' + esc(CAT_LABELS[c]) + '</label>';
+  });
+  menu.innerHTML = html;
+  Array.prototype.forEach.call(menu.querySelectorAll('[data-style]'), function(el){ el.onclick = function(){ setStyle(el.getAttribute('data-style')); }; });
+  Array.prototype.forEach.call(menu.querySelectorAll('[data-overlay]'), function(el){
+    el.onchange = function(){ overlays[el.getAttribute('data-overlay')] = el.checked; setLabelsVisible(); };
+  });
+  Array.prototype.forEach.call(menu.querySelectorAll('[data-cat]'), function(el){
+    el.onchange = function(){ if (el.checked) delete hiddenCats[el.getAttribute('data-cat')]; else hiddenCats[el.getAttribute('data-cat')] = true; drawVehicles(); };
+  });
+}
+
+function renderLegend(){
+  var el = document.getElementById('legend');
+  if (!legendOpen || !currentStyle) { el.classList.remove('open'); return; }
+  var items = MS.legend(currentStyle);
+  var html = '<div class="legend-head"><h5>' + esc(currentStyle.name || currentStyle.id) + '</h5><button class="close" id="legendClose" aria-label="Close legend">✕</button></div><div class="legend-body">';
+  html += items.map(function(it){
+    return '<div class="legend-row' + (hiddenLegend[it.key] ? ' off' : '') + '" data-key="' + esc(it.key) + '" title="Click to hide or show">' + MS.legendSwatch(it) + '<span class="lbl">' + esc(it.label) + '</span></div>';
+  }).join('');
+  html += '<div class="legend-section">Map</div>';
+  html += '<div class="legend-row" style="cursor:default"><span class="station-swatch"><i></i></span><span class="lbl" style="color:var(--station-text);font-weight:600">Station</span></div>';
+  html += '<div class="legend-row" style="cursor:default"><span class="station-swatch"><span class="dot" style="background:#6366f1;border:2px solid #fff;box-shadow:0 0 0 1px var(--border)"></span></span><span class="lbl">Train (line colour)</span></div>';
+  if (currentStyle.gradient) html += '<div class="legend-note">Colours between the listed values blend smoothly.</div>';
+  html += '<div class="legend-note">Click an entry to hide or show those rails. Colours are set in map-style.yaml.</div></div>';
+  el.innerHTML = html;
+  el.classList.add('open');
+  document.getElementById('legendClose').onclick = function(){ legendOpen = false; renderLegend(); };
+  Array.prototype.forEach.call(el.querySelectorAll('.legend-row[data-key]'), function(row){
+    row.onclick = function(){
+      var k = row.getAttribute('data-key');
+      if (hiddenLegend[k]) delete hiddenLegend[k]; else hiddenLegend[k] = true;
+      drawRails();
+      renderLegend();
+    };
+  });
+}
+
+/* ── popups ── */
+var hoverPopup = new maplibregl.Popup({ closeButton: false, closeOnClick: false, offset: 10 });
+var clickPopup = new maplibregl.Popup({ closeButton: true, maxWidth: '340px' });
+
+function dl(rows){
+  return '<dl class="pop-list">' + rows.filter(function(r){ return r[1] !== '' && r[1] != null; }).map(function(r){ return '<dt>' + esc(r[0]) + '</dt><dd>' + r[1] + '</dd>'; }).join('') + '</dl>';
+}
+
+function bindMapEvents(){
+  map.on('mouseenter', 'vehicle-dot', function(e){
+    map.getCanvas().style.cursor = 'pointer';
+    var p = e.features[0].properties;
+    var status = p.canceled ? '<span style="color:var(--late)">Cancelled</span>' : p.delayMin >= 1 ? '<span style="color:var(--late)">+' + p.delayMin + ' min</span>' : '<span style="color:var(--ontime)">On time</span>';
+    hoverPopup.setLngLat(e.features[0].geometry.coordinates).setHTML(
+      '<div class="pop-title"><span class="color-marker" style="background:' + p.color + '"></span>' + esc(p.lineName) + '</div>' +
+      dl([['To', esc(p.destination)], ['Next', esc(p.nextStation)], ['Status', status], ['Speed', p.speed + ' km/h'], ['Service', esc(p.category)]])).addTo(map);
+  });
+  map.on('mouseleave', 'vehicle-dot', function(){ map.getCanvas().style.cursor = ''; hoverPopup.remove(); });
+
+  map.on('click', function(e){
+    var layers = ((map.__magicRailLayers || {})['rail-'] || []).filter(function(id){ return (id === 'rail-line' || /^rail-dash/.test(id)) && map.getLayer(id); });
+    if (!layers.length || !currentStyle) return;
+    var feats = map.queryRenderedFeatures([[e.point.x - 4, e.point.y - 4], [e.point.x + 4, e.point.y + 4]], { layers: layers });
+    if (!feats.length) return;
+    var id = feats[0].properties.id;
+    var rail = rails.filter(function(r){ return r.id === id; })[0];
+    if (!rail) return;
+    var def = defsByRail[id], props = MS.railProps(rail, def, railRoutes), look = MS.evaluate(currentStyle, props);
+    var rows = [
+      ['Style', '<span class="color-marker" style="background:' + look.color + '"></span>' + esc(currentStyle.name || currentStyle.id)],
+      ['Railway', esc(def ? props.railway : '')], ['Usage', esc(def ? props.usage : '')],
+      ['Max speed', props.maxspeed ? esc(props.maxspeed) + ' km/h' + (def && Number(def.properties.maxspeed) > 0 ? '' : ' (MTR)') : 'none'],
+      ['Electrified', esc(def ? props.electrified : '')],
+      ['Voltage', def && props.voltage ? esc(props.voltage) + ' V' + (Number(props.frequency) > 0 ? ' ' + esc(props.frequency) + ' Hz' : ' DC') : ''],
+      ['Gauge', def && props.gauge ? esc(props.gauge) + ' mm' : ''],
+      ['Operator', esc(def ? (props.operator || props.operatorShort || '') : '')],
+      ['Ref', esc(def ? (props.ref || '') : '')],
+      ['Routes', esc(((railRoutes[id] || []).map(function(r){ var l = lines.filter(function(x){ return x.id === r; })[0]; return l ? clean(l.number) || clean(l.name) : r; })).join(', '))],
+      ['Rail ID', '<code>' + esc(id) + '</code>']
+    ];
+    clickPopup.setLngLat(e.lngLat).setHTML('<div class="pop-title">' + esc(def ? def.name : 'Rail') + '</div>' + dl(rows) +
+      (def ? '' : '<div class="pop-hint">Not in map.yaml. Add the rail ID to an entry\'s <code>trackIds</code> to set its properties.</div>')).addTo(map);
+  });
+
+  map.on('move', updateScale);
+  map.on('rotate', function(){ document.getElementById('northIcon').style.transform = 'rotate(' + (-map.getBearing()) + 'deg)'; });
+}
+
+/* Scale bar in blocks (1 block = 1 m). */
+function updateScale(){
+  var y = map.getContainer().clientHeight / 2;
+  var a = map.unproject([0, y]), b = map.unproject([100, y]);
+  var blocksPer100px = Math.abs(b.lng - a.lng) * BPD;
+  var nice = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000, 50000];
+  var target = blocksPer100px, pick = nice[0];
+  for (var i = 0; i < nice.length; i++) if (nice[i] <= target) pick = nice[i];
+  var el = document.getElementById('scale');
+  el.style.width = Math.max(20, Math.round(100 * pick / blocksPer100px)) + 'px';
+  el.textContent = pick >= 1000 ? (pick / 1000) + ' km' : pick + ' m';
+}
+
+function fitAll(animate){
+  var x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
+  rails.forEach(function(r){ (r.curvePoints || []).forEach(function(p){ if (p.x < x0) x0 = p.x; if (p.x > x1) x1 = p.x; if (p.z < z0) z0 = p.z; if (p.z > z1) z1 = p.z; }); });
+  if (!isFinite(x0)) return;
+  map.fitBounds([ll(x0, z1), ll(x1, z0)], { padding: { top: 70, bottom: 60, left: 60, right: 60 }, maxZoom: 9, duration: animate ? 800 : 0 });
+}
+
+/* ── search ── */
+function openModal(id){ document.getElementById(id).classList.add('open'); }
+function closeModal(el){ el.classList.remove('open'); }
+Array.prototype.forEach.call(document.querySelectorAll('.backdrop'), function(b){
+  b.addEventListener('click', function(e){ if (e.target === b || e.target.closest('[data-close]')) closeModal(b); });
+});
+document.addEventListener('keydown', function(e){
+  if (e.key === 'Escape') Array.prototype.forEach.call(document.querySelectorAll('.backdrop.open'), closeModal);
+  if (e.key === '/' && !e.target.closest('input')) { e.preventDefault(); openSearch(); }
+});
+
+function openSearch(){
+  openModal('searchModal');
+  var input = document.getElementById('searchInput');
+  input.value = '';
+  runSearch('');
+  setTimeout(function(){ input.focus(); }, 0);
+}
+
+function runSearch(term){
+  var t = term.trim().toLowerCase(), out = [];
+  if (t.length >= 1) {
+    stations.forEach(function(s){
+      if (String(s.name || '').toLowerCase().indexOf(t) < 0 || !s.position1) return;
+      out.push({ kind: 'Station', label: clean(s.name), x: (s.position1.x + s.position2.x) / 2, z: (s.position1.z + s.position2.z) / 2, zoom: 8 });
+    });
+    lines.forEach(function(l){
+      var hay = (String(l.name || '') + ' ' + String(l.number || '')).toLowerCase();
+      if (hay.indexOf(t) < 0 || !l.stops || !l.stops.length) return;
+      out.push({ kind: 'Line', label: clean(l.name), badge: l, bounds: l.stops });
+    });
+    railwayDefs.forEach(function(d){
+      if (String(d.name || '').toLowerCase().indexOf(t) < 0) return;
+      var pts = [];
+      rails.forEach(function(r){ if (defsByRail[r.id] === d) (r.curvePoints || []).forEach(function(p){ pts.push(p); }); });
+      if (pts.length) out.push({ kind: 'Railway', label: d.name, bounds: pts });
+    });
+  }
+  var el = document.getElementById('searchResults');
+  el.innerHTML = out.slice(0, 40).map(function(r, i){
+    var badge = r.badge ? '<span class="badge" style="background:' + hex(r.badge.color) + ';color:#fff">' + esc(clean(r.badge.number) || clean(r.badge.name).slice(0, 3)) + '</span>' : '';
+    return '<div class="result" data-i="' + i + '">' + badge + '<span>' + esc(r.label) + '</span><span class="kind">' + r.kind + '</span></div>';
+  }).join('') || (t ? '<div class="result" style="cursor:default;color:var(--text3)">No results</div>' : '');
+  Array.prototype.forEach.call(el.querySelectorAll('[data-i]'), function(row){
+    row.onclick = function(){
+      var r = out[Number(row.getAttribute('data-i'))];
+      closeModal(document.getElementById('searchModal'));
+      if (r.bounds) {
+        var x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
+        r.bounds.forEach(function(p){ x0 = Math.min(x0, p.x); x1 = Math.max(x1, p.x); z0 = Math.min(z0, p.z); z1 = Math.max(z1, p.z); });
+        map.fitBounds([ll(x0, z1), ll(x1, z0)], { padding: 80, maxZoom: 9 });
+      } else {
+        map.flyTo({ center: ll(r.x, r.z), zoom: Math.max(map.getZoom(), r.zoom) });
+      }
+    };
+  });
+}
+
+/* ── buttons ── */
+document.getElementById('searchBtn').onclick = openSearch;
+document.getElementById('searchInput').oninput = function(e){ runSearch(e.target.value); };
+document.getElementById('zoomIn').onclick = function(){ map.zoomIn(); };
+document.getElementById('zoomOut').onclick = function(){ map.zoomOut(); };
+document.getElementById('north').onclick = function(){ map.resetNorth(); };
+document.getElementById('fitBtn').onclick = function(){ fitAll(true); };
+document.getElementById('legendBtn').onclick = function(){ legendOpen = !legendOpen; renderLegend(); };
+document.getElementById('layersBtn').onclick = function(e){
+  e.stopPropagation();
+  var m = document.getElementById('layersMenu');
+  m.classList.toggle('open');
+  document.getElementById('layersBtn').classList.toggle('on', m.classList.contains('open'));
+};
+document.addEventListener('click', function(e){
+  if (!e.target.closest('#layersMenu') && !e.target.closest('#layersBtn')) {
+    document.getElementById('layersMenu').classList.remove('open');
+    document.getElementById('layersBtn').classList.remove('on');
+  }
+});
+
+document.getElementById('configBtn').onclick = function(){
+  document.getElementById('bgSaturation').value = setting('bgSaturation');
+  document.getElementById('bgOpacity').value = setting('bgOpacity');
+  Array.prototype.forEach.call(document.querySelectorAll('input[name=theme]'), function(r){ r.checked = r.value === setting('theme'); });
+  openModal('configModal');
+};
+document.getElementById('bgSaturation').oninput = function(e){ save('bgSaturation', e.target.value); applyTheme(); };
+document.getElementById('bgOpacity').oninput = function(e){ save('bgOpacity', e.target.value); applyTheme(); };
+Array.prototype.forEach.call(document.querySelectorAll('input[name=theme]'), function(r){ r.onchange = function(){ save('theme', r.value); applyTheme(); }; });
+document.getElementById('resetConfig').onclick = function(){
+  save('bgSaturation', null); save('bgOpacity', null); save('theme', null);
+  document.getElementById('configBtn').onclick();
+  applyTheme();
+};
+
+applyTheme();
+})();
+</script>
+</body>
+</html>

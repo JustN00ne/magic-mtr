@@ -1,0 +1,50 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "org.justnoone.jme.mixin",
+  "compatibilityLevel": "${mixin_compatibility_level}",
+  "mixins": [
+    "ArrivalsRequestAlternativePlatformMixin",
+    "ArrivalsRequestSchemaAccessor",
+    "DepotAlternativePlatformMixin",
+    "DepotCronTimetableMixin",
+    "FileLoaderThreadLimitMixin",
+    "ItemRailModifierMixin",
+    "ItemRailModifierTooltipMixin",
+    "NameColorDataAccessor",
+    "PathDataDwellTimeAccessor",
+    "RailSchemaAccessor",
+    "RoutePlatformDataAccessor",
+    "SidingCronTimetableMixin",
+    "SidingDelayCancellationMixin",
+    "SidingDivertedArrivalsMixin",
+    "SidingFlexibleTimetableMixin",
+    "SavedRailBasePositionAccessor",
+    "SidingVehiclesAccessor",
+    "SidingSpeedLimitMixin",
+    "TrainScheduleSensorRailDetectMixin",
+    "TripStopTimesAccessor",
+    "SystemMapServletMixin",
+    "VehicleDelayAccessor",
+    "VehicleExtraDataAlternativePlatformMixin",
+    "VehiclePlatformRouteInfoAccessor",
+    "VehicleAlternativePlatformRerouteMixin",
+    "SidingDynamicPlatformRerouteMixin",
+    "VehicleMinimumDwellMixin",
+    "VehicleMutableExtraDataAccessor",
+    "VehiclePlatformStopPositionMixin",
+    "VehicleSidingAccessor",
+    "VehicleSignalInvoker",
+    "WebserverResourcesMixin",
+    "VehicleScheduleAccessor",
+    "VehicleSpeedLimitMixin",
+    "VehicleExtraDataAccessor",
+    "VehicleExtraDataDoorInvoker"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  },
+  "overwrites": {
+    "requireAnnotations": true
+  }
+}

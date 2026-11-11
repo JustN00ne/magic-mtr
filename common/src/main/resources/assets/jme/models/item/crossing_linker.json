@@ -1,0 +1,11 @@
+{
+  "parent": "minecraft:item/generated",
+  "textures": {
+    "layer0": "jme:item/railroad_xing_link_inact"
+  },
+  "overrides": [
+    { "predicate": { "jme:link_mode": 0.3 }, "model": "jme:item/crossing_linker_startnode" },
+    { "predicate": { "jme:link_mode": 0.6 }, "model": "jme:item/crossing_linker_endnode" },
+    { "predicate": { "jme:link_mode": 0.9 }, "model": "jme:item/crossing_linker_object" }
+  ]
+}

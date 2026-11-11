@@ -1,0 +1,5 @@
+{
+  "variants": {
+    "": { "model": "jme:block/crossing_world" }
+  }
+}

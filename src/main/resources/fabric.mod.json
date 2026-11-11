@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "id": "jme",
+  "version": "${version}",
+  "name": "JME - JustNoone's Minecraft Transit Railway Extension",
+  "description": "The JME mod adds enchancements to the mod, which otherwise have not existed!",
+  "authors": [],
+  "contact": {},
+  "license": "MIT",
+  "icon": "assets/jme/icon.png",
+  "environment": "*",
+  "entrypoints": {
+    "fabric-datagen": [
+      "org.justnoone.jme.client.JmeDataGenerator"
+    ],
+    "client": [
+      "org.justnoone.jme.client.JmeClient"
+    ],
+    "main": [
+      "org.justnoone.jme.Jme"
+    ]
+  },
+  "mixins": [
+    "jme.mixins.json",
+    {
+      "config": "jme.client.mixins.json",
+      "environment": "client"
+    }
+  ],
+  "depends": {
+    "fabricloader": ">=${min_loader_version}",
+    "fabric": "*",
+    "mtr": "*",
+    "java": ">=${java_version}",
+    "minecraft": "${minecraft_version}"
+  }
+}

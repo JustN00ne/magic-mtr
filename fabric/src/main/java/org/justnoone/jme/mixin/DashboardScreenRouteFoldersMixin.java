@@ -6,6 +6,7 @@ import org.justnoone.jme.client.DashboardRouteFolderStore;
 import org.justnoone.jme.client.ui.OverlayMenuState;
 import org.justnoone.jme.client.screen.AlternativePlatformMenuScreen;
 import org.justnoone.jme.client.screen.RouteFolderEditScreen;
+import org.justnoone.jme.rail.AlternativePlatformRegistry;
 import org.mtr.core.data.Platform;
 import org.mtr.core.data.Route;
 import org.mtr.core.data.RoutePlatformData;
@@ -115,6 +116,8 @@ public abstract class DashboardScreenRouteFoldersMixin extends ScreenExtension i
     @Unique
     private ButtonWidgetExtension jme$contextDuplicateButton;
     @Unique
+    private ButtonWidgetExtension jme$contextAlternativesButton;
+    @Unique
     private boolean jme$contextButtonsAdded;
     @Unique
     private int jme$contextMenuX;
@@ -137,6 +140,7 @@ public abstract class DashboardScreenRouteFoldersMixin extends ScreenExtension i
             jme$contextSortButton = new ButtonWidgetExtension(0, 0, SQUARE_SIZE * 4, SQUARE_SIZE, TextHelper.literal("Sort"), button -> jme$onContextSort());
             jme$contextRemoveButton = new ButtonWidgetExtension(0, 0, SQUARE_SIZE * 4, SQUARE_SIZE, TextHelper.literal("Remove"), button -> jme$onContextRemove());
             jme$contextDuplicateButton = new ButtonWidgetExtension(0, 0, SQUARE_SIZE * 4, SQUARE_SIZE, TextHelper.literal("Duplicate"), button -> jme$onContextDuplicate());
+            jme$contextAlternativesButton = new ButtonWidgetExtension(0, 0, SQUARE_SIZE * 4, SQUARE_SIZE, TextHelper.literal("Alternative Platforms"), button -> jme$onContextAlternatives());
         }
 
         if (jme$folderRenameField == null) {
@@ -152,6 +156,7 @@ public abstract class DashboardScreenRouteFoldersMixin extends ScreenExtension i
         jme$addChild(new ClickableWidget(jme$contextSortButton));
         jme$addChild(new ClickableWidget(jme$contextRemoveButton));
         jme$addChild(new ClickableWidget(jme$contextDuplicateButton));
+        jme$addChild(new ClickableWidget(jme$contextAlternativesButton));
         jme$addChild(new ClickableWidget(jme$folderRenameField));
         jme$addChild(new ClickableWidget(jme$folderRenameDoneButton));
         jme$addChild(new ClickableWidget(jme$folderRenameCancelButton));
@@ -709,6 +714,7 @@ public abstract class DashboardScreenRouteFoldersMixin extends ScreenExtension i
         final boolean isPlatform = rowMetadata.platformIndex >= 0;
         final boolean showSort = isFolder;
         final boolean showRemove = isPlatform || isFolder;
+        final boolean showAlternatives = isPlatform && jme$stationHasOtherPlatforms(rowMetadata);
 
         final int menuWidth = SQUARE_SIZE * 5;
         final int startX = Math.max(2, Math.min(PANEL_WIDTH - menuWidth - 2, mouseX + 6));
@@ -720,6 +726,7 @@ public abstract class DashboardScreenRouteFoldersMixin extends ScreenExtension i
         rows += showSort ? 1 : 0; // sort folder
         rows += showRemove ? 1 : 0; // remove
         rows += isPlatform ? 1 : 0; // duplicate
+        rows += showAlternatives ? 1 : 0; // alternative platforms
         final int maxY = Math.max(SQUARE_SIZE + 2, height - rows * (SQUARE_SIZE + 1) - 2);
         startY = Math.min(startY, maxY);
 
@@ -733,7 +740,27 @@ public abstract class DashboardScreenRouteFoldersMixin extends ScreenExtension i
         row = jme$placeContextButton(jme$contextEditFolderButton, isFolder, TextHelper.literal("Edit Folder"), startX, startY, row);
         row = jme$placeContextButton(jme$contextSortButton, showSort, TextHelper.literal("Sort Folder"), startX, startY, row);
         row = jme$placeContextButton(jme$contextRemoveButton, showRemove, TextHelper.literal(isFolder ? "Delete Folder" : "Remove"), startX, startY, row);
-        jme$placeContextButton(jme$contextDuplicateButton, isPlatform, TextHelper.literal("Duplicate"), startX, startY, row);
+        row = jme$placeContextButton(jme$contextDuplicateButton, isPlatform, TextHelper.literal("Duplicate"), startX, startY, row);
+        jme$placeContextButton(jme$contextAlternativesButton, showAlternatives, TextHelper.literal("Alternative Platforms"), startX, startY, row);
+    }
+
+    @Unique
+    private boolean jme$stationHasOtherPlatforms(DashboardRouteFolderStore.RowMetadata rowMetadata) {
+        if (!AlternativePlatformRegistry.isEnabled()) {
+            return false;
+        }
+        final int platformIndex = jme$resolveRoutePlatformIndex(rowMetadata);
+        final Platform platform = platformIndex < 0 ? null : editingRoute.getRoutePlatforms().get(platformIndex).platform;
+        return platform != null && !AlternativePlatformRegistry.getCompatiblePlatforms(platform).isEmpty();
+    }
+
+    @Unique
+    private void jme$onContextAlternatives() {
+        final DashboardRouteFolderStore.RowMetadata rowMetadata = jme$contextRow;
+        jme$hideContextMenu();
+        if (rowMetadata != null) {
+            jme$openAlternativePlatformMenu(rowMetadata);
+        }
     }
 
     @Unique
@@ -765,6 +792,7 @@ public abstract class DashboardScreenRouteFoldersMixin extends ScreenExtension i
         jme$setContextButtonVisible(jme$contextSortButton, false);
         jme$setContextButtonVisible(jme$contextRemoveButton, false);
         jme$setContextButtonVisible(jme$contextDuplicateButton, false);
+        jme$setContextButtonVisible(jme$contextAlternativesButton, false);
     }
 
     @Unique

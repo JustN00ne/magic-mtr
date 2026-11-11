@@ -1,0 +1,12 @@
+{
+  "variants": {
+    "facing=north,powered=false": { "model": "jme:block/axle_counter" },
+    "facing=east,powered=false": { "model": "jme:block/axle_counter", "y": 90 },
+    "facing=south,powered=false": { "model": "jme:block/axle_counter", "y": 180 },
+    "facing=west,powered=false": { "model": "jme:block/axle_counter", "y": 270 },
+    "facing=north,powered=true": { "model": "jme:block/axle_counter" },
+    "facing=east,powered=true": { "model": "jme:block/axle_counter", "y": 90 },
+    "facing=south,powered=true": { "model": "jme:block/axle_counter", "y": 180 },
+    "facing=west,powered=true": { "model": "jme:block/axle_counter", "y": 270 }
+  }
+}

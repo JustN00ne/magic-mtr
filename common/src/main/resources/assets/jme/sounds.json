@@ -1,0 +1,38 @@
+{
+  "railroad_crossing": {
+    "subtitle": "subtitles.jme.railroad_crossing",
+    "sounds": [
+      "jme:railroad_crossing"
+    ]
+  },
+  "crossing_bell_2": {
+    "subtitle": "subtitles.jme.railroad_crossing",
+    "sounds": [
+      "jme:crossing_bell_2"
+    ]
+  },
+  "crossing_bell_3": {
+    "subtitle": "subtitles.jme.railroad_crossing",
+    "sounds": [
+      "jme:crossing_bell_3"
+    ]
+  },
+  "crossing_bell_4": {
+    "subtitle": "subtitles.jme.railroad_crossing",
+    "sounds": [
+      "jme:crossing_bell_4"
+    ]
+  },
+  "crossing_bell_5": {
+    "subtitle": "subtitles.jme.railroad_crossing",
+    "sounds": [
+      "jme:crossing_bell_5"
+    ]
+  },
+  "crossing_bell_6": {
+    "subtitle": "subtitles.jme.railroad_crossing",
+    "sounds": [
+      "jme:crossing_bell_6"
+    ]
+  }
+}

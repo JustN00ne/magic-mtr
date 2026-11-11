@@ -31,8 +31,9 @@ import org.justnoone.jme.item.CrossingLinkerItem;
  * <ul>
  *     <li>while linking with the Crossing Linker: an outline around the selected controller in the mode's colour, plus a
  *     preview line to the aimed point in start node (green) and end node (red) mode, or a blue outline around the
- *     aimed crossing object in object mode (outlines only, no line);</li>
- *     <li>while holding an MTR brush: the saved connections of the controllers in range, green / red from the start /
+ *     aimed crossing object in object mode (outlines only, no line); when an axle counter was selected first, the
+ *     preview line runs from it, and the aimed controller is outlined;</li>
+ *     <li>while holding an MTR brush: the saved connections of the controllers in range, green / red from each start /
  *     end axle counter to its controller and blue from a controller to each linked object, with arrows pointing the
  *     way the connection works (counter signals controller, controller switches object).</li>
  * </ul>
@@ -46,7 +47,10 @@ public final class CrossingLinkRenderer {
     private static final double ARROW_SPACING = 1.5;
     private static final double ARROW_LENGTH = 0.3;
     private static final double ARROW_HALF_WIDTH = 0.18;
+    // Counters can be linked at any distance; a very long connection gets no more arrows than this.
+    private static final int MAX_ARROWS = 64;
     private static final int OBJECT_COLOR = CrossingLinkMode.OBJECT.color;
+    private static final int DETECTOR_COLOR = 0xFFAA00;
 
     private CrossingLinkRenderer() {
     }
@@ -67,7 +71,8 @@ public final class CrossingLinkRenderer {
         final ItemStack mainHand = player.getMainHandStack();
         final CrossingLinkMode mode = mainHand.getItem() instanceof CrossingLinkerItem ? CrossingLinkMode.get(mainHand) : CrossingLinkMode.INACTIVE;
         final BlockPos selected = ClientCrossingLinks.getSelectedController();
-        final boolean linking = mode != CrossingLinkMode.INACTIVE && selected != null;
+        final Vec3d selectedCounter = ClientCrossingLinks.getSelectedCounter();
+        final boolean linking = mode != CrossingLinkMode.INACTIVE && (selected != null || selectedCounter != null && mode.linksCounters());
         final boolean brush = isBrush(mainHand) || isBrush(player.getOffHandStack());
         if (!linking && !brush) {
             return;
@@ -80,7 +85,11 @@ public final class CrossingLinkRenderer {
         matrices.translate(-camera.x, -camera.y, -camera.z);
 
         if (linking) {
-            renderLinking(client, world, matrices, lines, camera, selected, mode);
+            if (selected != null) {
+                renderLinking(client, world, matrices, lines, camera, selected, mode);
+            } else {
+                renderCounterLinking(client, world, matrices, lines, selectedCounter, mode);
+            }
         }
         if (brush) {
             renderConnections(world, player, matrices, lines, camera);
@@ -112,6 +121,24 @@ public final class CrossingLinkRenderer {
         }
     }
 
+    /**
+     * A counter was selected first: a line from it to the aimed point, and an outline around an aimed controller.
+     */
+    private static void renderCounterLinking(MinecraftClient client, ClientWorld world, MatrixStack matrices, VertexConsumer lines, Vec3d counter, CrossingLinkMode mode) {
+        final HitResult target = client.crosshairTarget;
+        final Vec3d to;
+        if (target instanceof BlockHitResult && target.getType() == HitResult.Type.BLOCK && world.getBlockEntity(((BlockHitResult) target).getBlockPos()) instanceof CrossingControl.Holder) {
+            final BlockPos targetPos = ((BlockHitResult) target).getBlockPos();
+            outline(matrices, lines, targetPos, world.getBlockEntity(targetPos), mode.color);
+            to = controllerAnchor(targetPos);
+        } else if (target != null && target.getType() != HitResult.Type.MISS) {
+            to = target.getPos();
+        } else {
+            to = client.player.getCameraPosVec(1).add(client.player.getRotationVec(1).multiply(PREVIEW_REACH));
+        }
+        line(matrices, lines, counter.add(0, 0.1, 0), to, mode.color);
+    }
+
     private static void renderConnections(ClientWorld world, ClientPlayerEntity player, MatrixStack matrices, VertexConsumer lines, Vec3d camera) {
         for (final BlockEntity blockEntity : ClientCrossingLinks.getControllers(world)) {
             if (!(blockEntity instanceof CrossingControl.Holder) || !blockEntity.getPos().isWithinDistance(player.getPos(), BRUSH_RANGE)) {
@@ -119,16 +146,17 @@ public final class CrossingLinkRenderer {
             }
             final CrossingControl control = ((CrossingControl.Holder) blockEntity).getCrossingControl();
             final Vec3d anchor = controllerAnchor(blockEntity.getPos());
-            final CrossingControl.CounterLink start = control.getStart();
-            final CrossingControl.CounterLink end = control.getEnd();
-            if (start != null) {
+            for (final CrossingControl.CounterLink start : control.getStarts()) {
                 arrowLine(matrices, lines, camera, counterAnchor(start), anchor, CrossingLinkMode.START_NODE.color);
             }
-            if (end != null) {
+            for (final CrossingControl.CounterLink end : control.getEnds()) {
                 arrowLine(matrices, lines, camera, counterAnchor(end), anchor, CrossingLinkMode.END_NODE.color);
             }
             for (final org.mtr.mapping.holder.BlockPos objectPos : control.getObjects()) {
                 arrowLine(matrices, lines, camera, anchor, controllerAnchor(objectPos.data), OBJECT_COLOR);
+            }
+            for (final org.mtr.mapping.holder.BlockPos detectorPos : control.getDetectors()) {
+                arrowLine(matrices, lines, camera, new Vec3d(detectorPos.getX() + 0.5, detectorPos.getY() + 1.05, detectorPos.getZ() + 0.5), anchor, DETECTOR_COLOR);
             }
         }
     }
@@ -146,9 +174,9 @@ public final class CrossingLinkRenderer {
     }
 
     private static void outline(MatrixStack matrices, VertexConsumer lines, BlockPos pos, BlockEntity blockEntity, int color) {
-        // Level crossings and controllers are drawn as tall crossings; other objects say how big they are.
-        final double height = blockEntity instanceof CrossingObject ? ((CrossingObject) blockEntity).getLinkOutlineHeight() : BlockCrossingLights.LINK_OUTLINE_HEIGHT;
-        final double halfWidth = blockEntity instanceof CrossingObject ? ((CrossingObject) blockEntity).getLinkOutlineHalfWidth() : BlockCrossingLights.LINK_OUTLINE_HALF_WIDTH;
+        // Objects and controllers say how big they are.
+        final double height = blockEntity instanceof CrossingObject ? ((CrossingObject) blockEntity).getLinkOutlineHeight() : blockEntity instanceof CrossingControl.Holder ? ((CrossingControl.Holder) blockEntity).getLinkOutlineHeight() : BlockCrossingLights.LINK_OUTLINE_HEIGHT;
+        final double halfWidth = blockEntity instanceof CrossingObject ? ((CrossingObject) blockEntity).getLinkOutlineHalfWidth() : blockEntity instanceof CrossingControl.Holder ? ((CrossingControl.Holder) blockEntity).getLinkOutlineHalfWidth() : BlockCrossingLights.LINK_OUTLINE_HALF_WIDTH;
         final double x = pos.getX() + 0.5, z = pos.getZ() + 0.5;
         final Box box = new Box(x - halfWidth, pos.getY(), z - halfWidth, x + halfWidth, pos.getY() + height, z + halfWidth).expand(0.02);
         WorldRenderer.drawBox(matrices, lines, box, red(color), green(color), blue(color), 1);
@@ -162,7 +190,7 @@ public final class CrossingLinkRenderer {
             return;
         }
         final Vec3d direction = delta.multiply(1 / length);
-        final int arrows = Math.max(1, (int) (length / ARROW_SPACING));
+        final int arrows = Math.max(1, Math.min(MAX_ARROWS, (int) (length / ARROW_SPACING)));
         final double spacing = length / (arrows + 1);
         for (int i = 1; i <= arrows; i++) {
             final Vec3d tip = from.add(direction.multiply(spacing * i + ARROW_LENGTH / 2));

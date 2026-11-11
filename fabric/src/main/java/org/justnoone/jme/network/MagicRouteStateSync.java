@@ -9,6 +9,7 @@ import org.justnoone.jme.rail.AlternativePlatformRegistry;
 import org.justnoone.jme.rail.CronTimetableRegistry;
 import org.justnoone.jme.rail.DepotCancellationRegistry;
 import org.justnoone.jme.rail.MagicRailConstants;
+import org.justnoone.jme.rail.RouteTimetableRegistry;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -16,8 +17,8 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Keeps clients in sync with the server's route types, alternative platforms, depot cancellation settings and cron
- * timetables.
+ * Keeps clients in sync with the server's route types, alternative platforms, depot cancellation settings, cron
+ * timetables and route timetables.
  * <p>
  * Both are stored in server-side config files. Previously each client only read its own local copy, so on a
  * dedicated server a selection was shown only on the machine that made it (and was lost when reopening the GUI
@@ -101,12 +102,32 @@ public final class MagicRouteStateSync {
             }
         }
 
+        // Appended in 1.5.0; older servers do not send it.
+        final Map<Long, RouteTimetableRegistry.Entry> routeTimetables = new HashMap<>();
+        if (packetByteBuf.readableBytes() > 0) {
+            final int routeTimetableCount = Math.min(MAX_ENTRIES, packetByteBuf.readVarInt());
+            for (int i = 0; i < routeTimetableCount; i++) {
+                final long routeId = packetByteBuf.readLong();
+                final long minimumDwellMillis = packetByteBuf.readVarLong();
+                final int headcodeClass = packetByteBuf.readVarInt();
+                final int stopCount = Math.min(MAX_ENTRIES, packetByteBuf.readVarInt());
+                final long[] platformIds = new long[stopCount];
+                final long[] offsets = new long[stopCount];
+                for (int j = 0; j < stopCount; j++) {
+                    platformIds[j] = packetByteBuf.readLong();
+                    offsets[j] = packetByteBuf.readLong();
+                }
+                routeTimetables.put(routeId, new RouteTimetableRegistry.Entry(minimumDwellMillis, headcodeClass, platformIds, offsets));
+            }
+        }
+
         final Boolean finalAlternativePlatformsServerEnabled = alternativePlatformsServerEnabled;
         return () -> {
             RouteTypeOverrideConfig.applySyncedSnapshot(routeTypes, alternativePlatformsEnabled);
             AlternativePlatformRegistry.applySyncedSnapshot(alternatives);
             DepotCancellationRegistry.applySyncedSnapshot(cancellations);
             CronTimetableRegistry.applySyncedSnapshot(cronTimetables);
+            RouteTimetableRegistry.applySyncedSnapshot(routeTimetables);
         };
     }
 
@@ -153,6 +174,19 @@ public final class MagicRouteStateSync {
         });
 
         packetByteBuf.writeBoolean(AlternativePlatformRegistry.isEnabled());
+
+        final Map<Long, RouteTimetableRegistry.Entry> routeTimetables = RouteTimetableRegistry.getSnapshot();
+        packetByteBuf.writeVarInt(routeTimetables.size());
+        routeTimetables.forEach((routeId, entry) -> {
+            packetByteBuf.writeLong(routeId);
+            packetByteBuf.writeVarLong(entry.minimumDwellMillis);
+            packetByteBuf.writeVarInt(entry.headcodeClass);
+            packetByteBuf.writeVarInt(entry.offsets.length);
+            for (int i = 0; i < entry.offsets.length; i++) {
+                packetByteBuf.writeLong(entry.platformIds[i]);
+                packetByteBuf.writeLong(entry.offsets[i]);
+            }
+        });
 
         return packetByteBuf;
     }

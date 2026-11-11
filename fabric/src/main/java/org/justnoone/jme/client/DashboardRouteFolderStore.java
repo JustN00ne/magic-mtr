@@ -93,9 +93,8 @@ public final class DashboardRouteFolderStore {
                 continue;
             }
 
-            listItems.add(new DashboardListItem(platform.getId(), getPlatformLabel(routePlatformData), getStationColor(platform)));
+            listItems.add(new DashboardListItem(platform.getId(), getPlatformLabel(routePlatformData) + jme$alternativeMark(route, platform), getStationColor(platform)));
             rowMetadataList.add(RowMetadata.platform(platformIndex, platform.getId()));
-            jme$appendAlternativeRows(route, platformIndex, 0, listItems, rowMetadataList);
         }
 
         visibleRowsByRoute.put(routeId, rowMetadataList);
@@ -119,49 +118,19 @@ public final class DashboardRouteFolderStore {
     }
 
     /**
-     * Under a stop with alternative platforms: a collapsible "Alternative platforms (n)" row and, when open, one row
-     * per alternative. The stop row itself stays the primary platform.
+     * A short mark after a stop with alternative platforms, eg " ⎇2". The alternatives are edited in their own screen
+     * (right-click the stop, or the ≣ button while editing it): rows for them in the stop list looked like stops and got
+     * in the way of reordering.
      */
-    private static void jme$appendAlternativeRows(Route route, int platformIndex, int depth, List<DashboardListItem> listItems, List<RowMetadata> rowMetadataList) {
-        final Platform primaryPlatform = route.getRoutePlatforms().get(platformIndex).platform;
+    private static String jme$alternativeMark(Route route, Platform primaryPlatform) {
         if (primaryPlatform == null) {
-            return;
+            return "";
         }
         final List<Long> alternativeIds = AlternativePlatformRegistry.getAlternatives(route.getId(), primaryPlatform.getId());
         if (alternativeIds.isEmpty()) {
-            return;
+            return "";
         }
-
-        final Map<Long, Platform> stationPlatforms = new HashMap<>();
-        AlternativePlatformRegistry.getCompatiblePlatforms(primaryPlatform).forEach(platform -> stationPlatforms.put(platform.getId(), platform));
-        final boolean everyPlatform = alternativeIds.contains(AlternativePlatformRegistry.ALL_STATION_PLATFORMS);
-        final boolean expanded = expandedAlternativeFolders.contains(jme$alternativeFolderKey(route, platformIndex));
-        final String indentation = jme$indentation(depth + 1);
-        final int color = getStationColor(primaryPlatform);
-        final String count = everyPlatform ? "all " + stationPlatforms.size() : String.valueOf(alternativeIds.size());
-
-        // Negative ids keep these rows apart from platform rows (positive platform ids).
-        final long rowIdSeed = (route.getId() * 31 + primaryPlatform.getId()) * 31 + platformIndex;
-        listItems.add(new DashboardListItem(-1 - (rowIdSeed & Long.MAX_VALUE) % Integer.MAX_VALUE, indentation + (expanded ? "▼ " : "▶ ") + "⎇ Alternative platforms (" + count + ")", color));
-        rowMetadataList.add(RowMetadata.alternativeFolder(platformIndex, primaryPlatform.getId(), depth + 1));
-        if (!expanded) {
-            return;
-        }
-
-        final String entryIndentation = jme$indentation(depth + 2);
-        if (everyPlatform) {
-            listItems.add(new DashboardListItem(-1 - ((rowIdSeed + 1) & Long.MAX_VALUE) % Integer.MAX_VALUE, entryIndentation + "↳ Every platform of the station", color));
-            rowMetadataList.add(RowMetadata.alternative(platformIndex, primaryPlatform.getId(), AlternativePlatformRegistry.ALL_STATION_PLATFORMS, depth + 2));
-            return;
-        }
-        for (final long alternativeId : alternativeIds) {
-            final Platform platform = stationPlatforms.get(alternativeId);
-            final String label = platform == null
-                    ? "↳ ⚠ Unavailable platform (removed or moved)"
-                    : "↳ " + getPlatformLabel(platform);
-            listItems.add(new DashboardListItem(alternativeId, entryIndentation + label, color));
-            rowMetadataList.add(RowMetadata.alternative(platformIndex, primaryPlatform.getId(), alternativeId, depth + 2));
-        }
+        return alternativeIds.contains(AlternativePlatformRegistry.ALL_STATION_PLATFORMS) ? "  \u2387 all" : "  \u2387" + alternativeIds.size();
     }
 
     private static String jme$alternativeFolderKey(Route route, int platformIndex) {
@@ -794,9 +763,8 @@ public final class DashboardRouteFolderStore {
             }
 
             final String prefix = indentation + (childOffset == 0 ? "  •★ " : "  • ");
-            listItems.add(new DashboardListItem(platform.getId(), prefix + getPlatformLabel(routePlatformData), getStationColor(platform)));
+            listItems.add(new DashboardListItem(platform.getId(), prefix + getPlatformLabel(routePlatformData) + jme$alternativeMark(route, platform), getStationColor(platform)));
             rowMetadataList.add(RowMetadata.childPlatform(folderConfig.id, folderConfig.parentFolderId, primaryPlatformId, platformIndex, platform.getId(), depth + 1));
-            jme$appendAlternativeRows(route, platformIndex, depth + 1, listItems, rowMetadataList);
         }
     }
 
