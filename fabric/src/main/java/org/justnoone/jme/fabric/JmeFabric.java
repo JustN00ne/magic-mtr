@@ -49,7 +49,8 @@ public class JmeFabric implements ModInitializer {
             LOGGER.info("[MAGIC] Reloaded config on server start: {}", result.toDebugString());
             SystemMapOverlayCacheStore.onServerStarted(server);
             MagicDashboardServer.setTileProvider((x, z, zoom) -> org.justnoone.jme.dashboard.TileRenderer.getTile(server, x, z, zoom));
-            MagicDashboardServer.start();
+            // Dedicated servers listen on all interfaces so players can open http://<server-ip>:8088/livemap.
+            MagicDashboardServer.start(FabricLoader.getInstance().getEnvironmentType() == net.fabricmc.api.EnvType.SERVER);
         });
 
         // Clients render route types and alternative platforms from the server's state, not their local files.

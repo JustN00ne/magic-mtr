@@ -39,8 +39,10 @@ import java.util.concurrent.TimeUnit;
 
 public final class MagicDashboardServer {
 
-    public static final int PORT = Integer.parseInt(System.getProperty("magic.dashboard.port", "8088"));
+    private static final DashboardServerConfig SERVER_CONFIG = DashboardServerConfig.load();
+    public static final int PORT = SERVER_CONFIG.port;
 
+    private static volatile boolean dedicatedServer;
     private static HttpServer httpServer;
     private static ExecutorService executorService;
     private static volatile Field initMainField;
@@ -68,14 +70,33 @@ public final class MagicDashboardServer {
     private MagicDashboardServer() {
     }
 
-    public static synchronized void start() {
+    /**
+     * @param isDedicatedServer true on a dedicated server, where the default ("auto") bind address listens on
+     *                          every interface so players can reach the map; false for singleplayer / LAN hosts,
+     *                          which stay loopback-only.
+     */
+    public static synchronized void start(boolean isDedicatedServer) {
+        dedicatedServer = isDedicatedServer;
+        start();
+    }
+
+    private static InetSocketAddress resolveBindAddress() throws Exception {
+        final String bind = SERVER_CONFIG.bindAddress;
+        if (DashboardServerConfig.AUTO.equalsIgnoreCase(bind)) {
+            return dedicatedServer ? new InetSocketAddress(PORT) : new InetSocketAddress(InetAddress.getLoopbackAddress(), PORT);
+        }
+        return new InetSocketAddress(InetAddress.getByName(bind), PORT);
+    }
+
+    private static synchronized void start() {
         if (httpServer != null) {
             dashboardRetryThread = null;
             return;
         }
 
         try {
-            final HttpServer createdServer = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), PORT), 64);
+            final InetSocketAddress bindAddress = resolveBindAddress();
+            final HttpServer createdServer = HttpServer.create(bindAddress, 64);
             // Bounded, adaptive thread pool: enough threads to serve parallel tile/data requests (async download)
             // while the fixed-size tile renderer workers produce images concurrently (async upload).
             final int cores = Runtime.getRuntime().availableProcessors();
@@ -97,11 +118,11 @@ public final class MagicDashboardServer {
             httpServer = createdServer;
             dashboardRetryThread = null;
             DashboardAuth.loadConfig();
-            Main.LOGGER.info("[{}] MAGIC dashboard listening on http://localhost:{}", Jme.MOD_ID, PORT);
+            Main.LOGGER.info("[{}] MAGIC dashboard listening on {}:{}", Jme.MOD_ID, bindAddress.getAddress().getHostAddress(), PORT);
         } catch (Exception exception) {
             // Port may be taken by another MAGIC instance (e.g. an old client still running) - keep retrying
             // so the dashboard comes up without requiring a full client restart.
-            Main.LOGGER.warn("[{}] Failed to start MAGIC dashboard on localhost:{} - will retry every 15 seconds", Jme.MOD_ID, PORT, exception);
+            Main.LOGGER.warn("[{}] Failed to start MAGIC dashboard on {}:{} - will retry every 15 seconds", Jme.MOD_ID, SERVER_CONFIG.bindAddress, PORT, exception);
             stop();
             if (dashboardRetryThread == null) {
                 dashboardRetryThread = new Thread(() -> {
@@ -121,8 +142,8 @@ public final class MagicDashboardServer {
     }
 
     /**
-     * True when the dashboard is served from this JVM, i.e. singleplayer or the LAN host. Players on a
-     * dedicated server can't reach it, because it only listens on the loopback address.
+     * True when the dashboard is served from this JVM, i.e. singleplayer or the LAN host. On a dedicated
+     * server the map lives on the server machine instead (http://&lt;server-ip&gt;:PORT/livemap).
      */
     public static synchronized boolean isRunning() {
         return httpServer != null;

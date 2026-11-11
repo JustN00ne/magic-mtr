@@ -235,7 +235,7 @@ public final class MagicServerCommands {
 
             final String code = DashboardAuth.generateCode(uuid, username, isAdmin);
             sendFeedback(source, "§a[MAGIC] Auth code: §e" + code + "§a (expires in 5 min)");
-            sendFeedback(source, "§7Paste at http://localhost:" + org.justnoone.jme.dashboard.MagicDashboardServer.PORT + " to authenticate.");
+            sendFeedback(source, "§7Paste into the MAGIC web map (port " + org.justnoone.jme.dashboard.MagicDashboardServer.PORT + ") to authenticate.");
             return Command.SINGLE_SUCCESS;
         } catch (Exception e) {
             sendFeedback(source, "§c[MAGIC] Failed to generate auth code: " + e.getMessage());

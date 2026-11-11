@@ -1,6 +1,6 @@
 # MAGIC Dashboard API Reference
 
-MAGIC exposes an HTTP API on **port `8088`** (configurable via `-Dmagic.dashboard.port`). The server binds to `localhost` only and supports CORS for local development.
+MAGIC exposes an HTTP API on **port `8088`**. Port and bind address are set in `config/MAGIC/configs/dashboard_server.json` (`"port"`, `"bindAddress"`), or overridden with `-Dmagic.dashboard.port` / `-Dmagic.dashboard.bind`. With the default `"bindAddress": "auto"`, a dedicated server listens on all interfaces (players open `http://<server-ip>:8088/livemap`), while singleplayer / LAN hosts bind to `localhost` only. The API supports CORS for local development.
 
 All responses are `application/json; charset=utf-8`. Every response includes a `cachedResponseTime` (epoch millis) field.
 

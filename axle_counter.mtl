@@ -1,5 +1,0 @@
-# Made in Blockbench 5.1.6
-# map_Kd must be a full resource id: MTR resolves bare file names next to the OBJ (jme:models/obj/), where no texture is packaged.
-newmtl m_12b19653-e324-52f5-316f-528de43426c0
-map_Kd jme:textures/block/axle_counter.png
-newmtl none
